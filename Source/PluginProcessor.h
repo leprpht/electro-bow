@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 
 #include "PolyPitchDetector.h"
+#include "PolyphonicAnalyzer.h"
 #include "VoiceManager.h"
 
 #include <cmath>
@@ -75,7 +76,8 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     }
 
   private:
-    PolyPitchDetector polyPitchDetector;
+    PolyphonicAnalyzer polyphonicAnalyzer;
+    PolyPitchDetector polyPitchDetector; // retained as the old comparison baseline
 
     VoiceManager voiceManager;
 

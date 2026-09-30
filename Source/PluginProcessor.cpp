@@ -9,6 +9,7 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
 void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     monoScratch.assign(static_cast<size_t>(juce::jmax(1, samplesPerBlock)), 0.0f);
 
+    polyphonicAnalyzer.prepare(sampleRate);
     polyPitchDetector.prepare(sampleRate);
 
     voiceManager.prepare(sampleRate, attackMs, releaseMs);
@@ -75,7 +76,7 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // Detect the current polyphonic note set.
     // ------------------------------------------------------------------
 
-    polyPitchDetector.push(monoScratch.data(), numSamples);
+    polyphonicAnalyzer.push(monoScratch.data(), numSamples);
 
     // ------------------------------------------------------------------
     // Synchronise VoiceManager with the detected note set.
@@ -85,7 +86,7 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // New notes create new Bowed voices.
     // ------------------------------------------------------------------
 
-    voiceManager.updateDetectedNotes(polyPitchDetector);
+    voiceManager.updateDetectedVoices(polyphonicAnalyzer);
 
     // ------------------------------------------------------------------
     // Render all active voices.

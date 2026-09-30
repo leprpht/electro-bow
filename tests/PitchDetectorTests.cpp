@@ -1,6 +1,7 @@
 #include "../Source/PolyPitchDetector.h"
 #include "../Source/PolyphonicAnalyzer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <vector>
@@ -76,8 +77,8 @@ int main() {
     // D3 + G3 + C4 + F4
     testChord("D3 + G3 + C4 + F4", {50, 55, 60, 65});
 
-    // The analyzer must expose independent buffers and invoke the tracker
-    // independently for each spectral peak.
+    // The analyzer must expose independent buffers and invoke the tracker for
+    // every voice on every analysis frame.
     int trackerCalls = 0;
     PolyphonicAnalyzer analyzer([&trackerCalls](const std::vector<float>& voice, double rate) {
         ++trackerCalls;
@@ -89,10 +90,38 @@ int main() {
     addNote(chord, 50, 0.2f);
     addNote(chord, 57, 0.2f);
     analyzer.push(chord.data(), static_cast<int>(chord.size()));
-    if (analyzer.getVoices().empty() ||
-        trackerCalls != static_cast<int>(analyzer.getVoices().size())) {
+    const auto& voices = analyzer.getVoices();
+    if (voices.size() < 2 || trackerCalls < static_cast<int>(voices.size())) {
         std::cerr << "Polyphonic analyzer did not produce independent tracked voices\n";
         return 1;
+    }
+
+    if (voices[0].samples.empty() || voices[1].samples.empty() ||
+        voices[0].samples == voices[1].samples || voices[0].id == voices[1].id) {
+        std::cerr << "Polyphonic analyzer returned non-independent voice buffers\n";
+        return 1;
+    }
+
+    for (const auto& voice : voices) {
+        if (std::abs(voice.trackedFrequencyHz - 440.0f) > 0.01f ||
+            voice.trackerConfidence <= 0.0f) {
+            std::cerr << "Polyphonic analyzer did not run the pluggable tracker\n";
+            return 1;
+        }
+    }
+
+    const auto firstIds = std::vector<int>{voices[0].id, voices[1].id};
+    analyzer.push(chord.data(), static_cast<int>(chord.size()));
+    const auto& nextVoices = analyzer.getVoices();
+    if (nextVoices.size() < 2 || nextVoices[0].id == nextVoices[1].id) {
+        std::cerr << "Polyphonic analyzer did not maintain distinct voice slots\n";
+        return 1;
+    }
+    for (const auto& voice : nextVoices) {
+        if (std::find(firstIds.begin(), firstIds.end(), voice.id) == firstIds.end()) {
+            std::cerr << "Polyphonic analyzer did not track voice identity across frames\n";
+            return 1;
+        }
     }
 
     return 0;

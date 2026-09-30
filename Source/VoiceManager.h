@@ -2,6 +2,7 @@
 
 #include "BowEnvelope.h"
 #include "PolyPitchDetector.h"
+#include "PolyphonicAnalyzer.h"
 
 #include <Bowed.h>
 
@@ -18,6 +19,7 @@ class VoiceManager {
         BowEnvelope envelope;
 
         int midiNote = -1;
+        float frequencyHz = 0.0f;
 
         float strength = 0.0f;
 
@@ -38,6 +40,7 @@ class VoiceManager {
             voice.envelope.setReleaseMs(newReleaseMs);
 
             voice.midiNote = -1;
+            voice.frequencyHz = 0.0f;
             voice.strength = 0.0f;
             voice.active = false;
             voice.releasing = false;
@@ -53,9 +56,54 @@ class VoiceManager {
             voice.envelope.reset();
 
             voice.midiNote = -1;
+            voice.frequencyHz = 0.0f;
             voice.strength = 0.0f;
             voice.active = false;
             voice.releasing = false;
+        }
+    }
+
+    void updateDetectedVoices(const PolyphonicAnalyzer& analyzer) {
+        std::array<bool, kMaxVoices> matched{};
+        for (const auto& detected : analyzer.getVoices()) {
+            if (detected.trackedFrequencyHz <= 0.0f)
+                continue;
+            int best = -1;
+            float bestCents = 100000.0f;
+            for (int i = 0; i < kMaxVoices; ++i) {
+                const auto& voice = voices[static_cast<size_t>(i)];
+                if (!voice.active || matched[static_cast<size_t>(i)] || voice.frequencyHz <= 0.0f)
+                    continue;
+                const float cents =
+                    std::abs(1200.0f * std::log2(detected.trackedFrequencyHz / voice.frequencyHz));
+                if (cents < 100.0f && cents < bestCents) {
+                    best = i;
+                    bestCents = cents;
+                }
+            }
+            if (best < 0)
+                best = findFreeVoice();
+            if (best < 0)
+                continue;
+            auto& voice = voices[static_cast<size_t>(best)];
+            if (!voice.active)
+                startVoice(voice, detected.trackedFrequencyHz, detected.strength);
+            else {
+                voice.frequencyHz = detected.trackedFrequencyHz;
+                voice.bowed.setFrequency(static_cast<stk::StkFloat>(voice.frequencyHz));
+                voice.strength = detected.strength;
+                voice.releasing = false;
+                voice.envelope.sustain();
+            }
+            matched[static_cast<size_t>(best)] = true;
+        }
+        for (int i = 0; i < kMaxVoices; ++i) {
+            auto& voice = voices[static_cast<size_t>(i)];
+            if (voice.active && !matched[static_cast<size_t>(i)] && !voice.releasing) {
+                voice.releasing = true;
+                voice.envelope.release();
+                voice.bowed.stopBowing(0.005);
+            }
         }
     }
 
@@ -185,6 +233,7 @@ class VoiceManager {
                 voice.bowed.clear();
 
                 voice.midiNote = -1;
+                voice.frequencyHz = 0.0f;
                 voice.strength = 0.0f;
                 voice.active = false;
                 voice.releasing = false;
@@ -229,6 +278,12 @@ class VoiceManager {
         const float frequency =
             440.0f * std::pow(2.0f, static_cast<float>(note.midiNote - 69) / 12.0f);
 
+        startVoice(voice, frequency, note.strength);
+        voice.midiNote = note.midiNote;
+    }
+
+    void startVoice(Voice& voice, float frequency, float strength) {
+
         voice.bowed.clear();
 
         voice.bowed.setFrequency(static_cast<stk::StkFloat>(frequency));
@@ -240,7 +295,7 @@ class VoiceManager {
         voice.bowed.controlChange(100, static_cast<stk::StkFloat>(bowSpeed * 128.0f));
 
         const stk::StkFloat amplitude =
-            static_cast<stk::StkFloat>(std::clamp(0.05f + note.strength * 0.95f, 0.05f, 1.0f));
+            static_cast<stk::StkFloat>(std::clamp(0.05f + strength * 0.95f, 0.05f, 1.0f));
 
         const stk::StkFloat attackRate = static_cast<stk::StkFloat>(
             std::max(0.0001, 0.005 / std::max(0.01, static_cast<double>(attackMs) * 0.001)));
@@ -250,10 +305,12 @@ class VoiceManager {
         voice.envelope.reset();
         voice.envelope.setAttackMs(attackMs);
         voice.envelope.setReleaseMs(releaseMs);
-        voice.envelope.trigger(note.strength);
+        voice.envelope.trigger(strength);
 
-        voice.midiNote = note.midiNote;
-        voice.strength = note.strength;
+        voice.frequencyHz = frequency;
+        voice.midiNote =
+            static_cast<int>(std::lround(69.0f + 12.0f * std::log2(frequency / 440.0f)));
+        voice.strength = strength;
         voice.active = true;
         voice.releasing = false;
     }
