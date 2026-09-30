@@ -11,6 +11,27 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - None.
 
+## [1.1.0] - 2026-09-30
+
+### Added
+
+- Added polyphonic pitch detection for chord input.
+- Added bowed-string voice synthesis with configurable attack and release envelopes.
+- Added bow-trigger processing for note release detection.
+- Added cross-platform automated builds and pitch-detector tests for Windows, macOS, and Linux.
+- Added CMake, Python, and batch build helpers for local development.
+- Added clang-format and clang-tidy configuration, a formatting pre-commit hook, and VS Code settings.
+
+### Changed
+
+- Improved pitch detection and plugin processing for polyphonic input.
+- macOS CI and release builds now produce universal Apple Silicon and Intel binaries.
+- CI and release builds now use parallel compilation and compiler caching.
+
+### Fixed
+
+- Fixed Linux test linking and added the JUCE dependencies required by Linux builds.
+
 ## [1.0.3] - 2026-09-28
 
 ### Fixed
