@@ -51,10 +51,27 @@ class PolyphonicAnalyzer {
 
     void reset() {
         input.assign(kFFTSize, 0.0f);
+        frame.assign(kFFTSize, 0.0f);
         spectrum.assign(kFFTSize, {});
         sourceSpectrum.assign(kFFTSize, {});
         voices.clear();
         voiceHistory.clear();
+        spectralPeaks.clear();
+        selectedPeaks.clear();
+        candidateScratch.clear();
+        mergedCandidateScratch.clear();
+        filteredCandidateScratch.clear();
+        nextVoiceScratch.clear();
+        usedScratch.clear();
+        voices.reserve(kMaxVoices);
+        voiceHistory.reserve(kMaxVoices * 2);
+        spectralPeaks.reserve(kMaxVoices * 8);
+        selectedPeaks.reserve(kMaxVoices * 8);
+        candidateScratch.reserve(kMaxVoices * 16);
+        mergedCandidateScratch.reserve(kMaxVoices * 16);
+        filteredCandidateScratch.reserve(kMaxVoices * 16);
+        nextVoiceScratch.reserve(kMaxVoices);
+        usedScratch.reserve(kMaxVoices);
         writePosition = 0;
         samplesSinceAnalysis = 0;
         samplesReceived = 0;
@@ -98,12 +115,16 @@ class PolyphonicAnalyzer {
     static constexpr float maximumFrequencyHz = 2000.0f;
     static constexpr float maximumPeakFrequencyHz = 8000.0f;
     static constexpr float minimumPeakRatio = 0.06f;
-    static constexpr float minimumFundamentalRatio = 0.02f;
+    static constexpr float minimumFundamentalRatio = 0.005f;
     static constexpr int peakSpacingBins = 3;
-    static constexpr int harmonicSearchRadiusBins = 2;
+    // Peak interpolation keeps the expected partial within roughly one bin;
+    // a wider search radius incorrectly treats neighbouring low-frequency
+    // fundamentals as evidence for a subharmonic.
+    static constexpr int harmonicSearchRadiusBins = 1;
 
     struct SpectralPeak {
         int bin = 0;
+        float frequencyHz = 0.0f;
         float magnitude = 0.0f;
     };
 
@@ -113,6 +134,9 @@ class PolyphonicAnalyzer {
         float dominantPeakFrequencyHz = 0.0f;
         float dominantPeakMagnitude = 0.0f;
         float fundamentalMagnitude = 0.0f;
+        int supportedHarmonics = 0;
+        int sourceHarmonic = 1;
+        bool hasFundamentalPeak = false;
     };
 
     struct HistoricalVoice {
@@ -152,15 +176,13 @@ class PolyphonicAnalyzer {
         }
     }
 
-    std::vector<float> currentFrame() const {
-        std::vector<float> frame(static_cast<size_t>(kFFTSize));
+    void fillCurrentFrame() {
         for (int i = 0; i < kFFTSize; ++i) {
             const int index = (writePosition + i) % kFFTSize;
             const float window =
                 0.5f - 0.5f * std::cos(2.0f * pi * i / static_cast<float>(kFFTSize - 1));
             frame[static_cast<size_t>(i)] = input[static_cast<size_t>(index)] * window;
         }
-        return frame;
     }
 
     int firstAnalysisBin() const {
@@ -186,30 +208,62 @@ class PolyphonicAnalyzer {
         return maximum;
     }
 
-    std::vector<SpectralPeak> findPeaks(float threshold) const {
+    bool isLocalPeakNearBin(float bin, float threshold) const {
+        const int center = static_cast<int>(std::lround(bin));
+        for (int offset = -1; offset <= 1; ++offset) {
+            const int peakBin = center + offset;
+            const float magnitude = magnitudeAtBin(peakBin);
+            if (magnitude < threshold || magnitude < magnitudeAtBin(peakBin - 1) ||
+                magnitude < magnitudeAtBin(peakBin + 1))
+                continue;
+
+            float peakOffset = 0.0f;
+            const float left = magnitudeAtBin(peakBin - 1);
+            const float right = magnitudeAtBin(peakBin + 1);
+            const float curvature = left - 2.0f * magnitude + right;
+            if (std::abs(curvature) > 1.0e-6f)
+                peakOffset = std::clamp(0.5f * (left - right) / curvature, -0.5f, 0.5f);
+
+            if (std::abs(static_cast<float>(peakBin) + peakOffset - bin) <= 0.25f)
+                return true;
+        }
+        return false;
+    }
+
+    const std::vector<SpectralPeak>& findPeaks(float threshold) {
         const int first = firstAnalysisBin();
         const int last = lastAnalysisBin();
-        std::vector<SpectralPeak> peaks;
+        spectralPeaks.clear();
 
         for (int bin = first; bin <= last; ++bin) {
             const float magnitude = magnitudeAtBin(bin);
             if (magnitude < threshold || magnitude < magnitudeAtBin(bin - 1) ||
                 magnitude < magnitudeAtBin(bin + 1))
                 continue;
-            peaks.push_back({bin, magnitude});
+            float offset = 0.0f;
+            const float left = magnitudeAtBin(bin - 1);
+            const float center = magnitude;
+            const float right = magnitudeAtBin(bin + 1);
+            const float curvature = left - 2.0f * center + right;
+            if (std::abs(curvature) > 1.0e-6f)
+                offset = std::clamp(0.5f * (left - right) / curvature, -0.5f, 0.5f);
+
+            spectralPeaks.push_back(
+                {bin,
+                 (static_cast<float>(bin) + offset) * static_cast<float>(sampleRate) / kFFTSize,
+                 magnitude});
         }
 
-        std::sort(peaks.begin(), peaks.end(), [](const SpectralPeak& a, const SpectralPeak& b) {
-            return a.magnitude > b.magnitude;
-        });
+        std::sort(
+            spectralPeaks.begin(), spectralPeaks.end(),
+            [](const SpectralPeak& a, const SpectralPeak& b) { return a.magnitude > b.magnitude; });
 
         // Keep enough partials to recover a weak fundamental, while avoiding
         // a noisy spectrum turning into an unbounded number of channels.
-        std::vector<SpectralPeak> selected;
-        selected.reserve(static_cast<size_t>(kMaxVoices * 8));
-        for (const auto& peak : peaks) {
+        selectedPeaks.clear();
+        for (const auto& peak : spectralPeaks) {
             bool tooClose = false;
-            for (const auto& other : selected) {
+            for (const auto& other : selectedPeaks) {
                 if (std::abs(peak.bin - other.bin) < peakSpacingBins) {
                     tooClose = true;
                     break;
@@ -217,15 +271,18 @@ class PolyphonicAnalyzer {
             }
             if (tooClose)
                 continue;
-            selected.push_back(peak);
-            if (selected.size() >= static_cast<size_t>(kMaxVoices * 8))
+            selectedPeaks.push_back(peak);
+            if (selectedPeaks.size() >= static_cast<size_t>(kMaxVoices * 8))
                 break;
         }
-        return selected;
+        return selectedPeaks;
     }
 
-    float harmonicScore(float frequencyHz) const {
+    Candidate scoreCandidate(float frequencyHz, float maximumMagnitude) const {
+        Candidate result;
+        result.frequencyHz = frequencyHz;
         float score = 0.0f;
+        int supportedHarmonics = 0;
         static constexpr float weights[] = {1.0f,  0.70f, 0.50f, 0.36f, 0.27f,
                                             0.20f, 0.15f, 0.11f, 0.08f, 0.06f};
         for (int harmonic = 1; harmonic <= 10; ++harmonic) {
@@ -233,47 +290,53 @@ class PolyphonicAnalyzer {
             if (harmonicFrequency >= sampleRate * 0.48)
                 break;
             const float bin = harmonicFrequency * kFFTSize / static_cast<float>(sampleRate);
-            score += localMagnitudeAtBin(bin) * weights[harmonic - 1];
+            const float magnitude = localMagnitudeAtBin(bin);
+            score += magnitude * weights[harmonic - 1];
+            if (magnitude >= maximumMagnitude * 0.035f &&
+                isLocalPeakNearBin(bin, maximumMagnitude * 0.035f))
+                ++supportedHarmonics;
         }
-        return score;
+        result.score = score;
+        result.supportedHarmonics = supportedHarmonics;
+        result.fundamentalMagnitude =
+            localMagnitudeAtBin(frequencyHz * kFFTSize / static_cast<float>(sampleRate));
+        result.hasFundamentalPeak =
+            isLocalPeakNearBin(frequencyHz * kFFTSize / static_cast<float>(sampleRate),
+                               maximumMagnitude * minimumFundamentalRatio);
+        return result;
     }
 
-    Candidate estimateFundamental(const SpectralPeak& sourcePeak, float maximumMagnitude) const {
-        const float sourceFrequency = sourcePeak.bin * static_cast<float>(sampleRate) / kFFTSize;
-        Candidate best;
+    void appendFundamentalCandidates(const SpectralPeak& sourcePeak, float maximumMagnitude,
+                                     std::vector<Candidate>& candidates) const {
+        const float sourceFrequency = sourcePeak.frequencyHz;
 
         for (int harmonic = 1; harmonic <= 8; ++harmonic) {
             const float candidateFrequency = sourceFrequency / static_cast<float>(harmonic);
             if (candidateFrequency < minimumFrequencyHz || candidateFrequency > maximumFrequencyHz)
                 continue;
 
-            // A subharmonic is accepted only when there is at least a weak
-            // spectral foothold at its fundamental. This prevents a chord's
-            // unrelated partials from creating spurious low voices, while
-            // still supporting weak guitar fundamentals.
-            if (harmonic > 1) {
-                const float fundamentalBin =
-                    candidateFrequency * kFFTSize / static_cast<float>(sampleRate);
-                if (localMagnitudeAtBin(fundamentalBin) <
-                    maximumMagnitude * minimumFundamentalRatio)
-                    continue;
-            }
+            const float fundamentalMagnitude =
+                localMagnitudeAtBin(candidateFrequency * kFFTSize / static_cast<float>(sampleRate));
+            if (harmonic > 1 && fundamentalMagnitude < maximumMagnitude * minimumFundamentalRatio)
+                continue;
 
-            const float score = harmonicScore(candidateFrequency);
-            if (score > best.score) {
-                best.frequencyHz = candidateFrequency;
-                best.score = score;
-                best.dominantPeakFrequencyHz = sourceFrequency;
-                best.dominantPeakMagnitude = sourcePeak.magnitude;
-                best.fundamentalMagnitude = localMagnitudeAtBin(candidateFrequency * kFFTSize /
-                                                                static_cast<float>(sampleRate));
-            }
+            const auto scored = scoreCandidate(candidateFrequency, maximumMagnitude);
+            if (harmonic > 1 && scored.supportedHarmonics < 2)
+                continue;
+            if (harmonic > 1 && !scored.hasFundamentalPeak && scored.supportedHarmonics < 3)
+                continue;
+
+            Candidate candidate = scored;
+            candidate.dominantPeakFrequencyHz = sourceFrequency;
+            candidate.dominantPeakMagnitude = sourcePeak.magnitude;
+            candidate.fundamentalMagnitude = fundamentalMagnitude;
+            candidate.sourceHarmonic = harmonic;
+            candidates.push_back(candidate);
         }
-        return best;
     }
 
     static bool frequenciesAreClose(float a, float b) {
-        return a > 0.0f && b > 0.0f && std::abs(1200.0f * std::log2(a / b)) < 80.0f;
+        return a > 0.0f && b > 0.0f && std::abs(1200.0f * std::log2(a / b)) < 45.0f;
     }
 
     int matchPreviousVoice(float frequency, const std::vector<bool>& used) const {
@@ -332,7 +395,7 @@ class PolyphonicAnalyzer {
     }
 
     void analyse() {
-        const auto frame = currentFrame();
+        fillCurrentFrame();
         for (int i = 0; i < kFFTSize; ++i)
             spectrum[static_cast<size_t>(i)] = {frame[static_cast<size_t>(i)], 0.0f};
         fft(false);
@@ -348,24 +411,27 @@ class PolyphonicAnalyzer {
         }
         averageMagnitude /= static_cast<float>(std::max(1, last - first + 1));
 
-        if (maximumMagnitude <= 1.0e-7f) {
+        // A tonal spectrum has a clear peak above its broadband floor. This
+        // gate prevents isolated random-noise maxima from becoming voices.
+        if (maximumMagnitude <= 1.0e-7f || maximumMagnitude < averageMagnitude * 4.0f) {
             voices.clear();
             updateVoiceHistory();
             return;
         }
 
-        const auto peaks =
+        const auto& peaks =
             findPeaks(std::max(maximumMagnitude * minimumPeakRatio, averageMagnitude * 3.0f));
-        std::vector<Candidate> candidates;
-        candidates.reserve(peaks.size());
+        auto& candidates = candidateScratch;
+        candidates.clear();
 
-        for (const auto& peak : peaks) {
-            const auto candidate = estimateFundamental(peak, maximumMagnitude);
-            if (candidate.frequencyHz <= 0.0f || candidate.score <= 0.0f)
-                continue;
+        for (const auto& peak : peaks)
+            appendFundamentalCandidates(peak, maximumMagnitude, candidates);
 
+        auto& mergedCandidates = mergedCandidateScratch;
+        mergedCandidates.clear();
+        for (const auto& candidate : candidates) {
             bool merged = false;
-            for (auto& existing : candidates) {
+            for (auto& existing : mergedCandidates) {
                 if (frequenciesAreClose(existing.frequencyHz, candidate.frequencyHz)) {
                     if (candidate.score > existing.score)
                         existing = candidate;
@@ -374,33 +440,67 @@ class PolyphonicAnalyzer {
                 }
             }
             if (!merged)
-                candidates.push_back(candidate);
+                mergedCandidates.push_back(candidate);
         }
+        candidates.clear();
 
-        // If a note has a weak fundamental, its second/third partial can
-        // otherwise look like an additional octave voice. Prefer the lower
-        // candidate only in that specific weak-fundamental case; strong
-        // octave notes remain independently representable.
-        std::vector<Candidate> filteredCandidates;
-        filteredCandidates.reserve(candidates.size());
-        for (const auto& candidate : candidates) {
-            bool isWeakFundamentalDuplicate = false;
-            for (const auto& lower : candidates) {
-                if (lower.frequencyHz >= candidate.frequencyHz || lower.frequencyHz <= 0.0f)
-                    continue;
-                const float ratio = candidate.frequencyHz / lower.frequencyHz;
-                const int roundedRatio = static_cast<int>(std::lround(ratio));
-                if (roundedRatio >= 2 && roundedRatio <= 8 &&
-                    std::abs(ratio - static_cast<float>(roundedRatio)) < 0.025f &&
-                    lower.fundamentalMagnitude < lower.dominantPeakMagnitude * 0.35f) {
-                    isWeakFundamentalDuplicate = true;
-                    break;
+        // A partial can still produce a lower subharmonic candidate when its
+        // local search window overlaps another note. Drop that candidate only
+        // when a direct, stronger higher-frequency candidate explains the same
+        // harmonic relationship. If no direct candidate exists, retain it so
+        // genuinely weak guitar fundamentals remain recoverable.
+        auto& filteredCandidates = filteredCandidateScratch;
+        filteredCandidates.clear();
+        for (const auto& candidate : mergedCandidates) {
+            bool isWeakSubharmonic =
+                candidate.sourceHarmonic > 1 && !candidate.hasFundamentalPeak &&
+                candidate.fundamentalMagnitude < candidate.dominantPeakMagnitude * 0.12f;
+            bool hasDirectExplanation = false;
+            if (isWeakSubharmonic) {
+                for (const auto& direct : mergedCandidates) {
+                    if (direct.sourceHarmonic != 1 || direct.frequencyHz <= candidate.frequencyHz)
+                        continue;
+                    const float ratio = direct.frequencyHz / candidate.frequencyHz;
+                    const int roundedRatio = static_cast<int>(std::lround(ratio));
+                    if (roundedRatio >= 2 && roundedRatio <= 10 &&
+                        std::abs(ratio - static_cast<float>(roundedRatio)) < 0.08f &&
+                        direct.score > candidate.score * 0.35f) {
+                        hasDirectExplanation = true;
+                        break;
+                    }
                 }
             }
-            if (!isWeakFundamentalDuplicate)
-                filteredCandidates.push_back(candidate);
+            if (isWeakSubharmonic && hasDirectExplanation)
+                continue;
+
+            filteredCandidates.push_back(candidate);
         }
-        candidates = std::move(filteredCandidates);
+
+        // Once a candidate has several harmonics, a higher candidate whose
+        // entire harmonic series is an integer multiple is normally a partial
+        // of the lower voice, not a new voice. Leave one-partial candidates
+        // alone: two clean sine-like tones at an octave are still distinct
+        // spectral peaks and remain representable.
+        candidates.clear();
+        for (const auto& candidate : filteredCandidates) {
+            bool explainedByLowerVoice = false;
+            if (candidate.supportedHarmonics > 0) {
+                for (const auto& lower : filteredCandidates) {
+                    if (lower.frequencyHz >= candidate.frequencyHz || lower.supportedHarmonics < 2)
+                        continue;
+                    const float ratio = candidate.frequencyHz / lower.frequencyHz;
+                    const int roundedRatio = static_cast<int>(std::lround(ratio));
+                    if (roundedRatio >= 2 && roundedRatio <= 10 &&
+                        std::abs(ratio - static_cast<float>(roundedRatio)) < 0.08f &&
+                        (candidate.supportedHarmonics >= 2 || lower.supportedHarmonics >= 3)) {
+                        explainedByLowerVoice = true;
+                        break;
+                    }
+                }
+            }
+            if (!explainedByLowerVoice)
+                candidates.push_back(candidate);
+        }
 
         std::sort(candidates.begin(), candidates.end(),
                   [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
@@ -408,11 +508,14 @@ class PolyphonicAnalyzer {
             candidates.resize(static_cast<size_t>(kMaxVoices));
 
         sourceSpectrum = spectrum;
-        std::vector<Voice> next;
+        auto& next = nextVoiceScratch;
+        next.clear();
         next.reserve(candidates.size());
-        std::vector<bool> used(voices.size(), false);
+        auto& used = usedScratch;
+        used.assign(voices.size(), false);
 
-        for (const auto& candidate : candidates) {
+        for (size_t voiceIndex = 0; voiceIndex < candidates.size(); ++voiceIndex) {
+            const auto& candidate = candidates[voiceIndex];
             const int previous = matchPreviousVoice(candidate.frequencyHz, used);
             int historicalId = previous >= 0 ? voices[static_cast<size_t>(previous)].id
                                              : matchHistoricalVoice(candidate.frequencyHz);
@@ -423,22 +526,40 @@ class PolyphonicAnalyzer {
                 historicalId = -1;
             spectrum = sourceSpectrum;
 
-            // Reconstruct a channel from the fundamental and its partials.
-            // This is the important distinction from forwarding one FFT bin:
-            // the pitch tracker sees the complete isolated voice, including
-            // harmonics that can rescue a weak fundamental.
+            // Build a normalized soft spectral mask for this candidate. A
+            // source bin is assigned across competing voices instead of being
+            // copied wholesale into every channel. Exact harmonic collisions
+            // are inherently ambiguous, but the channels remain independent
+            // and their retained energy is conserved.
             for (int bin = 0; bin < kFFTSize / 2; ++bin) {
-                bool keep = false;
-                for (int harmonic = 1; harmonic <= 10 && !keep; ++harmonic) {
-                    const float partial = candidate.frequencyHz * harmonic * kFFTSize /
-                                          static_cast<float>(sampleRate);
-                    keep =
-                        std::abs(bin - static_cast<int>(std::lround(partial))) <= peakSpacingBins;
+                float weight = 0.0f;
+                float totalWeight = 0.0f;
+                for (size_t candidateIndex = 0; candidateIndex < candidates.size();
+                     ++candidateIndex) {
+                    float distance = static_cast<float>(kFFTSize);
+                    for (int harmonic = 1; harmonic <= 10; ++harmonic) {
+                        const float partial = candidates[candidateIndex].frequencyHz * harmonic *
+                                              kFFTSize / static_cast<float>(sampleRate);
+                        distance = std::min(distance, std::abs(bin - partial));
+                    }
+                    if (distance <= static_cast<float>(peakSpacingBins)) {
+                        const float candidateWeight =
+                            std::max(0.001f, static_cast<float>(peakSpacingBins + 1) - distance);
+                        totalWeight += candidateWeight;
+                        if (candidateIndex == voiceIndex)
+                            weight = candidateWeight;
+                    }
                 }
-                if (!keep) {
+
+                if (totalWeight <= 0.0f) {
                     spectrum[static_cast<size_t>(bin)] = {};
                     if (bin > 0)
                         spectrum[static_cast<size_t>(kFFTSize - bin)] = {};
+                } else {
+                    const float mask = weight / totalWeight;
+                    spectrum[static_cast<size_t>(bin)] *= mask;
+                    if (bin > 0)
+                        spectrum[static_cast<size_t>(kFFTSize - bin)] *= mask;
                 }
             }
 
@@ -471,16 +592,24 @@ class PolyphonicAnalyzer {
             next.push_back(std::move(voice));
         }
 
-        voices = std::move(next);
+        voices.swap(next);
         updateVoiceHistory();
     }
 
     double sampleRate = 44100.0;
     std::vector<float> input;
+    std::vector<float> frame;
     std::vector<std::complex<float>> spectrum;
     std::vector<std::complex<float>> sourceSpectrum;
     std::vector<Voice> voices;
     std::vector<HistoricalVoice> voiceHistory;
+    std::vector<SpectralPeak> spectralPeaks;
+    std::vector<SpectralPeak> selectedPeaks;
+    std::vector<Candidate> candidateScratch;
+    std::vector<Candidate> mergedCandidateScratch;
+    std::vector<Candidate> filteredCandidateScratch;
+    std::vector<Voice> nextVoiceScratch;
+    std::vector<bool> usedScratch;
     PitchTracker pitchTracker;
     IndexedPitchTracker indexedPitchTracker;
     int writePosition = 0;

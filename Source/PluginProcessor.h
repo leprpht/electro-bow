@@ -84,6 +84,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     PolyphonicAnalyzer polyphonicAnalyzer;
     PolyPitchDetector polyPitchDetector; // retained as the old comparison baseline
     std::array<PolyPitchDetector, PolyphonicAnalyzer::kMaxVoices> isolatedTrackers;
+    std::array<int, PolyphonicAnalyzer::kMaxVoices> isolatedTrackerVoiceIds{};
 
     VoiceManager voiceManager;
 

@@ -21,12 +21,40 @@ ElectroBowAudioProcessor::trackIsolatedVoice(int voiceId, const std::vector<floa
     if (voiceId < 0 || samples.empty())
         return {};
 
-    // Analyzer IDs are intentionally stable over time and may grow beyond
-    // the fixed number of simultaneously active channels. This adapter is
-    // frame-local, so reusing a prepared detector slot is safe here.
-    auto& tracker = isolatedTrackers[static_cast<size_t>(voiceId) % isolatedTrackers.size()];
-    tracker.prepare(rate);
+    int slot = -1;
+    for (int i = 0; i < static_cast<int>(isolatedTrackerVoiceIds.size()); ++i) {
+        if (isolatedTrackerVoiceIds[static_cast<size_t>(i)] == voiceId) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot < 0) {
+        for (int i = 0; i < static_cast<int>(isolatedTrackerVoiceIds.size()); ++i) {
+            if (isolatedTrackerVoiceIds[static_cast<size_t>(i)] < 0) {
+                slot = i;
+                break;
+            }
+        }
+    }
+
+    // There can be at most kMaxVoices active IDs. If an old ID has not yet
+    // been retired by the analyzer, reuse its slot rather than aliasing two
+    // active IDs with modulo arithmetic.
+    if (slot < 0)
+        slot = voiceId % static_cast<int>(isolatedTrackers.size());
+
+    auto& tracker = isolatedTrackers[static_cast<size_t>(slot)];
+    if (isolatedTrackerVoiceIds[static_cast<size_t>(slot)] != voiceId) {
+        tracker.prepare(rate);
+        isolatedTrackerVoiceIds[static_cast<size_t>(slot)] = voiceId;
+    }
+
     tracker.push(samples.data(), static_cast<int>(samples.size()));
+    if (tracker.getBestFrequencyHz() > 0.0f) {
+        return {tracker.getBestFrequencyHz(), tracker.getBestConfidence()};
+    }
+
     if (tracker.getNumNotes() <= 0)
         return {};
 
@@ -40,6 +68,9 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
 
     polyphonicAnalyzer.prepare(sampleRate);
     polyPitchDetector.prepare(sampleRate);
+    isolatedTrackerVoiceIds.fill(-1);
+    for (auto& tracker : isolatedTrackers)
+        tracker.prepare(sampleRate);
 
     voiceManager.prepare(sampleRate, attackMs, releaseMs);
 
@@ -50,6 +81,7 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
 
 void ElectroBowAudioProcessor::releaseResources() {
     voiceManager.reset();
+    isolatedTrackerVoiceIds.fill(-1);
 }
 
 bool ElectroBowAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {

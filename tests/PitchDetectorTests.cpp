@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <random>
 #include <vector>
 
 namespace {
@@ -22,6 +23,24 @@ void addNote(std::vector<float>& buffer, int midiNote, float amplitude) {
 
         buffer[i] += std::sin(2.0f * pi * frequency * t) * amplitude;
     }
+}
+
+void addGuitarLikeNote(std::vector<float>& buffer, float frequency, float amplitude,
+                       float fundamentalScale = 1.0f) {
+    for (size_t i = 0; i < buffer.size(); ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
+        buffer[i] += amplitude * (fundamentalScale * 0.15f * std::sin(2.0f * pi * frequency * t) +
+                                  0.70f * std::sin(4.0f * pi * frequency * t) +
+                                  0.45f * std::sin(6.0f * pi * frequency * t) +
+                                  0.30f * std::sin(8.0f * pi * frequency * t));
+    }
+}
+
+float rms(const std::vector<float>& samples) {
+    float energy = 0.0f;
+    for (const float sample : samples)
+        energy += sample * sample;
+    return std::sqrt(energy / static_cast<float>(std::max<size_t>(1, samples.size())));
 }
 
 void printDetected(const char* name, PolyPitchDetector& detector) {
@@ -122,6 +141,106 @@ int main() {
             std::cerr << "Polyphonic analyzer did not track voice identity across frames\n";
             return 1;
         }
+    }
+
+    // The tracker must receive a genuinely isolated channel and return a
+    // continuous frequency, not only a MIDI-semitone estimate.
+    PolyphonicAnalyzer trackedAnalyzer([](const std::vector<float>& voice, double rate) {
+        PolyPitchDetector tracker;
+        tracker.prepare(rate);
+        tracker.push(voice.data(), static_cast<int>(voice.size()));
+        return PolyphonicAnalyzer::PitchEstimate{tracker.getBestFrequencyHz(),
+                                                 tracker.getBestConfidence()};
+    });
+    trackedAnalyzer.prepare(sampleRate);
+    trackedAnalyzer.push(chord.data(), static_cast<int>(chord.size()));
+    bool foundTrackedD3 = false;
+    bool foundTrackedA3 = false;
+    for (const auto& voice : trackedAnalyzer.getVoices()) {
+        foundTrackedD3 |= std::abs(voice.trackedFrequencyHz - midiToFrequency(50)) < 2.0f;
+        foundTrackedA3 |= std::abs(voice.trackedFrequencyHz - midiToFrequency(57)) < 2.0f;
+    }
+    if (!foundTrackedD3 || !foundTrackedA3) {
+        std::cerr << "Isolated pitch tracking did not recover both continuous frequencies\n";
+        return 1;
+    }
+
+    if (rms(trackedAnalyzer.getVoices()[0].samples) <= 0.0f ||
+        rms(trackedAnalyzer.getVoices()[1].samples) <= 0.0f ||
+        trackedAnalyzer.getVoices()[0].samples == trackedAnalyzer.getVoices()[1].samples) {
+        std::cerr << "Separated voice buffers did not contain independent signal energy\n";
+        return 1;
+    }
+
+    // Guitar-like harmonic content with a weak fundamental should still
+    // produce the two underlying voices rather than their dominant partials.
+    std::vector<float> guitarChord(PolyphonicAnalyzer::kFFTSize * 2, 0.0f);
+    addGuitarLikeNote(guitarChord, 82.41f, 1.0f, 0.15f);
+    addGuitarLikeNote(guitarChord, 110.0f, 1.0f, 0.15f);
+    PolyphonicAnalyzer guitarAnalyzer;
+    guitarAnalyzer.prepare(sampleRate);
+    guitarAnalyzer.push(guitarChord.data(), static_cast<int>(guitarChord.size()));
+    bool foundLowString = false;
+    bool foundAString = false;
+    for (const auto& voice : guitarAnalyzer.getVoices()) {
+        foundLowString |= std::abs(voice.peakFrequencyHz - 82.41f) < 3.0f;
+        foundAString |= std::abs(voice.peakFrequencyHz - 110.0f) < 3.0f;
+    }
+    if (!foundLowString || !foundAString || guitarAnalyzer.getVoices().size() > 2) {
+        std::cerr << "Guitar-like harmonic separation produced incorrect voices\n";
+        return 1;
+    }
+
+    std::vector<float> weakFundamental(PolyphonicAnalyzer::kFFTSize * 2, 0.0f);
+    addGuitarLikeNote(weakFundamental, 82.41f, 1.0f, 0.08f);
+    PolyphonicAnalyzer weakAnalyzer;
+    weakAnalyzer.prepare(sampleRate);
+    weakAnalyzer.push(weakFundamental.data(), static_cast<int>(weakFundamental.size()));
+    bool foundWeakFundamental = false;
+    for (const auto& voice : weakAnalyzer.getVoices())
+        foundWeakFundamental |= std::abs(voice.peakFrequencyHz - 82.41f) < 3.0f;
+    if (!foundWeakFundamental) {
+        std::cerr << "Weak fundamental was not recovered from its harmonics\n";
+        return 1;
+    }
+
+    // Continuous tracking must follow a bend and reject unpitched noise.
+    std::vector<float> tone(PolyPitchDetector::kFFTSize, 0.0f);
+    addGuitarLikeNote(tone, 440.0f, 1.0f, 1.0f);
+    PolyPitchDetector continuousTracker;
+    continuousTracker.prepare(sampleRate);
+    continuousTracker.push(tone.data(), static_cast<int>(tone.size()));
+    if (std::abs(continuousTracker.getBestFrequencyHz() - 440.0f) > 2.0f ||
+        continuousTracker.getBestConfidence() < 0.5f) {
+        std::cerr << "Continuous pitch estimate failed on a stable tone\n";
+        return 1;
+    }
+
+    std::fill(tone.begin(), tone.end(), 0.0f);
+    addGuitarLikeNote(tone, 466.16f, 1.0f, 1.0f);
+    continuousTracker.push(tone.data(), static_cast<int>(tone.size()));
+    if (std::abs(continuousTracker.getBestFrequencyHz() - 466.16f) > 2.0f) {
+        std::cerr << "Continuous pitch estimate failed on a bend\n";
+        return 1;
+    }
+
+    std::mt19937 random(7);
+    std::normal_distribution<float> noise(0.0f, 0.2f);
+    for (float& sample : tone)
+        sample = noise(random);
+    continuousTracker.push(tone.data(), static_cast<int>(tone.size()));
+    if (continuousTracker.getBestFrequencyHz() != 0.0f ||
+        continuousTracker.getBestConfidence() != 0.0f) {
+        std::cerr << "Noise was incorrectly reported as a stable pitch\n";
+        return 1;
+    }
+
+    PolyphonicAnalyzer noiseAnalyzer;
+    noiseAnalyzer.prepare(sampleRate);
+    noiseAnalyzer.push(tone.data(), static_cast<int>(tone.size()));
+    if (!noiseAnalyzer.getVoices().empty()) {
+        std::cerr << "Spectral analyzer created voices from unpitched noise\n";
+        return 1;
     }
 
     // With no tracker installed, the analyzer still has a useful spectral

@@ -61,7 +61,9 @@ The release workflow builds the macOS plugin as a universal binary for both Appl
 
 ## Tests
 
-The test suite uses CTest and currently covers pitch detection from a generated 440 Hz signal:
+The test suite uses CTest and covers generated monophonic and polyphonic signals, including
+isolated voice buffers, guitar-like harmonics, weak fundamentals, continuous pitch bends, and
+noise rejection:
 
 ```sh
 ctest --test-dir build --build-config Release --output-on-failure

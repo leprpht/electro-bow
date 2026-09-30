@@ -33,8 +33,12 @@ class PolyPitchDetector {
 
         writePosition = 0;
         samplesSinceAnalysis = 0;
+        samplesReceived = 0;
+        samplesAtLastContinuousAnalysis = 0;
 
-        detectedNotes.clear();
+        detectedNoteCount = 0;
+        bestFrequencyHz = 0.0f;
+        bestConfidence = 0.0f;
     }
 
     void push(const float* samples, int numSamples) {
@@ -47,6 +51,7 @@ class PolyPitchDetector {
 
             writePosition = (writePosition + 1) % kFFTSize;
 
+            ++samplesReceived;
             ++samplesSinceAnalysis;
 
             if (samplesSinceAnalysis >= kHopSize) {
@@ -57,15 +62,26 @@ class PolyPitchDetector {
     }
 
     int getNumNotes() const noexcept {
-        return static_cast<int>(detectedNotes.size());
+        return detectedNoteCount;
     }
 
     DetectedNote getNote(int index) const noexcept {
-        if (index < 0 || index >= static_cast<int>(detectedNotes.size())) {
+        if (index < 0 || index >= detectedNoteCount) {
             return {};
         }
 
         return detectedNotes[static_cast<size_t>(index)];
+    }
+
+    // Continuous estimate used when this detector is fed an isolated voice.
+    // The MIDI-note list above remains available as the legacy detector
+    // interface, while this estimate preserves bends between semitones.
+    float getBestFrequencyHz() const noexcept {
+        return bestFrequencyHz;
+    }
+
+    float getBestConfidence() const noexcept {
+        return bestConfidence;
     }
 
   private:
@@ -87,7 +103,9 @@ class PolyPitchDetector {
         }
 
         if (strongest <= 0.000001f) {
-            detectedNotes.clear();
+            detectedNoteCount = 0;
+            bestFrequencyHz = 0.0f;
+            bestConfidence = 0.0f;
             return;
         }
 
@@ -127,23 +145,99 @@ class PolyPitchDetector {
             ++candidateCount;
         }
 
-        std::vector<DetectedNote> newNotes;
+        std::array<DetectedNote, kMaxNotes> newNotes{};
 
         for (int i = 0; i < candidateCount; ++i) {
-            DetectedNote note;
-
-            note.midiNote = candidateNotes[static_cast<size_t>(i)];
-
-            note.strength = candidateStrengths[static_cast<size_t>(i)];
-
-            newNotes.push_back(note);
+            newNotes[static_cast<size_t>(i)].midiNote = candidateNotes[static_cast<size_t>(i)];
+            newNotes[static_cast<size_t>(i)].strength = candidateStrengths[static_cast<size_t>(i)];
         }
 
         std::sort(
-            newNotes.begin(), newNotes.end(),
+            newNotes.begin(), newNotes.begin() + candidateCount,
             [](const DetectedNote& a, const DetectedNote& b) { return a.strength > b.strength; });
 
-        detectedNotes = std::move(newNotes);
+        detectedNotes = newNotes;
+        detectedNoteCount = candidateCount;
+
+        if (samplesReceived >= kFFTSize &&
+            samplesReceived - samplesAtLastContinuousAnalysis >= kFFTSize) {
+            estimateContinuousPitch();
+            samplesAtLastContinuousAnalysis = samplesReceived;
+        }
+    }
+
+    void estimateContinuousPitch() {
+        bestFrequencyHz = 0.0f;
+        bestConfidence = 0.0f;
+
+        if (samplesReceived < kFFTSize)
+            return;
+
+        constexpr float minimumConfidence = 0.30f;
+
+        const int minimumLag = std::max(2, static_cast<int>(std::floor(sampleRate / 2000.0)));
+        const int maximumLag =
+            std::min(kFFTSize / 2, static_cast<int>(std::ceil(sampleRate / 30.0)));
+        if (maximumLag <= minimumLag + 2)
+            return;
+
+        // The forward FFT has already been computed by analyse(). The inverse
+        // transform of its power spectrum is the autocorrelation, avoiding a
+        // second O(N * lag) time-domain pass for every isolated voice.
+        for (auto& value : fftBuffer)
+            value = {std::norm(value), 0.0f};
+        performFFT(true);
+
+        const float zeroLag = fftBuffer[0].real();
+        if (zeroLag <= 1.0e-8f)
+            return;
+
+        float bestCorrelation = 0.0f;
+        int bestLag = 0;
+        std::array<float, kFFTSize / 2 + 1> correlations{};
+
+        for (int lag = minimumLag; lag <= maximumLag; ++lag) {
+            const float correlation = fftBuffer[static_cast<size_t>(lag)].real() / zeroLag;
+            correlations[static_cast<size_t>(lag)] = correlation;
+            if (correlation > bestCorrelation) {
+                bestCorrelation = correlation;
+                bestLag = lag;
+            }
+        }
+
+        if (bestLag == 0 || bestCorrelation < minimumConfidence)
+            return;
+
+        // Prefer the first strong local maximum. This avoids selecting an
+        // octave multiple simply because several periods correlate well.
+        const float localThreshold = bestCorrelation * 0.97f;
+        int selectedLag = bestLag;
+        for (int lag = minimumLag + 1; lag < maximumLag; ++lag) {
+            const float current = correlations[static_cast<size_t>(lag)];
+            if (current >= localThreshold &&
+                current >= correlations[static_cast<size_t>(lag - 1)] &&
+                current >= correlations[static_cast<size_t>(lag + 1)]) {
+                selectedLag = lag;
+                break;
+            }
+        }
+
+        float refinedLag = static_cast<float>(selectedLag);
+        if (selectedLag > minimumLag && selectedLag < maximumLag) {
+            const float left = correlations[static_cast<size_t>(selectedLag - 1)];
+            const float center = correlations[static_cast<size_t>(selectedLag)];
+            const float right = correlations[static_cast<size_t>(selectedLag + 1)];
+            const float curvature = left - 2.0f * center + right;
+            if (std::abs(curvature) > 1.0e-6f)
+                refinedLag += 0.5f * (left - right) / curvature;
+        }
+
+        if (refinedLag <= 0.0f)
+            return;
+
+        bestFrequencyHz = static_cast<float>(sampleRate / refinedLag);
+        bestConfidence = std::clamp(
+            (bestCorrelation - minimumConfidence) / (1.0f - minimumConfidence), 0.0f, 1.0f);
     }
 
     void buildFFTInput() {
@@ -162,7 +256,7 @@ class PolyPitchDetector {
         }
     }
 
-    void performFFT() {
+    void performFFT(bool inverse = false) {
         constexpr float pi = 3.14159265358979323846f;
 
         // Bit reversal.
@@ -182,7 +276,7 @@ class PolyPitchDetector {
 
         // Cooley-Tukey radix-2 FFT.
         for (int length = 2; length <= kFFTSize; length <<= 1) {
-            const float angle = -2.0f * pi / static_cast<float>(length);
+            const float angle = (inverse ? 2.0f : -2.0f) * pi / static_cast<float>(length);
 
             const std::complex<float> wLen = std::polar(1.0f, angle);
 
@@ -203,6 +297,11 @@ class PolyPitchDetector {
                     w *= wLen;
                 }
             }
+        }
+
+        if (inverse) {
+            for (auto& value : fftBuffer)
+                value /= static_cast<float>(kFFTSize);
         }
     }
 
@@ -258,5 +357,13 @@ class PolyPitchDetector {
 
     int samplesSinceAnalysis = 0;
 
-    std::vector<DetectedNote> detectedNotes;
+    int samplesReceived = 0;
+
+    int samplesAtLastContinuousAnalysis = 0;
+
+    std::array<DetectedNote, kMaxNotes> detectedNotes{};
+    int detectedNoteCount = 0;
+
+    float bestFrequencyHz = 0.0f;
+    float bestConfidence = 0.0f;
 };
