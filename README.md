@@ -67,6 +67,19 @@ The test suite uses CTest and currently covers pitch detection from a generated 
 ctest --test-dir build --build-config Release --output-on-failure
 ```
 
+For a convenient configure/build/run workflow, use the Python test wrapper:
+
+```sh
+python3 run_tests.py /path/to/JUCE
+python3 run_tests.py                 # reuse the configured build directory
+python3 run_tests.py --verbose       # show detailed CTest output
+python3 run_tests.py --list          # list tests without running them
+```
+
+On Windows, use `python run_tests.py`. The wrapper builds only the
+`ElectroBowPitchDetectorTests` target before invoking CTest. Use `--reconfigure`
+after changing CMake options, or `--no-build` to run an already-built test binary.
+
 GitHub Actions runs the build and tests on every push and pull request for Windows, macOS, and Linux. Release builds run the same tests before packaging. CMake build directories are cached when the platform, JUCE version, and source inputs match.
 
 ## VS Code
