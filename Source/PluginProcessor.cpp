@@ -4,7 +4,36 @@
 ElectroBowAudioProcessor::ElectroBowAudioProcessor()
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
-                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {}
+                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {
+    // The analyzer remains independent of any particular tracker. The current
+    // product path uses the existing detector as an adapter for each isolated
+    // channel; this can later be replaced by Q without changing separation or
+    // VoiceManager.
+    polyphonicAnalyzer.setPitchTracker(
+        [this](int voiceId, const std::vector<float>& samples, double rate) {
+            return trackIsolatedVoice(voiceId, samples, rate);
+        });
+}
+
+PolyphonicAnalyzer::PitchEstimate
+ElectroBowAudioProcessor::trackIsolatedVoice(int voiceId, const std::vector<float>& samples,
+                                             double rate) {
+    if (voiceId < 0 || samples.empty())
+        return {};
+
+    // Analyzer IDs are intentionally stable over time and may grow beyond
+    // the fixed number of simultaneously active channels. This adapter is
+    // frame-local, so reusing a prepared detector slot is safe here.
+    auto& tracker = isolatedTrackers[static_cast<size_t>(voiceId) % isolatedTrackers.size()];
+    tracker.prepare(rate);
+    tracker.push(samples.data(), static_cast<int>(samples.size()));
+    if (tracker.getNumNotes() <= 0)
+        return {};
+
+    const auto note = tracker.getNote(0);
+    return {440.0f * std::pow(2.0f, static_cast<float>(note.midiNote - 69) / 12.0f),
+            std::clamp(note.strength, 0.0f, 1.0f)};
+}
 
 void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     monoScratch.assign(static_cast<size_t>(juce::jmax(1, samplesPerBlock)), 0.0f);
@@ -76,6 +105,9 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // Detect the current polyphonic note set.
     // ------------------------------------------------------------------
 
+    // Keep the old detector fed for the existing editor/comparison accessors.
+    // It is not used as the analyzer's architectural foundation.
+    polyPitchDetector.push(monoScratch.data(), numSamples);
     polyphonicAnalyzer.push(monoScratch.data(), numSamples);
 
     // ------------------------------------------------------------------

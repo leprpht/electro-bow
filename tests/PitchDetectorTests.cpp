@@ -124,5 +124,22 @@ int main() {
         }
     }
 
+    // With no tracker installed, the analyzer still has a useful spectral
+    // fallback. It should expose the two independent fundamentals rather than
+    // returning only one dominant FFT peak.
+    PolyphonicAnalyzer spectralAnalyzer;
+    spectralAnalyzer.prepare(sampleRate);
+    spectralAnalyzer.push(chord.data(), static_cast<int>(chord.size()));
+    bool foundD3 = false;
+    bool foundA3 = false;
+    for (const auto& voice : spectralAnalyzer.getVoices()) {
+        foundD3 |= std::abs(voice.peakFrequencyHz - midiToFrequency(50)) < 10.0f;
+        foundA3 |= std::abs(voice.peakFrequencyHz - midiToFrequency(57)) < 10.0f;
+    }
+    if (!foundD3 || !foundA3) {
+        std::cerr << "Polyphonic analyzer did not separate the expected fundamentals\n";
+        return 1;
+    }
+
     return 0;
 }

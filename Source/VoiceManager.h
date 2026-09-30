@@ -20,6 +20,7 @@ class VoiceManager {
 
         int midiNote = -1;
         float frequencyHz = 0.0f;
+        int analyzerVoiceId = -1;
 
         float strength = 0.0f;
 
@@ -41,6 +42,7 @@ class VoiceManager {
 
             voice.midiNote = -1;
             voice.frequencyHz = 0.0f;
+            voice.analyzerVoiceId = -1;
             voice.strength = 0.0f;
             voice.active = false;
             voice.releasing = false;
@@ -57,6 +59,7 @@ class VoiceManager {
 
             voice.midiNote = -1;
             voice.frequencyHz = 0.0f;
+            voice.analyzerVoiceId = -1;
             voice.strength = 0.0f;
             voice.active = false;
             voice.releasing = false;
@@ -74,9 +77,18 @@ class VoiceManager {
                 const auto& voice = voices[static_cast<size_t>(i)];
                 if (!voice.active || matched[static_cast<size_t>(i)] || voice.frequencyHz <= 0.0f)
                     continue;
+
+                // Analyzer identity is stronger than frequency proximity. It
+                // keeps a channel alive through bends and avoids swapping two
+                // nearby voices when their tracked frequencies cross.
+                if (detected.id >= 0 && voice.analyzerVoiceId == detected.id) {
+                    best = i;
+                    break;
+                }
+
                 const float cents =
                     std::abs(1200.0f * std::log2(detected.trackedFrequencyHz / voice.frequencyHz));
-                if (cents < 100.0f && cents < bestCents) {
+                if (cents < 250.0f && cents < bestCents) {
                     best = i;
                     bestCents = cents;
                 }
@@ -86,12 +98,14 @@ class VoiceManager {
             if (best < 0)
                 continue;
             auto& voice = voices[static_cast<size_t>(best)];
-            if (!voice.active)
+            if (!voice.active) {
                 startVoice(voice, detected.trackedFrequencyHz, detected.strength);
-            else {
+                voice.analyzerVoiceId = detected.id;
+            } else {
                 voice.frequencyHz = detected.trackedFrequencyHz;
                 voice.bowed.setFrequency(static_cast<stk::StkFloat>(voice.frequencyHz));
                 voice.strength = detected.strength;
+                voice.analyzerVoiceId = detected.id;
                 voice.releasing = false;
                 voice.envelope.sustain();
             }
@@ -234,6 +248,7 @@ class VoiceManager {
 
                 voice.midiNote = -1;
                 voice.frequencyHz = 0.0f;
+                voice.analyzerVoiceId = -1;
                 voice.strength = 0.0f;
                 voice.active = false;
                 voice.releasing = false;
@@ -308,6 +323,7 @@ class VoiceManager {
         voice.envelope.trigger(strength);
 
         voice.frequencyHz = frequency;
+        voice.analyzerVoiceId = -1;
         voice.midiNote =
             static_cast<int>(std::lround(69.0f + 12.0f * std::log2(frequency / 440.0f)));
         voice.strength = strength;

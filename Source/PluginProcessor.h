@@ -6,6 +6,8 @@
 #include "PolyphonicAnalyzer.h"
 #include "VoiceManager.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <vector>
 
@@ -76,8 +78,12 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     }
 
   private:
+    PolyphonicAnalyzer::PitchEstimate
+    trackIsolatedVoice(int voiceId, const std::vector<float>& samples, double sampleRate);
+
     PolyphonicAnalyzer polyphonicAnalyzer;
     PolyPitchDetector polyPitchDetector; // retained as the old comparison baseline
+    std::array<PolyPitchDetector, PolyphonicAnalyzer::kMaxVoices> isolatedTrackers;
 
     VoiceManager voiceManager;
 
