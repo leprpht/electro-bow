@@ -4,12 +4,73 @@
 ElectroBowAudioProcessor::ElectroBowAudioProcessor()
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
-                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {}
+                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {
+    // The analyzer remains independent of any particular tracker. The current
+    // product path uses the existing detector as an adapter for each isolated
+    // channel; this can later be replaced by Q without changing separation or
+    // VoiceManager.
+    polyphonicAnalyzer.setPitchTracker(
+        [this](int voiceId, const std::vector<float>& samples, double rate) {
+            return trackIsolatedVoice(voiceId, samples, rate);
+        });
+}
+
+PolyphonicAnalyzer::PitchEstimate
+ElectroBowAudioProcessor::trackIsolatedVoice(int voiceId, const std::vector<float>& samples,
+                                             double rate) {
+    if (voiceId < 0 || samples.empty())
+        return {};
+
+    int slot = -1;
+    for (int i = 0; i < static_cast<int>(isolatedTrackerVoiceIds.size()); ++i) {
+        if (isolatedTrackerVoiceIds[static_cast<size_t>(i)] == voiceId) {
+            slot = i;
+            break;
+        }
+    }
+
+    if (slot < 0) {
+        for (int i = 0; i < static_cast<int>(isolatedTrackerVoiceIds.size()); ++i) {
+            if (isolatedTrackerVoiceIds[static_cast<size_t>(i)] < 0) {
+                slot = i;
+                break;
+            }
+        }
+    }
+
+    // There can be at most kMaxVoices active IDs. If an old ID has not yet
+    // been retired by the analyzer, reuse its slot rather than aliasing two
+    // active IDs with modulo arithmetic.
+    if (slot < 0)
+        slot = voiceId % static_cast<int>(isolatedTrackers.size());
+
+    auto& tracker = isolatedTrackers[static_cast<size_t>(slot)];
+    if (isolatedTrackerVoiceIds[static_cast<size_t>(slot)] != voiceId) {
+        tracker.prepare(rate);
+        isolatedTrackerVoiceIds[static_cast<size_t>(slot)] = voiceId;
+    }
+
+    tracker.push(samples.data(), static_cast<int>(samples.size()));
+    if (tracker.getBestFrequencyHz() > 0.0f) {
+        return {tracker.getBestFrequencyHz(), tracker.getBestConfidence()};
+    }
+
+    if (tracker.getNumNotes() <= 0)
+        return {};
+
+    const auto note = tracker.getNote(0);
+    return {440.0f * std::pow(2.0f, static_cast<float>(note.midiNote - 69) / 12.0f),
+            std::clamp(note.strength, 0.0f, 1.0f)};
+}
 
 void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     monoScratch.assign(static_cast<size_t>(juce::jmax(1, samplesPerBlock)), 0.0f);
 
+    polyphonicAnalyzer.prepare(sampleRate);
     polyPitchDetector.prepare(sampleRate);
+    isolatedTrackerVoiceIds.fill(-1);
+    for (auto& tracker : isolatedTrackers)
+        tracker.prepare(sampleRate);
 
     voiceManager.prepare(sampleRate, attackMs, releaseMs);
 
@@ -20,6 +81,7 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
 
 void ElectroBowAudioProcessor::releaseResources() {
     voiceManager.reset();
+    isolatedTrackerVoiceIds.fill(-1);
 }
 
 bool ElectroBowAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
@@ -75,7 +137,10 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // Detect the current polyphonic note set.
     // ------------------------------------------------------------------
 
+    // Keep the old detector fed for the existing editor/comparison accessors.
+    // It is not used as the analyzer's architectural foundation.
     polyPitchDetector.push(monoScratch.data(), numSamples);
+    polyphonicAnalyzer.push(monoScratch.data(), numSamples);
 
     // ------------------------------------------------------------------
     // Synchronise VoiceManager with the detected note set.
@@ -85,7 +150,7 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // New notes create new Bowed voices.
     // ------------------------------------------------------------------
 
-    voiceManager.updateDetectedNotes(polyPitchDetector);
+    voiceManager.updateDetectedVoices(polyphonicAnalyzer);
 
     // ------------------------------------------------------------------
     // Render all active voices.

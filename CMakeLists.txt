@@ -209,6 +209,7 @@ target_sources(ElectroBow
         Source/PluginEditor.h
         Source/PitchDetector.h
         Source/PolyPitchDetector.h
+        Source/PolyphonicAnalyzer.h
         Source/BowTrigger.h
         Source/BowEnvelope.h
         Source/VoiceManager.h)
