@@ -67,8 +67,8 @@ Visual Studio is only used as the compiler/generator on Windows; no solution fil
 
 ## Project layout
 
-- `PluginProcessor.*` and `PluginEditor.*` contain the plugin implementation.
-- `PitchDetector.h` contains the aubio-based pitch detector.
+- `Source/PluginProcessor.*` and `Source/PluginEditor.*` contain the plugin implementation.
+- `Source/PitchDetector.h` contains the aubio-based pitch detector.
 - `ThirdParty/` contains the vendored aubio and STK sources used by the plugin.
 - `CMakeLists.txt` defines the platform-independent build.
 

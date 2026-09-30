@@ -203,15 +203,15 @@ target_include_directories(ElectroBow
 
 target_sources(ElectroBow
     PRIVATE
-        PluginProcessor.cpp
-        PluginEditor.cpp
-        PluginProcessor.h
-        PluginEditor.h
-        PitchDetector.h
-        PolyPitchDetector.h
-        BowTrigger.h
-        BowEnvelope.h
-        VoiceManager.h)
+        Source/PluginProcessor.cpp
+        Source/PluginEditor.cpp
+        Source/PluginProcessor.h
+        Source/PluginEditor.h
+        Source/PitchDetector.h
+        Source/PolyPitchDetector.h
+        Source/BowTrigger.h
+        Source/BowEnvelope.h
+        Source/VoiceManager.h)
 
 target_compile_features(ElectroBow
     PRIVATE

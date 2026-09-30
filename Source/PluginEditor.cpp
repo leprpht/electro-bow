@@ -51,7 +51,7 @@ void ElectroBowAudioProcessorEditor::timerCallback() {
         noteLabel.setText("Note: ---", juce::dontSendNotification);
         freqLabel.setText("Frequency: --- Hz", juce::dontSendNotification);
     }
-} //a
+} // a
 
 void ElectroBowAudioProcessorEditor::paint(juce::Graphics& g) {
     g.fillAll(juce::Colour(0xff1c1c1c));
