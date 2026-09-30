@@ -1,4 +1,5 @@
 #include "../Source/PolyPitchDetector.h"
+#include "../Source/PolyphonicAnalyzer.h"
 
 #include <cmath>
 #include <iostream>
@@ -74,6 +75,25 @@ int main() {
 
     // D3 + G3 + C4 + F4
     testChord("D3 + G3 + C4 + F4", {50, 55, 60, 65});
+
+    // The analyzer must expose independent buffers and invoke the tracker
+    // independently for each spectral peak.
+    int trackerCalls = 0;
+    PolyphonicAnalyzer analyzer([&trackerCalls](const std::vector<float>& voice, double rate) {
+        ++trackerCalls;
+        return PolyphonicAnalyzer::PitchEstimate{440.0f,
+                                                 voice.empty() || rate <= 0.0 ? 0.0f : 1.0f};
+    });
+    analyzer.prepare(sampleRate);
+    std::vector<float> chord(PolyphonicAnalyzer::kFFTSize * 2, 0.0f);
+    addNote(chord, 50, 0.2f);
+    addNote(chord, 57, 0.2f);
+    analyzer.push(chord.data(), static_cast<int>(chord.size()));
+    if (analyzer.getVoices().empty() ||
+        trackerCalls != static_cast<int>(analyzer.getVoices().size())) {
+        std::cerr << "Polyphonic analyzer did not produce independent tracked voices\n";
+        return 1;
+    }
 
     return 0;
 }
