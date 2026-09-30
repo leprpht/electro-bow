@@ -5,11 +5,20 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.0] - 2026-10-01
 
 ### Added
 
-- None.
+- Added isolated polyphonic voice tracking with stable analyzer voice IDs.
+- Added spectral analysis for improved tracking of polyphonic input.
+- Added a Python test wrapper for configuring, building, and running the test suite.
+- Added tests for isolated voice buffers, guitar-like harmonics, weak fundamentals, continuous pitch bends, and noise rejection.
+
+### Changed
+
+- Improved polyphonic pitch detection and voice matching when tracked frequencies cross.
+- Improved resource management for isolated audio input analysis.
+- Improved Windows build and configuration workflows, including operation without Python.
 
 ## [1.1.0] - 2026-09-30
 
