@@ -8,14 +8,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 
-class VoiceManager
-{
-public:
+class VoiceManager {
+  public:
     static constexpr int kMaxVoices = PolyphonicAnalyzer::kMaxVoices;
 
-    struct Voice
-    {
+    struct Voice {
         stk::Bowed bowed;
         BowEnvelope envelope;
 
@@ -29,57 +28,58 @@ public:
         bool releasing = false;
     };
 
-    void prepare(double newSampleRate,
-                 float newAttackMs,
-                 float newNaturalResonanceMs)
-    {
+    void prepare(double newSampleRate, float newAttackMs, float newNaturalResonanceMs) {
         sampleRate = std::max(1.0, newSampleRate);
         attackMs = std::max(0.0f, newAttackMs);
-        naturalResonanceMs =
-            std::max(0.0f, newNaturalResonanceMs);
+        naturalResonanceMs = std::max(0.0f, newNaturalResonanceMs);
 
         stk::Stk::setSampleRate(sampleRate);
 
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+        for (int i = 0; i < kMaxVoices; ++i) {
+            Voice& voice = voices[static_cast<std::size_t>(i)];
 
             voice.bowed.clear();
 
             voice.envelope.prepare(sampleRate);
             voice.envelope.setAttackMs(attackMs);
-            voice.envelope.setNaturalResonanceMs(
-                naturalResonanceMs);
+            voice.envelope.setNaturalResonanceMs(naturalResonanceMs);
 
             resetVoice(voice);
         }
+
+        lastAnalysisGeneration = 0;
     }
 
-    void reset()
-    {
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+    void reset() {
+        for (int i = 0; i < kMaxVoices; ++i) {
+            Voice& voice = voices[static_cast<std::size_t>(i)];
 
             voice.bowed.clear();
             voice.envelope.reset();
 
             resetVoice(voice);
         }
+
+        lastAnalysisGeneration = 0;
     }
 
-    void updateDetectedVoices(
-        const PolyphonicAnalyzer& analyzer)
-    {
+    void updateDetectedVoices(const PolyphonicAnalyzer& analyzer, bool allowNewVoices = true) {
+        const auto analysisGeneration = analyzer.getAnalysisGeneration();
+
+        // PolyphonicAnalyzer is fed in host-sized blocks, but it only
+        // publishes a new voice set on FFT hops. Processing the same set more
+        // than once would consume the loss grace period in host-block time
+        // and could release a voice during a single transient.
+        if (analysisGeneration == lastAnalysisGeneration)
+            return;
+
+        lastAnalysisGeneration = analysisGeneration;
+
         std::array<bool, kMaxVoices> matched{};
 
-        const auto& detectedVoices =
-            analyzer.getVoices();
+        const auto& detectedVoices = analyzer.getVoices();
 
-        for (const auto& detected : detectedVoices)
-        {
+        for (const auto& detected : detectedVoices) {
             if (!detected.active)
                 continue;
 
@@ -89,8 +89,7 @@ public:
             if (detected.trackedFrequencyHz <= 0.0f)
                 continue;
 
-            float confidence =
-                detected.trackerConfidence;
+            float confidence = detected.trackerConfidence;
 
             if (confidence < 0.0f)
                 confidence = 0.0f;
@@ -98,57 +97,53 @@ public:
             if (confidence > 1.0f)
                 confidence = 1.0f;
 
-            int voiceIndex =
-                findVoiceByAnalyzerId(
-                    detected.id,
-                    matched);
+            float strength = detected.strength;
 
-            if (voiceIndex < 0)
-            {
-                voiceIndex =
-                    findVoiceByFrequency(
-                        detected.trackedFrequencyHz,
-                        matched);
+            if (!std::isfinite(strength) || strength <= 0.0f)
+                strength = confidence;
+
+            strength = limit01(strength);
+
+            int voiceIndex = findVoiceByAnalyzerId(detected.id, matched);
+
+            if (voiceIndex < 0) {
+                voiceIndex = findVoiceByFrequency(detected.trackedFrequencyHz, matched);
             }
 
-            if (voiceIndex < 0)
+            // New STK attacks are permitted only for a physical note-on. If
+            // the analyzer changes candidates during an existing pluck,
+            // continuity handling below must update/reuse a live voice.
+            if (voiceIndex < 0 && allowNewVoices)
                 voiceIndex = findFreeVoice();
+
+            if (voiceIndex < 0 && !allowNewVoices) {
+                // Once the physical attack has been consumed, an unmatched
+                // spectral candidate is a retuning of an existing note until
+                // proven otherwise. Reusing the nearest live voice keeps a
+                // pitch jump from becoming a second Bowed attack. A genuinely
+                // new note remains ignored here because it has no note-on.
+                voiceIndex = findNearestVoiceForContinuity(detected.trackedFrequencyHz, matched);
+            }
 
             if (voiceIndex < 0)
                 continue;
 
-            Voice& voice =
-                voices[static_cast<std::size_t>(
-                    voiceIndex)];
+            Voice& voice = voices[static_cast<std::size_t>(voiceIndex)];
 
-            if (!voice.active)
-            {
-                startVoice(
-                    voice,
-                    detected.id,
-                    detected.trackedFrequencyHz,
-                    confidence);
-            }
-            else
-            {
-                updateExistingVoice(
-                    voice,
-                    detected.id,
-                    detected.trackedFrequencyHz,
-                    confidence);
+            if (!voice.active) {
+                startVoice(voice, detected.id, detected.trackedFrequencyHz, strength);
+            } else {
+                updateExistingVoice(voice, detected.id, detected.trackedFrequencyHz, strength);
             }
 
-            matched[static_cast<std::size_t>(
-                voiceIndex)] = true;
+            matched[static_cast<std::size_t>(voiceIndex)] = true;
         }
 
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
+        for (int i = 0; i < kMaxVoices; ++i) {
             if (matched[static_cast<std::size_t>(i)])
                 continue;
 
-            Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+            Voice& voice = voices[static_cast<std::size_t>(i)];
 
             if (!voice.active)
                 continue;
@@ -158,83 +153,57 @@ public:
 
             ++voice.lostFrames;
 
-            if (voice.lostFrames >=
-                kLostFramesBeforeRelease)
-            {
+            if (voice.lostFrames >= kLostFramesBeforeRelease) {
                 beginRelease(voice);
             }
         }
     }
 
-    void setBowParameters(float newBowPressure,
-                          float newBowSpeed,
-                          float newFriction)
-    {
+    void setBowParameters(float newBowPressure, float newBowSpeed, float newFriction) {
         bowPressure = limit01(newBowPressure);
         bowSpeed = limit01(newBowSpeed);
         friction = limit01(newFriction);
 
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+        for (int i = 0; i < kMaxVoices; ++i) {
+            Voice& voice = voices[static_cast<std::size_t>(i)];
 
             if (voice.active)
                 applyBowParameters(voice);
         }
     }
 
-    void setEnvelopeParameters(
-        float newAttackMs,
-        float newNaturalResonanceMs)
-    {
-        attackMs =
-            std::max(0.0f, newAttackMs);
+    void setEnvelopeParameters(float newAttackMs, float newNaturalResonanceMs) {
+        attackMs = std::max(0.0f, newAttackMs);
 
-        naturalResonanceMs =
-            std::max(0.0f, newNaturalResonanceMs);
+        naturalResonanceMs = std::max(0.0f, newNaturalResonanceMs);
 
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+        for (int i = 0; i < kMaxVoices; ++i) {
+            Voice& voice = voices[static_cast<std::size_t>(i)];
 
             voice.envelope.setAttackMs(attackMs);
 
-            voice.envelope.setNaturalResonanceMs(
-                naturalResonanceMs);
+            voice.envelope.setNaturalResonanceMs(naturalResonanceMs);
         }
     }
 
-    float processSample()
-    {
+    float processSample() {
         float mixedOutput = 0.0f;
 
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+        for (int i = 0; i < kMaxVoices; ++i) {
+            Voice& voice = voices[static_cast<std::size_t>(i)];
 
             if (!voice.active)
                 continue;
 
-            const float envelopeLevel =
-                voice.envelope.process();
+            const float envelopeLevel = voice.envelope.process();
 
-            if (envelopeLevel > 0.000001f ||
-                !voice.releasing)
-            {
-                const float bowedSample =
-                    static_cast<float>(
-                        voice.bowed.tick());
+            if (envelopeLevel > 0.000001f || !voice.releasing) {
+                const float bowedSample = static_cast<float>(voice.bowed.tick());
 
-                mixedOutput +=
-                    bowedSample * envelopeLevel;
+                mixedOutput += bowedSample * envelopeLevel;
             }
 
-            if (voice.releasing &&
-                !voice.envelope.isActive())
-            {
+            if (voice.releasing && !voice.envelope.isActive()) {
                 voice.bowed.clear();
                 resetVoice(voice);
             }
@@ -249,16 +218,11 @@ public:
         return mixedOutput;
     }
 
-    int getActiveVoiceCount() const noexcept
-    {
+    int getActiveVoiceCount() const noexcept {
         int count = 0;
 
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            if (voices[
-                    static_cast<std::size_t>(i)]
-                    .active)
-            {
+        for (int i = 0; i < kMaxVoices; ++i) {
+            if (voices[static_cast<std::size_t>(i)].active) {
                 ++count;
             }
         }
@@ -266,56 +230,39 @@ public:
         return count;
     }
 
-    float getVoiceFrequencyHz(
-        int index) const noexcept
-    {
+    float getVoiceFrequencyHz(int index) const noexcept {
         if (index < 0 || index >= kMaxVoices)
             return 0.0f;
 
-        return voices[
-            static_cast<std::size_t>(index)]
-            .frequencyHz;
+        return voices[static_cast<std::size_t>(index)].frequencyHz;
     }
 
-    float getVoiceStrength(
-        int index) const noexcept
-    {
+    float getVoiceStrength(int index) const noexcept {
         if (index < 0 || index >= kMaxVoices)
             return 0.0f;
 
-        return voices[
-            static_cast<std::size_t>(index)]
-            .strength;
+        return voices[static_cast<std::size_t>(index)].strength;
     }
 
-    int getVoiceAnalyzerId(
-        int index) const noexcept
-    {
+    int getVoiceAnalyzerId(int index) const noexcept {
         if (index < 0 || index >= kMaxVoices)
             return -1;
 
-        return voices[
-            static_cast<std::size_t>(index)]
-            .analyzerVoiceId;
+        return voices[static_cast<std::size_t>(index)].analyzerVoiceId;
     }
 
-    bool isVoiceActive(
-        int index) const noexcept
-    {
+    bool isVoiceActive(int index) const noexcept {
         if (index < 0 || index >= kMaxVoices)
             return false;
 
-        return voices[
-            static_cast<std::size_t>(index)]
-            .active;
+        return voices[static_cast<std::size_t>(index)].active;
     }
 
-private:
+  private:
     static constexpr int kLostFramesBeforeRelease = 3;
     static constexpr float kFrequencyMatchCents = 100.0f;
 
-    static float limit01(float value) noexcept
-    {
+    static float limit01(float value) noexcept {
         if (value < 0.0f)
             return 0.0f;
 
@@ -325,12 +272,9 @@ private:
         return value;
     }
 
-    int findFreeVoice() const noexcept
-    {
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            const Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+    int findFreeVoice() const noexcept {
+        for (int i = 0; i < kMaxVoices; ++i) {
+            const Voice& voice = voices[static_cast<std::size_t>(i)];
 
             if (!voice.active)
                 return i;
@@ -339,21 +283,14 @@ private:
         return -1;
     }
 
-    int findVoiceByAnalyzerId(
-        int analyzerId,
-        const std::array<bool, kMaxVoices>& matched)
-        const noexcept
-    {
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            if (matched[
-                    static_cast<std::size_t>(i)])
-            {
+    int findVoiceByAnalyzerId(int analyzerId,
+                              const std::array<bool, kMaxVoices>& matched) const noexcept {
+        for (int i = 0; i < kMaxVoices; ++i) {
+            if (matched[static_cast<std::size_t>(i)]) {
                 continue;
             }
 
-            const Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+            const Voice& voice = voices[static_cast<std::size_t>(i)];
 
             if (!voice.active)
                 continue;
@@ -365,30 +302,21 @@ private:
         return -1;
     }
 
-    int findVoiceByFrequency(
-        float frequency,
-        const std::array<bool, kMaxVoices>& matched)
-        const noexcept
-    {
-        if (frequency <= 0.0f ||
-            !std::isfinite(frequency))
-        {
+    int findVoiceByFrequency(float frequency,
+                             const std::array<bool, kMaxVoices>& matched) const noexcept {
+        if (frequency <= 0.0f || !std::isfinite(frequency)) {
             return -1;
         }
 
         int bestIndex = -1;
         float bestCents = kFrequencyMatchCents;
 
-        for (int i = 0; i < kMaxVoices; ++i)
-        {
-            if (matched[
-                    static_cast<std::size_t>(i)])
-            {
+        for (int i = 0; i < kMaxVoices; ++i) {
+            if (matched[static_cast<std::size_t>(i)]) {
                 continue;
             }
 
-            const Voice& voice =
-                voices[static_cast<std::size_t>(i)];
+            const Voice& voice = voices[static_cast<std::size_t>(i)];
 
             if (!voice.active)
                 continue;
@@ -399,22 +327,15 @@ private:
             if (voice.frequencyHz <= 0.0f)
                 continue;
 
-            const float ratio =
-                frequency / voice.frequencyHz;
+            const float ratio = frequency / voice.frequencyHz;
 
-            if (ratio <= 0.0f ||
-                !std::isfinite(ratio))
-            {
+            if (ratio <= 0.0f || !std::isfinite(ratio)) {
                 continue;
             }
 
-            const float cents =
-                std::abs(
-                    1200.0f *
-                    std::log2(ratio));
+            const float cents = std::abs(1200.0f * std::log2(ratio));
 
-            if (cents < bestCents)
-            {
+            if (cents < bestCents) {
                 bestCents = cents;
                 bestIndex = i;
             }
@@ -423,54 +344,69 @@ private:
         return bestIndex;
     }
 
-    void startVoice(
-        Voice& voice,
-        int analyzerId,
-        float frequency,
-        float strength)
-    {
+    int findNearestVoiceForContinuity(float frequency,
+                                      const std::array<bool, kMaxVoices>& matched) const noexcept {
+        if (frequency <= 0.0f || !std::isfinite(frequency))
+            return -1;
+
+        int bestIndex = -1;
+        float bestCents = 100000.0f;
+
+        for (int i = 0; i < kMaxVoices; ++i) {
+            if (matched[static_cast<std::size_t>(i)]) {
+                continue;
+            }
+
+            const Voice& voice = voices[static_cast<std::size_t>(i)];
+
+            if (!voice.active || voice.releasing || voice.frequencyHz <= 0.0f) {
+                continue;
+            }
+
+            // This function is only reached when no physical note-on was
+            // detected. There is therefore no new-note candidate to protect
+            // with a proximity threshold; the closest unmatched live voice
+            // is the continuity target.
+            const float cents = std::abs(1200.0f * std::log2(frequency / voice.frequencyHz));
+
+            if (cents < bestCents) {
+                bestCents = cents;
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
+    void startVoice(Voice& voice, int analyzerId, float frequency, float strength) {
+        // This is the sole synthesis note-on path. Pitch changes must use
+        // updateExistingVoice() so they do not restart the Bowed attack.
         voice.bowed.clear();
 
-        voice.bowed.setFrequency(
-            static_cast<stk::StkFloat>(
-                frequency));
+        voice.bowed.setFrequency(static_cast<stk::StkFloat>(frequency));
 
         applyBowParameters(voice);
 
-        float amplitude =
-            0.05f + strength * 0.95f;
+        float amplitude = 0.05f + strength * 0.95f;
 
-        amplitude =
-            std::max(0.05f, amplitude);
+        amplitude = std::max(0.05f, amplitude);
 
-        amplitude =
-            std::min(1.0f, amplitude);
+        amplitude = std::min(1.0f, amplitude);
 
-        const double attackSeconds =
-            std::max(
-                0.0001,
-                static_cast<double>(
-                    attackMs) * 0.001);
+        const double attackSeconds = std::max(0.0001, static_cast<double>(attackMs) * 0.001);
 
-        double attackRate =
-            0.005 / attackSeconds;
+        double attackRate = 0.005 / attackSeconds;
 
-        attackRate =
-            std::max(0.0001, attackRate);
+        attackRate = std::max(0.0001, attackRate);
 
-        attackRate =
-            std::min(100.0, attackRate);
+        attackRate = std::min(100.0, attackRate);
 
-        voice.bowed.startBowing(
-            static_cast<stk::StkFloat>(
-                amplitude),
-            static_cast<stk::StkFloat>(
-                attackRate));
+        voice.bowed.startBowing(static_cast<stk::StkFloat>(amplitude),
+                                static_cast<stk::StkFloat>(attackRate));
 
         voice.envelope.reset();
         voice.envelope.setAttackMs(attackMs);
-        voice.envelope.setNaturalResonanceMs(
-            naturalResonanceMs);
+        voice.envelope.setNaturalResonanceMs(naturalResonanceMs);
         voice.envelope.trigger(strength);
 
         voice.analyzerVoiceId = analyzerId;
@@ -482,20 +418,14 @@ private:
         voice.releasing = false;
     }
 
-    void updateExistingVoice(
-        Voice& voice,
-        int analyzerId,
-        float frequency,
-        float strength)
-    {
-        if (frequency > 0.0f &&
-            std::isfinite(frequency))
-        {
+    void updateExistingVoice(Voice& voice, int analyzerId, float frequency, float strength) {
+        // Analyzer IDs and spectral candidates can change as a pluck decays;
+        // updating frequency here preserves one physical attack as one STK
+        // voice.
+        if (frequency > 0.0f && std::isfinite(frequency)) {
             voice.frequencyHz = frequency;
 
-            voice.bowed.setFrequency(
-                static_cast<stk::StkFloat>(
-                    frequency));
+            voice.bowed.setFrequency(static_cast<stk::StkFloat>(frequency));
         }
 
         voice.analyzerVoiceId = analyzerId;
@@ -506,8 +436,7 @@ private:
         voice.envelope.sustain();
     }
 
-    void beginRelease(Voice& voice)
-    {
+    void beginRelease(Voice& voice) {
         if (!voice.active)
             return;
 
@@ -520,26 +449,15 @@ private:
         voice.envelope.release();
     }
 
-    void applyBowParameters(Voice& voice)
-    {
-        voice.bowed.controlChange(
-            2,
-            static_cast<stk::StkFloat>(
-                bowPressure * 128.0f));
+    void applyBowParameters(Voice& voice) {
+        voice.bowed.controlChange(2, static_cast<stk::StkFloat>(bowPressure * 128.0f));
 
-        voice.bowed.controlChange(
-            4,
-            static_cast<stk::StkFloat>(
-                friction * 128.0f));
+        voice.bowed.controlChange(4, static_cast<stk::StkFloat>(friction * 128.0f));
 
-        voice.bowed.controlChange(
-            100,
-            static_cast<stk::StkFloat>(
-                bowSpeed * 128.0f));
+        voice.bowed.controlChange(100, static_cast<stk::StkFloat>(bowSpeed * 128.0f));
     }
 
-    void resetVoice(Voice& voice)
-    {
+    void resetVoice(Voice& voice) {
         voice.analyzerVoiceId = -1;
         voice.frequencyHz = 0.0f;
         voice.strength = 0.0f;
@@ -558,5 +476,5 @@ private:
     float naturalResonanceMs = 50.0f;
 
     std::array<Voice, kMaxVoices> voices{};
+    std::uint64_t lastAnalysisGeneration = 0;
 };
-

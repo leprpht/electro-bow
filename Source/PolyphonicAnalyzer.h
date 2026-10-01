@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <complex>
+#include <cstdint>
 #include <functional>
 #include <utility>
 #include <vector>
@@ -76,6 +77,7 @@ class PolyphonicAnalyzer {
         samplesSinceAnalysis = 0;
         samplesReceived = 0;
         nextVoiceId = 0;
+        analysisGeneration = 0;
     }
 
     void setPitchTracker(PitchTracker tracker) {
@@ -107,6 +109,13 @@ class PolyphonicAnalyzer {
 
     const std::vector<Voice>& getVoices() const noexcept {
         return voices;
+    }
+
+    // Incremented only when a new FFT analysis frame has been committed.
+    // Consumers run once per analysis frame rather than once per host block;
+    // this keeps voice-loss state independent of the host's block size.
+    std::uint64_t getAnalysisGeneration() const noexcept {
+        return analysisGeneration;
     }
 
   private:
@@ -395,6 +404,8 @@ class PolyphonicAnalyzer {
     }
 
     void analyse() {
+        ++analysisGeneration;
+
         fillCurrentFrame();
         for (int i = 0; i < kFFTSize; ++i)
             spectrum[static_cast<size_t>(i)] = {frame[static_cast<size_t>(i)], 0.0f};
@@ -616,4 +627,5 @@ class PolyphonicAnalyzer {
     int samplesSinceAnalysis = 0;
     int samplesReceived = 0;
     int nextVoiceId = 0;
+    std::uint64_t analysisGeneration = 0;
 };
