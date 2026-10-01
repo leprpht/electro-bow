@@ -5,6 +5,17 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-10-01
+
+### Changed
+
+- Improved realtime bow tracking and physical attack detection.
+- Improved voice management and analysis-generation handling for more stable realtime processing.
+
+### Fixed
+
+- Fixed realtime stability issues in bow-trigger and voice-processing behavior.
+
 ## [1.2.1] - 2026-10-01
 
 ### Changed
