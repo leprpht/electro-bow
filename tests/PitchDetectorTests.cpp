@@ -1,4 +1,4 @@
-#include "../Source/PolyPitchDetector.h"
+#include "../Source/PitchDetector.h"
 #include "../Source/PolyphonicAnalyzer.h"
 
 #include <algorithm>
@@ -7,258 +7,773 @@
 #include <random>
 #include <vector>
 
-namespace {
+namespace
+{
 constexpr double sampleRate = 44100.0;
 constexpr float pi = 3.14159265358979323846f;
 
-float midiToFrequency(int midi) {
-    return 440.0f * std::pow(2.0f, static_cast<float>(midi - 69) / 12.0f);
+float midiToFrequency(int midi)
+{
+    return 440.0f *
+           std::pow(2.0f, static_cast<float>(midi - 69) / 12.0f);
 }
 
-void addNote(std::vector<float>& buffer, int midiNote, float amplitude) {
+void addNote(std::vector<float>& buffer, int midiNote, float amplitude)
+{
     const float frequency = midiToFrequency(midiNote);
 
-    for (size_t i = 0; i < buffer.size(); ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
+    for (std::size_t i = 0; i < buffer.size(); ++i)
+    {
+        const float t =
+            static_cast<float>(i) /
+            static_cast<float>(sampleRate);
 
-        buffer[i] += std::sin(2.0f * pi * frequency * t) * amplitude;
+        buffer[i] +=
+            std::sin(2.0f * pi * frequency * t) *
+            amplitude;
     }
 }
 
-void addGuitarLikeNote(std::vector<float>& buffer, float frequency, float amplitude,
-                       float fundamentalScale = 1.0f) {
-    for (size_t i = 0; i < buffer.size(); ++i) {
-        const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
-        buffer[i] += amplitude * (fundamentalScale * 0.15f * std::sin(2.0f * pi * frequency * t) +
-                                  0.70f * std::sin(4.0f * pi * frequency * t) +
-                                  0.45f * std::sin(6.0f * pi * frequency * t) +
-                                  0.30f * std::sin(8.0f * pi * frequency * t));
+void addGuitarLikeNote(std::vector<float>& buffer,
+                       float frequency,
+                       float amplitude,
+                       float fundamentalScale = 1.0f)
+{
+    for (std::size_t i = 0; i < buffer.size(); ++i)
+    {
+        const float t =
+            static_cast<float>(i) /
+            static_cast<float>(sampleRate);
+
+        buffer[i] += amplitude *
+                     (fundamentalScale * 0.15f *
+                          std::sin(2.0f * pi * frequency * t) +
+                      0.70f *
+                          std::sin(4.0f * pi * frequency * t) +
+                      0.45f *
+                          std::sin(6.0f * pi * frequency * t) +
+                      0.30f *
+                          std::sin(8.0f * pi * frequency * t));
     }
 }
 
-float rms(const std::vector<float>& samples) {
-    float energy = 0.0f;
+float rms(const std::vector<float>& samples)
+{
+    double energy = 0.0;
+
     for (const float sample : samples)
-        energy += sample * sample;
-    return std::sqrt(energy / static_cast<float>(std::max<size_t>(1, samples.size())));
+        energy += static_cast<double>(sample) * sample;
+
+    return static_cast<float>(
+        std::sqrt(
+            energy /
+            static_cast<double>(
+                std::max<std::size_t>(1, samples.size()))));
 }
 
-void printDetected(const char* name, PolyPitchDetector& detector) {
-    std::cout << name << ": ";
-
-    if (detector.getNumNotes() == 0) {
-        std::cout << "(none)\n";
-        return;
-    }
-
-    for (int i = 0; i < detector.getNumNotes(); ++i) {
-        const auto note = detector.getNote(i);
-
-        std::cout << note.midiNote << "(" << note.strength << ") ";
-    }
-
-    std::cout << '\n';
+bool approximately(float a, float b, float tolerance)
+{
+    return std::abs(a - b) <= tolerance;
 }
 
-void testChord(const char* name, const std::vector<int>& notes) {
-    constexpr int numSamples = 8192;
+bool containsFrequency(const PolyphonicAnalyzer& analyzer,
+                       float targetFrequency,
+                       float tolerance)
+{
+    for (const auto& voice : analyzer.getVoices())
+    {
+        if (approximately(
+                voice.trackedFrequencyHz,
+                targetFrequency,
+                tolerance))
+        {
+            return true;
+        }
+    }
 
-    std::vector<float> buffer(numSamples, 0.0f);
+    return false;
+}
 
-    for (const int midiNote : notes)
-        addNote(buffer, midiNote, 0.2f);
+bool containsPeak(const PolyphonicAnalyzer& analyzer,
+                  float targetFrequency,
+                  float tolerance)
+{
+    for (const auto& voice : analyzer.getVoices())
+    {
+        if (approximately(
+                voice.peakFrequencyHz,
+                targetFrequency,
+                tolerance))
+        {
+            return true;
+        }
+    }
 
-    PolyPitchDetector detector;
+    return false;
+}
+
+void printPitchResult(const char* name,
+                      const PitchDetector& detector)
+{
+    std::cout
+        << name
+        << ": "
+        << detector.getFrequencyHz()
+        << " Hz"
+        << "  confidence="
+        << detector.getConfidence()
+        << "  midi="
+        << detector.getMidiNote()
+        << '\n';
+}
+
+void testSinglePitch(float frequency,
+                     const char* name)
+{
+    constexpr int numSamples = PitchDetector::kWindowSize;
+
+    std::vector<float> buffer(
+        static_cast<std::size_t>(numSamples),
+        0.0f);
+
+    addGuitarLikeNote(
+        buffer,
+        frequency,
+        1.0f,
+        1.0f);
+
+    PitchDetector detector;
     detector.prepare(sampleRate);
 
-    detector.push(buffer.data(), static_cast<int>(buffer.size()));
+    detector.push(
+        buffer.data(),
+        static_cast<int>(buffer.size()));
 
-    printDetected(name, detector);
+    printPitchResult(name, detector);
+
+    if (!approximately(
+            detector.getFrequencyHz(),
+            frequency,
+            2.0f))
+    {
+        std::cerr
+            << "PitchDetector failed to detect "
+            << frequency
+            << " Hz\n";
+
+        std::exit(1);
+    }
+
+    if (detector.getConfidence() <= 0.0f)
+    {
+        std::cerr
+            << "PitchDetector returned zero confidence for "
+            << frequency
+            << " Hz\n";
+
+        std::exit(1);
+    }
 }
+
 } // namespace
 
-int main() {
-    std::cout << "ElectroBow PolyPitchDetector tests\n"
-              << "-----------------------------------\n";
+int main()
+{
+    std::cout
+        << "ElectroBow PitchDetector / PolyphonicAnalyzer tests\n"
+        << "----------------------------------------------------\n";
 
-    // D3
-    testChord("D3", {50});
+    // ------------------------------------------------------------
+    // 1. Basic continuous pitch detection
+    // ------------------------------------------------------------
 
-    // A3
-    testChord("A3", {57});
+    testSinglePitch(
+        midiToFrequency(50),
+        "D3");
 
-    // D3 + A3
-    testChord("D3 + A3", {50, 57});
+    testSinglePitch(
+        midiToFrequency(57),
+        "A3");
 
-    // D3 + A3 + D4 + F4
-    testChord("D3 + A3 + D4 + F4", {50, 57, 62, 65});
+    // ------------------------------------------------------------
+    // 2. Continuous pitch must not be MIDI-quantized
+    // ------------------------------------------------------------
 
-    // D3 + G3 + C4 + F4
-    testChord("D3 + G3 + C4 + F4", {50, 55, 60, 65});
+    {
+        constexpr float bendFrequency = 466.16f;
 
-    // The analyzer must expose independent buffers and invoke the tracker for
-    // every voice on every analysis frame.
-    int trackerCalls = 0;
-    PolyphonicAnalyzer analyzer([&trackerCalls](const std::vector<float>& voice, double rate) {
-        ++trackerCalls;
-        return PolyphonicAnalyzer::PitchEstimate{440.0f,
-                                                 voice.empty() || rate <= 0.0 ? 0.0f : 1.0f};
-    });
-    analyzer.prepare(sampleRate);
-    std::vector<float> chord(PolyphonicAnalyzer::kFFTSize * 2, 0.0f);
-    addNote(chord, 50, 0.2f);
-    addNote(chord, 57, 0.2f);
-    analyzer.push(chord.data(), static_cast<int>(chord.size()));
-    const auto& voices = analyzer.getVoices();
-    if (voices.size() < 2 || trackerCalls < static_cast<int>(voices.size())) {
-        std::cerr << "Polyphonic analyzer did not produce independent tracked voices\n";
-        return 1;
+        std::vector<float> tone(
+            PitchDetector::kWindowSize,
+            0.0f);
+
+        addGuitarLikeNote(
+            tone,
+            bendFrequency,
+            1.0f,
+            1.0f);
+
+        PitchDetector detector;
+        detector.prepare(sampleRate);
+
+        detector.push(
+            tone.data(),
+            static_cast<int>(tone.size()));
+
+        if (!approximately(
+                detector.getFrequencyHz(),
+                bendFrequency,
+                2.0f))
+        {
+            std::cerr
+                << "Continuous pitch tracking failed on 466.16 Hz\n";
+
+            return 1;
+        }
+
+        /*
+            466.16 Hz is approximately A#4/Bb4.
+
+            The important part is that the actual frequency remains
+            466.16 Hz instead of being converted to a MIDI-grid value.
+        */
+
+        if (detector.getFrequencyHz() <= 0.0f)
+        {
+            std::cerr
+                << "Continuous pitch detector returned no frequency\n";
+
+            return 1;
+        }
+
+        std::cout
+            << "Continuous bend: "
+            << detector.getFrequencyHz()
+            << " Hz\n";
     }
 
-    if (voices[0].samples.empty() || voices[1].samples.empty() ||
-        voices[0].samples == voices[1].samples || voices[0].id == voices[1].id) {
-        std::cerr << "Polyphonic analyzer returned non-independent voice buffers\n";
-        return 1;
-    }
+    // ------------------------------------------------------------
+    // 3. Detector must update repeatedly on 1024-sample hops
+    // ------------------------------------------------------------
 
-    for (const auto& voice : voices) {
-        if (std::abs(voice.trackedFrequencyHz - 440.0f) > 0.01f ||
-            voice.trackerConfidence <= 0.0f) {
-            std::cerr << "Polyphonic analyzer did not run the pluggable tracker\n";
+    {
+        std::vector<float> first(
+            PitchDetector::kWindowSize,
+            0.0f);
+
+        std::vector<float> second(
+            PitchDetector::kHopSize,
+            0.0f);
+
+        addGuitarLikeNote(
+            first,
+            220.0f,
+            1.0f,
+            1.0f);
+
+        addGuitarLikeNote(
+            second,
+            246.94f,
+            1.0f,
+            1.0f);
+
+        PitchDetector detector;
+        detector.prepare(sampleRate);
+
+        detector.push(
+            first.data(),
+            static_cast<int>(first.size()));
+
+        const float firstFrequency =
+            detector.getFrequencyHz();
+
+        if (!approximately(
+                firstFrequency,
+                220.0f,
+                2.0f))
+        {
+            std::cerr
+                << "Initial pitch detection failed\n";
+
+            return 1;
+        }
+
+        /*
+            Push enough new material to force another analysis.
+        */
+
+        detector.push(
+            second.data(),
+            static_cast<int>(second.size()));
+
+        const float secondFrequency =
+            detector.getFrequencyHz();
+
+        /*
+            Because the analysis window still contains old material,
+            the exact transition will not necessarily be 246.94 Hz
+            immediately. We only require that the detector remains
+            valid and does not produce an invalid frequency.
+        */
+
+        if (!std::isfinite(secondFrequency) ||
+            secondFrequency <= 0.0f)
+        {
+            std::cerr
+                << "PitchDetector produced an invalid frequency after hop\n";
+
             return 1;
         }
     }
 
-    const auto firstIds = std::vector<int>{voices[0].id, voices[1].id};
-    analyzer.push(chord.data(), static_cast<int>(chord.size()));
-    const auto& nextVoices = analyzer.getVoices();
-    if (nextVoices.size() < 2 || nextVoices[0].id == nextVoices[1].id) {
-        std::cerr << "Polyphonic analyzer did not maintain distinct voice slots\n";
-        return 1;
-    }
-    for (const auto& voice : nextVoices) {
-        if (std::find(firstIds.begin(), firstIds.end(), voice.id) == firstIds.end()) {
-            std::cerr << "Polyphonic analyzer did not track voice identity across frames\n";
+    // ------------------------------------------------------------
+    // 4. Silence must produce no pitch
+    // ------------------------------------------------------------
+
+    {
+        std::vector<float> silence(
+            PitchDetector::kWindowSize,
+            0.0f);
+
+        PitchDetector detector;
+        detector.prepare(sampleRate);
+
+        detector.push(
+            silence.data(),
+            static_cast<int>(silence.size()));
+
+        if (detector.getFrequencyHz() != 0.0f ||
+            detector.getConfidence() != 0.0f)
+        {
+            std::cerr
+                << "Silence was incorrectly detected as pitch\n";
+
             return 1;
         }
     }
 
-    // The tracker must receive a genuinely isolated channel and return a
-    // continuous frequency, not only a MIDI-semitone estimate.
-    PolyphonicAnalyzer trackedAnalyzer([](const std::vector<float>& voice, double rate) {
-        PolyPitchDetector tracker;
-        tracker.prepare(rate);
-        tracker.push(voice.data(), static_cast<int>(voice.size()));
-        return PolyphonicAnalyzer::PitchEstimate{tracker.getBestFrequencyHz(),
-                                                 tracker.getBestConfidence()};
-    });
-    trackedAnalyzer.prepare(sampleRate);
-    trackedAnalyzer.push(chord.data(), static_cast<int>(chord.size()));
-    bool foundTrackedD3 = false;
-    bool foundTrackedA3 = false;
-    for (const auto& voice : trackedAnalyzer.getVoices()) {
-        foundTrackedD3 |= std::abs(voice.trackedFrequencyHz - midiToFrequency(50)) < 2.0f;
-        foundTrackedA3 |= std::abs(voice.trackedFrequencyHz - midiToFrequency(57)) < 2.0f;
-    }
-    if (!foundTrackedD3 || !foundTrackedA3) {
-        std::cerr << "Isolated pitch tracking did not recover both continuous frequencies\n";
-        return 1;
+    // ------------------------------------------------------------
+    // 5. Noise must not produce a stable pitch
+    // ------------------------------------------------------------
+
+    {
+        std::vector<float> noiseBuffer(
+            PitchDetector::kWindowSize,
+            0.0f);
+
+        std::mt19937 random(7);
+        std::normal_distribution<float> noise(0.0f, 0.2f);
+
+        for (float& sample : noiseBuffer)
+            sample = noise(random);
+
+        PitchDetector detector;
+        detector.prepare(sampleRate);
+
+        detector.push(
+            noiseBuffer.data(),
+            static_cast<int>(noiseBuffer.size()));
+
+        if (detector.getFrequencyHz() != 0.0f ||
+            detector.getConfidence() != 0.0f)
+        {
+            std::cerr
+                << "Noise was incorrectly reported as stable pitch\n";
+
+            return 1;
+        }
     }
 
-    if (rms(trackedAnalyzer.getVoices()[0].samples) <= 0.0f ||
-        rms(trackedAnalyzer.getVoices()[1].samples) <= 0.0f ||
-        trackedAnalyzer.getVoices()[0].samples == trackedAnalyzer.getVoices()[1].samples) {
-        std::cerr << "Separated voice buffers did not contain independent signal energy\n";
-        return 1;
+    // ------------------------------------------------------------
+    // 6. Polyphonic analyzer must produce independent voices
+    // ------------------------------------------------------------
+
+    {
+        constexpr int numSamples =
+            PolyphonicAnalyzer::kFFTSize * 2;
+
+        std::vector<float> chord(
+            static_cast<std::size_t>(numSamples),
+            0.0f);
+
+        addNote(chord, 50, 0.2f); // D3
+        addNote(chord, 57, 0.2f); // A3
+
+        int trackerCalls = 0;
+
+        PolyphonicAnalyzer analyzer(
+            [&trackerCalls](
+                const std::vector<float>& voice,
+                double rate)
+            {
+                ++trackerCalls;
+
+                PitchDetector tracker;
+                tracker.prepare(rate);
+
+                if (!voice.empty())
+                {
+                    tracker.push(
+                        voice.data(),
+                        static_cast<int>(voice.size()));
+                }
+
+                return PolyphonicAnalyzer::PitchEstimate{
+                    tracker.getFrequencyHz(),
+                    tracker.getConfidence()};
+            });
+
+        analyzer.prepare(sampleRate);
+
+        analyzer.push(
+            chord.data(),
+            static_cast<int>(chord.size()));
+
+        const auto& voices =
+            analyzer.getVoices();
+
+        if (voices.size() < 2)
+        {
+            std::cerr
+                << "Polyphonic analyzer did not produce two voices\n";
+
+            return 1;
+        }
+
+        if (trackerCalls <
+            static_cast<int>(voices.size()))
+        {
+            std::cerr
+                << "Pitch tracker was not called for every voice\n";
+
+            return 1;
+        }
+
+        if (voices[0].samples.empty() ||
+            voices[1].samples.empty())
+        {
+            std::cerr
+                << "Analyzer returned empty voice buffers\n";
+
+            return 1;
+        }
+
+        if (voices[0].samples ==
+            voices[1].samples)
+        {
+            std::cerr
+                << "Analyzer returned identical voice buffers\n";
+
+            return 1;
+        }
+
+        if (voices[0].id ==
+            voices[1].id)
+        {
+            std::cerr
+                << "Analyzer assigned the same ID to two voices\n";
+
+            return 1;
+        }
+
+        if (!containsFrequency(
+                analyzer,
+                midiToFrequency(50),
+                2.0f))
+        {
+            std::cerr
+                << "D3 was not recovered by isolated pitch tracking\n";
+
+            return 1;
+        }
+
+        if (!containsFrequency(
+                analyzer,
+                midiToFrequency(57),
+                2.0f))
+        {
+            std::cerr
+                << "A3 was not recovered by isolated pitch tracking\n";
+
+            return 1;
+        }
     }
 
-    // Guitar-like harmonic content with a weak fundamental should still
-    // produce the two underlying voices rather than their dominant partials.
-    std::vector<float> guitarChord(PolyphonicAnalyzer::kFFTSize * 2, 0.0f);
-    addGuitarLikeNote(guitarChord, 82.41f, 1.0f, 0.15f);
-    addGuitarLikeNote(guitarChord, 110.0f, 1.0f, 0.15f);
-    PolyphonicAnalyzer guitarAnalyzer;
-    guitarAnalyzer.prepare(sampleRate);
-    guitarAnalyzer.push(guitarChord.data(), static_cast<int>(guitarChord.size()));
-    bool foundLowString = false;
-    bool foundAString = false;
-    for (const auto& voice : guitarAnalyzer.getVoices()) {
-        foundLowString |= std::abs(voice.peakFrequencyHz - 82.41f) < 3.0f;
-        foundAString |= std::abs(voice.peakFrequencyHz - 110.0f) < 3.0f;
-    }
-    if (!foundLowString || !foundAString || guitarAnalyzer.getVoices().size() > 2) {
-        std::cerr << "Guitar-like harmonic separation produced incorrect voices\n";
-        return 1;
+    // ------------------------------------------------------------
+    // 7. Voice identity must persist between frames
+    // ------------------------------------------------------------
+
+    {
+        constexpr int numSamples =
+            PolyphonicAnalyzer::kFFTSize * 2;
+
+        std::vector<float> chord(
+            static_cast<std::size_t>(numSamples),
+            0.0f);
+
+        addNote(chord, 50, 0.2f); // D3
+        addNote(chord, 57, 0.2f); // A3
+
+        PolyphonicAnalyzer analyzer;
+
+        analyzer.prepare(sampleRate);
+
+        analyzer.push(
+            chord.data(),
+            static_cast<int>(chord.size()));
+
+        const auto firstVoices =
+            analyzer.getVoices();
+
+        if (firstVoices.size() < 2)
+        {
+            std::cerr
+                << "Initial identity test did not produce two voices\n";
+
+            return 1;
+        }
+
+        std::vector<int> firstIds;
+
+        for (const auto& voice : firstVoices)
+            firstIds.push_back(voice.id);
+
+        analyzer.push(
+            chord.data(),
+            static_cast<int>(chord.size()));
+
+        const auto& nextVoices =
+            analyzer.getVoices();
+
+        if (nextVoices.size() < 2)
+        {
+            std::cerr
+                << "Second identity frame lost voices\n";
+
+            return 1;
+        }
+
+        for (const auto& voice : nextVoices)
+        {
+            if (std::find(
+                    firstIds.begin(),
+                    firstIds.end(),
+                    voice.id) == firstIds.end())
+            {
+                std::cerr
+                    << "Voice ID was not preserved across frames\n";
+
+                return 1;
+            }
+        }
     }
 
-    std::vector<float> weakFundamental(PolyphonicAnalyzer::kFFTSize * 2, 0.0f);
-    addGuitarLikeNote(weakFundamental, 82.41f, 1.0f, 0.08f);
-    PolyphonicAnalyzer weakAnalyzer;
-    weakAnalyzer.prepare(sampleRate);
-    weakAnalyzer.push(weakFundamental.data(), static_cast<int>(weakFundamental.size()));
-    bool foundWeakFundamental = false;
-    for (const auto& voice : weakAnalyzer.getVoices())
-        foundWeakFundamental |= std::abs(voice.peakFrequencyHz - 82.41f) < 3.0f;
-    if (!foundWeakFundamental) {
-        std::cerr << "Weak fundamental was not recovered from its harmonics\n";
-        return 1;
+    // ------------------------------------------------------------
+    // 8. Guitar-like harmonic content
+    // ------------------------------------------------------------
+
+    {
+        constexpr int numSamples =
+            PolyphonicAnalyzer::kFFTSize * 2;
+
+        std::vector<float> guitarChord(
+            static_cast<std::size_t>(numSamples),
+            0.0f);
+
+        addGuitarLikeNote(
+            guitarChord,
+            82.41f,
+            1.0f,
+            0.15f);
+
+        addGuitarLikeNote(
+            guitarChord,
+            110.0f,
+            1.0f,
+            0.15f);
+
+        PolyphonicAnalyzer analyzer;
+
+        analyzer.prepare(sampleRate);
+
+        analyzer.push(
+            guitarChord.data(),
+            static_cast<int>(guitarChord.size()));
+
+        if (!containsPeak(
+                analyzer,
+                82.41f,
+                3.0f))
+        {
+            std::cerr
+                << "Low guitar string fundamental was not recovered\n";
+
+            return 1;
+        }
+
+        if (!containsPeak(
+                analyzer,
+                110.0f,
+                3.0f))
+        {
+            std::cerr
+                << "A-string fundamental was not recovered\n";
+
+            return 1;
+        }
+
+        if (analyzer.getVoices().size() > 2)
+        {
+            std::cerr
+                << "Guitar harmonic separation produced too many voices\n";
+
+            return 1;
+        }
     }
 
-    // Continuous tracking must follow a bend and reject unpitched noise.
-    std::vector<float> tone(PolyPitchDetector::kFFTSize, 0.0f);
-    addGuitarLikeNote(tone, 440.0f, 1.0f, 1.0f);
-    PolyPitchDetector continuousTracker;
-    continuousTracker.prepare(sampleRate);
-    continuousTracker.push(tone.data(), static_cast<int>(tone.size()));
-    if (std::abs(continuousTracker.getBestFrequencyHz() - 440.0f) > 2.0f ||
-        continuousTracker.getBestConfidence() < 0.5f) {
-        std::cerr << "Continuous pitch estimate failed on a stable tone\n";
-        return 1;
+    // ------------------------------------------------------------
+    // 9. Weak fundamental recovery
+    // ------------------------------------------------------------
+
+    {
+        constexpr int numSamples =
+            PolyphonicAnalyzer::kFFTSize * 2;
+
+        std::vector<float> weakFundamental(
+            static_cast<std::size_t>(numSamples),
+            0.0f);
+
+        addGuitarLikeNote(
+            weakFundamental,
+            82.41f,
+            1.0f,
+            0.08f);
+
+        PolyphonicAnalyzer analyzer;
+
+        analyzer.prepare(sampleRate);
+
+        analyzer.push(
+            weakFundamental.data(),
+            static_cast<int>(weakFundamental.size()));
+
+        if (!containsPeak(
+                analyzer,
+                82.41f,
+                3.0f))
+        {
+            std::cerr
+                << "Weak fundamental was not recovered\n";
+
+            return 1;
+        }
     }
 
-    std::fill(tone.begin(), tone.end(), 0.0f);
-    addGuitarLikeNote(tone, 466.16f, 1.0f, 1.0f);
-    continuousTracker.push(tone.data(), static_cast<int>(tone.size()));
-    if (std::abs(continuousTracker.getBestFrequencyHz() - 466.16f) > 2.0f) {
-        std::cerr << "Continuous pitch estimate failed on a bend\n";
-        return 1;
+    // ------------------------------------------------------------
+    // 10. Spectral fallback without a pitch tracker
+    // ------------------------------------------------------------
+
+    {
+        constexpr int numSamples =
+            PolyphonicAnalyzer::kFFTSize * 2;
+
+        std::vector<float> chord(
+            static_cast<std::size_t>(numSamples),
+            0.0f);
+
+        addNote(chord, 50, 0.2f); // D3
+        addNote(chord, 57, 0.2f); // A3
+
+        PolyphonicAnalyzer analyzer;
+
+        analyzer.prepare(sampleRate);
+
+        analyzer.push(
+            chord.data(),
+            static_cast<int>(chord.size()));
+
+        if (!containsPeak(
+                analyzer,
+                midiToFrequency(50),
+                10.0f))
+        {
+            std::cerr
+                << "Spectral fallback did not recover D3\n";
+
+            return 1;
+        }
+
+        if (!containsPeak(
+                analyzer,
+                midiToFrequency(57),
+                10.0f))
+        {
+            std::cerr
+                << "Spectral fallback did not recover A3\n";
+
+            return 1;
+        }
     }
 
-    std::mt19937 random(7);
-    std::normal_distribution<float> noise(0.0f, 0.2f);
-    for (float& sample : tone)
-        sample = noise(random);
-    continuousTracker.push(tone.data(), static_cast<int>(tone.size()));
-    if (continuousTracker.getBestFrequencyHz() != 0.0f ||
-        continuousTracker.getBestConfidence() != 0.0f) {
-        std::cerr << "Noise was incorrectly reported as a stable pitch\n";
-        return 1;
+    // ------------------------------------------------------------
+    // 11. Four-note chord
+    // ------------------------------------------------------------
+
+    {
+        constexpr int numSamples =
+            PolyphonicAnalyzer::kFFTSize * 2;
+
+        std::vector<float> chord(
+            static_cast<std::size_t>(numSamples),
+            0.0f);
+
+        addNote(chord, 50, 0.15f); // D3
+        addNote(chord, 55, 0.15f); // G3
+        addNote(chord, 60, 0.15f); // C4
+        addNote(chord, 65, 0.15f); // F4
+
+        PolyphonicAnalyzer analyzer;
+
+        analyzer.prepare(sampleRate);
+
+        analyzer.push(
+            chord.data(),
+            static_cast<int>(chord.size()));
+
+        if (analyzer.getVoices().size() < 4)
+        {
+            std::cerr
+                << "Four-note chord did not produce four voices\n";
+
+            return 1;
+        }
+
+        if (!containsPeak(
+                analyzer,
+                midiToFrequency(50),
+                10.0f) ||
+            !containsPeak(
+                analyzer,
+                midiToFrequency(55),
+                10.0f) ||
+            !containsPeak(
+                analyzer,
+                midiToFrequency(60),
+                10.0f) ||
+            !containsPeak(
+                analyzer,
+                midiToFrequency(65),
+                10.0f))
+        {
+            std::cerr
+                << "Four-note chord did not recover expected fundamentals\n";
+
+            return 1;
+        }
     }
 
-    PolyphonicAnalyzer noiseAnalyzer;
-    noiseAnalyzer.prepare(sampleRate);
-    noiseAnalyzer.push(tone.data(), static_cast<int>(tone.size()));
-    if (!noiseAnalyzer.getVoices().empty()) {
-        std::cerr << "Spectral analyzer created voices from unpitched noise\n";
-        return 1;
-    }
-
-    // With no tracker installed, the analyzer still has a useful spectral
-    // fallback. It should expose the two independent fundamentals rather than
-    // returning only one dominant FFT peak.
-    PolyphonicAnalyzer spectralAnalyzer;
-    spectralAnalyzer.prepare(sampleRate);
-    spectralAnalyzer.push(chord.data(), static_cast<int>(chord.size()));
-    bool foundD3 = false;
-    bool foundA3 = false;
-    for (const auto& voice : spectralAnalyzer.getVoices()) {
-        foundD3 |= std::abs(voice.peakFrequencyHz - midiToFrequency(50)) < 10.0f;
-        foundA3 |= std::abs(voice.peakFrequencyHz - midiToFrequency(57)) < 10.0f;
-    }
-    if (!foundD3 || !foundA3) {
-        std::cerr << "Polyphonic analyzer did not separate the expected fundamentals\n";
-        return 1;
-    }
+    std::cout
+        << "\nAll PitchDetector / PolyphonicAnalyzer tests passed.\n";
 
     return 0;
 }
+

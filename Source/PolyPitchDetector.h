@@ -3,367 +3,293 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
-#include <complex>
-#include <vector>
+#include <cstddef>
 
-class PolyPitchDetector {
-  public:
-    static constexpr int kFFTOrder = 12;
-    static constexpr int kFFTSize = 1 << kFFTOrder;
-    static constexpr int kHopSize = 512;
-    static constexpr int kMaxNotes = 8;
+#include <aubio.h>
+#include <pitch/pitchyin.h>
 
-    struct DetectedNote {
-        int midiNote = 0;
-        float strength = 0.0f;
-    };
+class PitchDetector
+{
+public:
+    static constexpr int kWindowSize = 4096;
+    static constexpr int kHopSize = 1024;
 
-    PolyPitchDetector() {
+    PitchDetector()
+    {
         reset();
     }
 
-    void prepare(double newSampleRate) {
+    ~PitchDetector()
+    {
+        destroyAubio();
+    }
+
+    PitchDetector(const PitchDetector&) = delete;
+    PitchDetector& operator=(const PitchDetector&) = delete;
+
+    void prepare(double newSampleRate)
+    {
         sampleRate = std::max(1.0, newSampleRate);
+
+        destroyAubio();
+        createAubio();
+
         reset();
     }
 
-    void reset() {
+    void push(const float* samples, int numSamples)
+    {
+        if (samples == nullptr || numSamples <= 0)
+            return;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            inputBuffer[static_cast<std::size_t>(writePosition)] = samples[i];
+
+            writePosition = (writePosition + 1) % kWindowSize;
+
+            ++samplesSinceAnalysis;
+            ++totalSamples;
+
+            // Do not analyse until the first complete window exists.
+            if (totalSamples < kWindowSize)
+                continue;
+
+            // Analyse immediately on the first complete window,
+            // then every kHopSize samples afterwards.
+            if (samplesSinceAnalysis >= kHopSize)
+            {
+                samplesSinceAnalysis = 0;
+                analyseCurrentWindow();
+            }
+        }
+    }
+
+    float getFrequencyHz() const noexcept
+    {
+        return frequencyHz;
+    }
+
+    float getConfidence() const noexcept
+    {
+        return confidence;
+    }
+
+    float getBestFrequencyHz() const noexcept
+    {
+        return frequencyHz;
+    }
+
+    float getBestConfidence() const noexcept
+    {
+        return confidence;
+    }
+
+    int getMidiNote() const noexcept
+    {
+        return midiNote;
+    }
+
+    void reset() noexcept
+    {
         inputBuffer.fill(0.0f);
-        fftBuffer.fill(std::complex<float>(0.0f, 0.0f));
+        analysisBuffer.fill(0.0f);
 
         writePosition = 0;
         samplesSinceAnalysis = 0;
-        samplesReceived = 0;
-        samplesAtLastContinuousAnalysis = 0;
+        totalSamples = 0;
 
-        detectedNoteCount = 0;
-        bestFrequencyHz = 0.0f;
-        bestConfidence = 0.0f;
+        frequencyHz = 0.0f;
+        confidence = 0.0f;
+        midiNote = 0;
     }
 
-    void push(const float* samples, int numSamples) {
-        if (samples == nullptr || numSamples <= 0) {
+private:
+    void createAubio()
+    {
+        aubioPitchYin =
+            new_aubio_pitchyin(static_cast<uint_t>(kWindowSize));
+
+        if (aubioPitchYin == nullptr)
+            return;
+
+        // Lower tolerance = stricter periodicity requirement.
+        // 0.15 was already used successfully in the previous version.
+        aubio_pitchyin_set_tolerance(aubioPitchYin, 0.15f);
+
+        aubioInput =
+            new_fvec(static_cast<uint_t>(kWindowSize));
+
+        aubioOutput = new_fvec(1);
+
+        if (aubioInput == nullptr || aubioOutput == nullptr)
+        {
+            destroyAubio();
+        }
+    }
+
+    void destroyAubio() noexcept
+    {
+        if (aubioOutput != nullptr)
+        {
+            del_fvec(aubioOutput);
+            aubioOutput = nullptr;
+        }
+
+        if (aubioInput != nullptr)
+        {
+            del_fvec(aubioInput);
+            aubioInput = nullptr;
+        }
+
+        if (aubioPitchYin != nullptr)
+        {
+            del_aubio_pitchyin(aubioPitchYin);
+            aubioPitchYin = nullptr;
+        }
+    }
+
+    void analyseCurrentWindow()
+    {
+        if (aubioPitchYin == nullptr ||
+            aubioInput == nullptr ||
+            aubioOutput == nullptr)
+        {
+            clearDetection();
             return;
         }
 
-        for (int i = 0; i < numSamples; ++i) {
-            inputBuffer[static_cast<size_t>(writePosition)] = samples[i];
+        /*
+            inputBuffer is circular.
 
-            writePosition = (writePosition + 1) % kFFTSize;
+            writePosition points to the oldest sample because it is
+            also the position where the next incoming sample will be
+            written.
 
-            ++samplesReceived;
-            ++samplesSinceAnalysis;
+            Therefore the current 4096-sample analysis window starts
+            at writePosition.
+        */
 
-            if (samplesSinceAnalysis >= kHopSize) {
-                samplesSinceAnalysis = 0;
-                analyse();
-            }
-        }
-    }
+        for (int i = 0; i < kWindowSize; ++i)
+        {
+            const int sourceIndex =
+                (writePosition + i) % kWindowSize;
 
-    int getNumNotes() const noexcept {
-        return detectedNoteCount;
-    }
-
-    DetectedNote getNote(int index) const noexcept {
-        if (index < 0 || index >= detectedNoteCount) {
-            return {};
+            analysisBuffer[static_cast<std::size_t>(i)] =
+                inputBuffer[static_cast<std::size_t>(sourceIndex)];
         }
 
-        return detectedNotes[static_cast<size_t>(index)];
-    }
+        /*
+            Basic energy gate.
 
-    // Continuous estimate used when this detector is fed an isolated voice.
-    // The MIDI-note list above remains available as the legacy detector
-    // interface, while this estimate preserves bends between semitones.
-    float getBestFrequencyHz() const noexcept {
-        return bestFrequencyHz;
-    }
+            YIN can occasionally return meaningless periods for silence
+            or extremely low-level material. We do not want that to
+            create a fake Bowed voice.
+        */
 
-    float getBestConfidence() const noexcept {
-        return bestConfidence;
-    }
+        double energy = 0.0;
 
-  private:
-    void analyse() {
-        buildFFTInput();
-        performFFT();
+        for (float sample : analysisBuffer)
+            energy += static_cast<double>(sample) * sample;
 
-        std::array<float, kMaxNotes> candidateStrengths{};
+        const double rms =
+            std::sqrt(energy / static_cast<double>(kWindowSize));
 
-        std::array<int, kMaxNotes> candidateNotes{};
-
-        float strongest = 0.0f;
-
-        for (int midi = 36; midi <= 88; ++midi) {
-            const float strength = calculateHarmonicStrength(midi);
-
-            if (strength > strongest)
-                strongest = strength;
-        }
-
-        if (strongest <= 0.000001f) {
-            detectedNoteCount = 0;
-            bestFrequencyHz = 0.0f;
-            bestConfidence = 0.0f;
+        if (rms < 0.000001)
+        {
+            clearDetection();
             return;
         }
 
-        const float threshold = strongest * 0.20f;
-
-        int candidateCount = 0;
-
-        for (int midi = 36; midi <= 88 && candidateCount < kMaxNotes; ++midi) {
-            const float strength = calculateHarmonicStrength(midi);
-
-            if (strength < threshold)
-                continue;
-
-            bool isLocalMaximum = true;
-
-            if (midi > 36) {
-                const float previous = calculateHarmonicStrength(midi - 1);
-
-                if (strength < previous)
-                    isLocalMaximum = false;
-            }
-
-            if (midi < 88) {
-                const float next = calculateHarmonicStrength(midi + 1);
-
-                if (strength < next)
-                    isLocalMaximum = false;
-            }
-
-            if (!isLocalMaximum)
-                continue;
-
-            candidateNotes[static_cast<size_t>(candidateCount)] = midi;
-
-            candidateStrengths[static_cast<size_t>(candidateCount)] = strength / strongest;
-
-            ++candidateCount;
+        for (int i = 0; i < kWindowSize; ++i)
+        {
+            fvec_set_sample(
+                aubioInput,
+                analysisBuffer[static_cast<std::size_t>(i)],
+                static_cast<uint_t>(i));
         }
 
-        std::array<DetectedNote, kMaxNotes> newNotes{};
+        aubio_pitchyin_do(
+            aubioPitchYin,
+            aubioInput,
+            aubioOutput);
 
-        for (int i = 0; i < candidateCount; ++i) {
-            newNotes[static_cast<size_t>(i)].midiNote = candidateNotes[static_cast<size_t>(i)];
-            newNotes[static_cast<size_t>(i)].strength = candidateStrengths[static_cast<size_t>(i)];
+        const float period =
+            fvec_get_sample(aubioOutput, 0);
+
+        const float detectedConfidence =
+            std::clamp(
+                aubio_pitchyin_get_confidence(aubioPitchYin),
+                0.0f,
+                1.0f);
+
+        if (period <= 0.0f ||
+            !std::isfinite(period) ||
+            detectedConfidence <= 0.0f)
+        {
+            clearDetection();
+            return;
         }
 
-        std::sort(
-            newNotes.begin(), newNotes.begin() + candidateCount,
-            [](const DetectedNote& a, const DetectedNote& b) { return a.strength > b.strength; });
+        const float detectedFrequency =
+            static_cast<float>(sampleRate / period);
 
-        detectedNotes = newNotes;
-        detectedNoteCount = candidateCount;
+        /*
+            This is deliberately continuous Hz.
 
-        if (samplesReceived >= kFFTSize &&
-            samplesReceived - samplesAtLastContinuousAnalysis >= kFFTSize) {
-            estimateContinuousPitch();
-            samplesAtLastContinuousAnalysis = samplesReceived;
+            Do NOT quantize this value to MIDI before passing it to
+            VoiceManager. Pitch bends, detuning and microtonal input
+            must survive.
+        */
+
+        if (!std::isfinite(detectedFrequency) ||
+            detectedFrequency < 25.0f ||
+            detectedFrequency > 1200.0f)
+        {
+            clearDetection();
+            return;
         }
+
+        frequencyHz = detectedFrequency;
+        confidence = detectedConfidence;
+
+        /*
+            MIDI is retained only as debug metadata.
+
+            It must never be used as the synthesis frequency.
+        */
+
+        const float midi =
+            69.0f +
+            12.0f *
+            std::log2(detectedFrequency / 440.0f);
+
+        midiNote =
+            static_cast<int>(std::lround(midi));
     }
 
-    void estimateContinuousPitch() {
-        bestFrequencyHz = 0.0f;
-        bestConfidence = 0.0f;
-
-        if (samplesReceived < kFFTSize)
-            return;
-
-        constexpr float minimumConfidence = 0.30f;
-
-        const int minimumLag = std::max(2, static_cast<int>(std::floor(sampleRate / 2000.0)));
-        const int maximumLag =
-            std::min(kFFTSize / 2, static_cast<int>(std::ceil(sampleRate / 30.0)));
-        if (maximumLag <= minimumLag + 2)
-            return;
-
-        // The forward FFT has already been computed by analyse(). The inverse
-        // transform of its power spectrum is the autocorrelation, avoiding a
-        // second O(N * lag) time-domain pass for every isolated voice.
-        for (auto& value : fftBuffer)
-            value = {std::norm(value), 0.0f};
-        performFFT(true);
-
-        const float zeroLag = fftBuffer[0].real();
-        if (zeroLag <= 1.0e-8f)
-            return;
-
-        float bestCorrelation = 0.0f;
-        int bestLag = 0;
-        std::array<float, kFFTSize / 2 + 1> correlations{};
-
-        for (int lag = minimumLag; lag <= maximumLag; ++lag) {
-            const float correlation = fftBuffer[static_cast<size_t>(lag)].real() / zeroLag;
-            correlations[static_cast<size_t>(lag)] = correlation;
-            if (correlation > bestCorrelation) {
-                bestCorrelation = correlation;
-                bestLag = lag;
-            }
-        }
-
-        if (bestLag == 0 || bestCorrelation < minimumConfidence)
-            return;
-
-        // Prefer the first strong local maximum. This avoids selecting an
-        // octave multiple simply because several periods correlate well.
-        const float localThreshold = bestCorrelation * 0.97f;
-        int selectedLag = bestLag;
-        for (int lag = minimumLag + 1; lag < maximumLag; ++lag) {
-            const float current = correlations[static_cast<size_t>(lag)];
-            if (current >= localThreshold &&
-                current >= correlations[static_cast<size_t>(lag - 1)] &&
-                current >= correlations[static_cast<size_t>(lag + 1)]) {
-                selectedLag = lag;
-                break;
-            }
-        }
-
-        float refinedLag = static_cast<float>(selectedLag);
-        if (selectedLag > minimumLag && selectedLag < maximumLag) {
-            const float left = correlations[static_cast<size_t>(selectedLag - 1)];
-            const float center = correlations[static_cast<size_t>(selectedLag)];
-            const float right = correlations[static_cast<size_t>(selectedLag + 1)];
-            const float curvature = left - 2.0f * center + right;
-            if (std::abs(curvature) > 1.0e-6f)
-                refinedLag += 0.5f * (left - right) / curvature;
-        }
-
-        if (refinedLag <= 0.0f)
-            return;
-
-        bestFrequencyHz = static_cast<float>(sampleRate / refinedLag);
-        bestConfidence = std::clamp(
-            (bestCorrelation - minimumConfidence) / (1.0f - minimumConfidence), 0.0f, 1.0f);
-    }
-
-    void buildFFTInput() {
-        constexpr float pi = 3.14159265358979323846f;
-
-        for (int i = 0; i < kFFTSize; ++i) {
-            const int index = (writePosition + i) % kFFTSize;
-
-            const float sample = inputBuffer[static_cast<size_t>(index)];
-
-            const float phase = static_cast<float>(i) / static_cast<float>(kFFTSize - 1);
-
-            const float window = 0.5f * (1.0f - std::cos(2.0f * pi * phase));
-
-            fftBuffer[static_cast<size_t>(i)] = std::complex<float>(sample * window, 0.0f);
-        }
-    }
-
-    void performFFT(bool inverse = false) {
-        constexpr float pi = 3.14159265358979323846f;
-
-        // Bit reversal.
-        for (int i = 1, j = 0; i < kFFTSize; ++i) {
-            int bit = kFFTSize >> 1;
-
-            for (; j & bit; bit >>= 1) {
-                j ^= bit;
-            }
-
-            j ^= bit;
-
-            if (i < j) {
-                std::swap(fftBuffer[static_cast<size_t>(i)], fftBuffer[static_cast<size_t>(j)]);
-            }
-        }
-
-        // Cooley-Tukey radix-2 FFT.
-        for (int length = 2; length <= kFFTSize; length <<= 1) {
-            const float angle = (inverse ? 2.0f : -2.0f) * pi / static_cast<float>(length);
-
-            const std::complex<float> wLen = std::polar(1.0f, angle);
-
-            for (int i = 0; i < kFFTSize; i += length) {
-                std::complex<float> w(1.0f, 0.0f);
-
-                const int halfLength = length >> 1;
-
-                for (int j = 0; j < halfLength; ++j) {
-                    const auto u = fftBuffer[static_cast<size_t>(i + j)];
-
-                    const auto v = fftBuffer[static_cast<size_t>(i + j + halfLength)] * w;
-
-                    fftBuffer[static_cast<size_t>(i + j)] = u + v;
-
-                    fftBuffer[static_cast<size_t>(i + j + halfLength)] = u - v;
-
-                    w *= wLen;
-                }
-            }
-        }
-
-        if (inverse) {
-            for (auto& value : fftBuffer)
-                value /= static_cast<float>(kFFTSize);
-        }
-    }
-
-    float magnitudeAtFrequency(float frequency) const {
-        if (frequency <= 0.0f)
-            return 0.0f;
-
-        const float bin = frequency * static_cast<float>(kFFTSize) / static_cast<float>(sampleRate);
-
-        if (bin < 1.0f || bin >= static_cast<float>(kFFTSize / 2 - 1)) {
-            return 0.0f;
-        }
-
-        const int lowerBin = static_cast<int>(std::floor(bin));
-
-        const float fraction = bin - static_cast<float>(lowerBin);
-
-        const float a = std::abs(fftBuffer[static_cast<size_t>(lowerBin)]);
-
-        const float b = std::abs(fftBuffer[static_cast<size_t>(lowerBin + 1)]);
-
-        return a + (b - a) * fraction;
-    }
-
-    float calculateHarmonicStrength(int midiNote) const {
-        const float frequency = 440.0f * std::pow(2.0f, static_cast<float>(midiNote - 69) / 12.0f);
-
-        static constexpr float harmonicWeights[] = {1.0f,  0.65f, 0.40f, 0.25f,
-                                                    0.15f, 0.10f, 0.07f, 0.05f};
-
-        float total = 0.0f;
-
-        for (int harmonic = 1; harmonic <= 8; ++harmonic) {
-            const float harmonicFrequency = frequency * static_cast<float>(harmonic);
-
-            if (harmonicFrequency >= static_cast<float>(sampleRate * 0.45)) {
-                break;
-            }
-
-            total += magnitudeAtFrequency(harmonicFrequency) * harmonicWeights[harmonic - 1];
-        }
-
-        return total;
+    void clearDetection() noexcept
+    {
+        frequencyHz = 0.0f;
+        confidence = 0.0f;
+        midiNote = 0;
     }
 
     double sampleRate = 44100.0;
 
-    std::array<float, kFFTSize> inputBuffer{};
-
-    std::array<std::complex<float>, kFFTSize> fftBuffer{};
+    std::array<float, kWindowSize> inputBuffer{};
+    std::array<float, kWindowSize> analysisBuffer{};
 
     int writePosition = 0;
-
     int samplesSinceAnalysis = 0;
+    int totalSamples = 0;
 
-    int samplesReceived = 0;
+    float frequencyHz = 0.0f;
+    float confidence = 0.0f;
+    int midiNote = 0;
 
-    int samplesAtLastContinuousAnalysis = 0;
-
-    std::array<DetectedNote, kMaxNotes> detectedNotes{};
-    int detectedNoteCount = 0;
-
-    float bestFrequencyHz = 0.0f;
-    float bestConfidence = 0.0f;
+    aubio_pitchyin_t* aubioPitchYin = nullptr;
+    fvec_t* aubioInput = nullptr;
+    fvec_t* aubioOutput = nullptr;
 };
+

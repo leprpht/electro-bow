@@ -1,220 +1,562 @@
 ﻿#include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#include <algorithm>
+#include <cmath>
+
 ElectroBowAudioProcessor::ElectroBowAudioProcessor()
-    : AudioProcessor(BusesProperties()
-                         .withInput("Input", juce::AudioChannelSet::stereo(), true)
-                         .withOutput("Output", juce::AudioChannelSet::stereo(), true)) {
-    // The analyzer remains independent of any particular tracker. The current
-    // product path uses the existing detector as an adapter for each isolated
-    // channel; this can later be replaced by Q without changing separation or
-    // VoiceManager.
+    : AudioProcessor(
+          BusesProperties()
+              .withInput(
+                  "Input",
+                  juce::AudioChannelSet::stereo(),
+                  true)
+              .withOutput(
+                  "Output",
+                  juce::AudioChannelSet::stereo(),
+                  true))
+{
     polyphonicAnalyzer.setPitchTracker(
-        [this](int voiceId, const std::vector<float>& samples, double rate) {
-            return trackIsolatedVoice(voiceId, samples, rate);
+        [this](
+            int voiceId,
+            const std::vector<float>& samples,
+            double rate)
+        {
+            return trackIsolatedVoice(
+                voiceId,
+                samples,
+                rate);
         });
 }
 
 PolyphonicAnalyzer::PitchEstimate
-ElectroBowAudioProcessor::trackIsolatedVoice(int voiceId, const std::vector<float>& samples,
-                                             double rate) {
+ElectroBowAudioProcessor::trackIsolatedVoice(
+    int voiceId,
+    const std::vector<float>& samples,
+    double rate)
+{
     if (voiceId < 0 || samples.empty())
         return {};
 
-    int slot = -1;
-    for (int i = 0; i < static_cast<int>(isolatedTrackerVoiceIds.size()); ++i) {
-        if (isolatedTrackerVoiceIds[static_cast<size_t>(i)] == voiceId) {
-            slot = i;
-            break;
-        }
-    }
+    int slot = findTrackerSlot(voiceId);
 
-    if (slot < 0) {
-        for (int i = 0; i < static_cast<int>(isolatedTrackerVoiceIds.size()); ++i) {
-            if (isolatedTrackerVoiceIds[static_cast<size_t>(i)] < 0) {
-                slot = i;
-                break;
-            }
-        }
-    }
-
-    // There can be at most kMaxVoices active IDs. If an old ID has not yet
-    // been retired by the analyzer, reuse its slot rather than aliasing two
-    // active IDs with modulo arithmetic.
     if (slot < 0)
-        slot = voiceId % static_cast<int>(isolatedTrackers.size());
+        slot = findFreeTrackerSlot();
 
-    auto& tracker = isolatedTrackers[static_cast<size_t>(slot)];
-    if (isolatedTrackerVoiceIds[static_cast<size_t>(slot)] != voiceId) {
-        tracker.prepare(rate);
-        isolatedTrackerVoiceIds[static_cast<size_t>(slot)] = voiceId;
-    }
-
-    tracker.push(samples.data(), static_cast<int>(samples.size()));
-    if (tracker.getBestFrequencyHz() > 0.0f) {
-        return {tracker.getBestFrequencyHz(), tracker.getBestConfidence()};
-    }
-
-    if (tracker.getNumNotes() <= 0)
+    if (slot < 0)
         return {};
 
-    const auto note = tracker.getNote(0);
-    return {440.0f * std::pow(2.0f, static_cast<float>(note.midiNote - 69) / 12.0f),
-            std::clamp(note.strength, 0.0f, 1.0f)};
+    auto& tracker =
+        isolatedTrackers[
+            static_cast<std::size_t>(slot)];
+
+    const std::size_t slotIndex =
+        static_cast<std::size_t>(slot);
+
+    /*
+        If this is a new analyzer voice, reuse this
+        PitchDetector slot and reset its history.
+    */
+    if (isolatedTrackerVoiceIds[slotIndex] != voiceId)
+    {
+        tracker.prepare(rate);
+
+        isolatedTrackerVoiceIds[slotIndex] =
+            voiceId;
+    }
+
+    tracker.push(
+        samples.data(),
+        static_cast<int>(samples.size()));
+
+    const float frequency =
+        tracker.getFrequencyHz();
+
+    const float confidence =
+        tracker.getConfidence();
+
+    if (frequency <= 0.0f ||
+        !std::isfinite(frequency) ||
+        confidence <= 0.0f ||
+        !std::isfinite(confidence))
+    {
+        return {};
+    }
+
+    return {
+        frequency,
+        std::clamp(
+            confidence,
+            0.0f,
+            1.0f)
+    };
 }
 
-void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    monoScratch.assign(static_cast<size_t>(juce::jmax(1, samplesPerBlock)), 0.0f);
+int ElectroBowAudioProcessor::findTrackerSlot(
+    int voiceId) const noexcept
+{
+    for (int i = 0;
+         i < static_cast<int>(
+                 isolatedTrackerVoiceIds.size());
+         ++i)
+    {
+        if (isolatedTrackerVoiceIds[
+                static_cast<std::size_t>(i)] == voiceId)
+        {
+            return i;
+        }
+    }
 
-    polyphonicAnalyzer.prepare(sampleRate);
-    polyPitchDetector.prepare(sampleRate);
+    return -1;
+}
+
+int ElectroBowAudioProcessor::findFreeTrackerSlot()
+    const noexcept
+{
+    for (int i = 0;
+         i < static_cast<int>(
+                 isolatedTrackerVoiceIds.size());
+         ++i)
+    {
+        if (isolatedTrackerVoiceIds[
+                static_cast<std::size_t>(i)] < 0)
+        {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+void ElectroBowAudioProcessor::prepareToPlay(
+    double sampleRate,
+    int samplesPerBlock)
+{
+    const int safeBlockSize =
+        juce::jmax(
+            1,
+            samplesPerBlock);
+
+    monoScratch.assign(
+        static_cast<std::size_t>(
+            safeBlockSize),
+        0.0f);
+
+    polyphonicAnalyzer.prepare(
+        sampleRate);
+
     isolatedTrackerVoiceIds.fill(-1);
+
     for (auto& tracker : isolatedTrackers)
         tracker.prepare(sampleRate);
 
-    voiceManager.prepare(sampleRate, attackMs, releaseMs);
+    voiceManager.prepare(
+        sampleRate,
+        attackMs,
+        naturalResonanceMs);
 
-    voiceManager.setBowParameters(bowPressure, bowSpeed, friction);
+    voiceManager.setBowParameters(
+        bowPressure,
+        bowSpeed,
+        friction);
 
-    voiceManager.setEnvelopeParameters(attackMs, releaseMs);
+    voiceManager.setEnvelopeParameters(
+        attackMs,
+        naturalResonanceMs);
 }
 
-void ElectroBowAudioProcessor::releaseResources() {
+void ElectroBowAudioProcessor::releaseResources()
+{
     voiceManager.reset();
+
     isolatedTrackerVoiceIds.fill(-1);
 }
 
-bool ElectroBowAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
-    const auto& input = layouts.getMainInputChannelSet();
+bool ElectroBowAudioProcessor::isBusesLayoutSupported(
+    const BusesLayout& layouts) const
+{
+    const auto input =
+        layouts.getMainInputChannelSet();
 
-    const auto& output = layouts.getMainOutputChannelSet();
+    const auto output =
+        layouts.getMainOutputChannelSet();
 
-    if (input != output)
+    if (input != juce::AudioChannelSet::mono() &&
+        input != juce::AudioChannelSet::stereo())
+    {
         return false;
+    }
 
-    return input == juce::AudioChannelSet::mono() || input == juce::AudioChannelSet::stereo();
+    return output == input;
 }
 
-void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
-                                            juce::MidiBuffer& midi) {
+void ElectroBowAudioProcessor::processBlock(
+    juce::AudioBuffer<float>& buffer,
+    juce::MidiBuffer& midi)
+{
     juce::ScopedNoDenormals noDenormals;
 
     juce::ignoreUnused(midi);
 
-    const int numChannels = buffer.getNumChannels();
+    const int numChannels =
+        buffer.getNumChannels();
 
-    const int numSamples = buffer.getNumSamples();
+    const int numSamples =
+        buffer.getNumSamples();
 
-    if (numChannels <= 0 || numSamples <= 0) {
+    if (numChannels <= 0 ||
+        numSamples <= 0)
+    {
         return;
     }
 
-    if (monoScratch.size() < static_cast<size_t>(numSamples)) {
-        monoScratch.resize(static_cast<size_t>(numSamples));
+    /*
+        The host normally respects the maximum block
+        size supplied during prepareToPlay().
+
+        Do not resize the scratch buffer on the audio
+        thread.
+    */
+    if (static_cast<std::size_t>(numSamples) >
+        monoScratch.size())
+    {
+        buffer.clear();
+        return;
     }
 
-    std::fill(monoScratch.begin(), monoScratch.begin() + numSamples, 0.0f);
+    /*
+        Convert input to mono.
 
-    // ------------------------------------------------------------------
-    // Stereo -> mono.
-    // ------------------------------------------------------------------
+        PolyphonicAnalyzer receives one analysis signal.
+    */
+    std::fill(
+        monoScratch.begin(),
+        monoScratch.begin() + numSamples,
+        0.0f);
 
-    for (int channel = 0; channel < numChannels; ++channel) {
-        const float* input = buffer.getReadPointer(channel);
+    for (int channel = 0;
+         channel < numChannels;
+         ++channel)
+    {
+        const float* input =
+            buffer.getReadPointer(channel);
 
-        for (int sample = 0; sample < numSamples; ++sample) {
-            monoScratch[static_cast<size_t>(sample)] += input[sample];
+        for (int sample = 0;
+             sample < numSamples;
+             ++sample)
+        {
+            monoScratch[
+                static_cast<std::size_t>(
+                    sample)] +=
+                input[sample];
         }
     }
 
-    const float channelScale = 1.0f / static_cast<float>(numChannels);
+    const float channelScale =
+        1.0f /
+        static_cast<float>(
+            numChannels);
 
-    for (int sample = 0; sample < numSamples; ++sample) {
-        monoScratch[static_cast<size_t>(sample)] *= channelScale;
+    for (int sample = 0;
+         sample < numSamples;
+         ++sample)
+    {
+        monoScratch[
+            static_cast<std::size_t>(
+                sample)] *=
+            channelScale;
     }
 
-    // ------------------------------------------------------------------
-    // Detect the current polyphonic note set.
-    // ------------------------------------------------------------------
+    /*
+        Analyze and separate the incoming audio.
+    */
+    polyphonicAnalyzer.push(
+        monoScratch.data(),
+        numSamples);
 
-    // Keep the old detector fed for the existing editor/comparison accessors.
-    // It is not used as the analyzer's architectural foundation.
-    polyPitchDetector.push(monoScratch.data(), numSamples);
-    polyphonicAnalyzer.push(monoScratch.data(), numSamples);
+    /*
+        VoiceManager decides which voices should start,
+        continue, or enter natural resonance.
+    */
+    voiceManager.updateDetectedVoices(
+        polyphonicAnalyzer);
 
-    // ------------------------------------------------------------------
-    // Synchronise VoiceManager with the detected note set.
-    //
-    // Existing notes remain alive.
-    // Missing notes enter release.
-    // New notes create new Bowed voices.
-    // ------------------------------------------------------------------
+    /*
+        Render all active Bowed voices.
+    */
+    for (int sample = 0;
+         sample < numSamples;
+         ++sample)
+    {
+        const float output =
+            voiceManager.processSample();
 
-    voiceManager.updateDetectedVoices(polyphonicAnalyzer);
-
-    // ------------------------------------------------------------------
-    // Render all active voices.
-    // ------------------------------------------------------------------
-
-    for (int sample = 0; sample < numSamples; ++sample) {
-        const float output = voiceManager.processSample();
-
-        for (int channel = 0; channel < numChannels; ++channel) {
-            buffer.setSample(channel, sample, output);
+        for (int channel = 0;
+             channel < numChannels;
+             ++channel)
+        {
+            buffer.setSample(
+                channel,
+                sample,
+                output);
         }
     }
 }
 
-bool ElectroBowAudioProcessor::hasEditor() const {
+juce::AudioProcessorEditor*
+ElectroBowAudioProcessor::createEditor()
+{
+    return new ElectroBowAudioProcessorEditor(
+        *this);
+}
+
+bool ElectroBowAudioProcessor::hasEditor() const
+{
     return true;
 }
 
-juce::AudioProcessorEditor* ElectroBowAudioProcessor::createEditor() {
-    return new ElectroBowAudioProcessorEditor(*this);
-}
-
-const juce::String ElectroBowAudioProcessor::getName() const {
+const juce::String
+ElectroBowAudioProcessor::getName() const
+{
     return JucePlugin_Name;
 }
 
-bool ElectroBowAudioProcessor::acceptsMidi() const {
+bool ElectroBowAudioProcessor::acceptsMidi() const
+{
     return false;
 }
 
-bool ElectroBowAudioProcessor::producesMidi() const {
+bool ElectroBowAudioProcessor::producesMidi() const
+{
     return false;
 }
 
-bool ElectroBowAudioProcessor::isMidiEffect() const {
+bool ElectroBowAudioProcessor::isMidiEffect() const
+{
     return false;
 }
 
-double ElectroBowAudioProcessor::getTailLengthSeconds() const {
-    return 2.0;
+double ElectroBowAudioProcessor::getTailLengthSeconds()
+    const
+{
+    return static_cast<double>(
+               naturalResonanceMs) *
+           0.001 +
+           0.25;
 }
 
-int ElectroBowAudioProcessor::getNumPrograms() {
+int ElectroBowAudioProcessor::getNumPrograms()
+{
     return 1;
 }
 
-int ElectroBowAudioProcessor::getCurrentProgram() {
+int ElectroBowAudioProcessor::getCurrentProgram()
+{
     return 0;
 }
 
-void ElectroBowAudioProcessor::setCurrentProgram(int) {}
+void ElectroBowAudioProcessor::setCurrentProgram(
+    int index)
+{
+    juce::ignoreUnused(index);
+}
 
-const juce::String ElectroBowAudioProcessor::getProgramName(int) {
+const juce::String
+ElectroBowAudioProcessor::getProgramName(
+    int index)
+{
+    juce::ignoreUnused(index);
+
     return {};
 }
 
-void ElectroBowAudioProcessor::changeProgramName(int, const juce::String&) {}
-
-void ElectroBowAudioProcessor::getStateInformation(juce::MemoryBlock& destData) {
-    destData.reset();
+void ElectroBowAudioProcessor::changeProgramName(
+    int index,
+    const juce::String& newName)
+{
+    juce::ignoreUnused(index);
+    juce::ignoreUnused(newName);
 }
 
-void ElectroBowAudioProcessor::setStateInformation(const void*, int) {}
+void ElectroBowAudioProcessor::getStateInformation(
+    juce::MemoryBlock& destData)
+{
+    juce::MemoryOutputStream stream(
+        destData,
+        false);
 
-juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {
+    constexpr int stateMagic =
+        0x45424F57; // "EBOW"
+
+    constexpr int stateVersion = 1;
+
+    stream.writeInt(stateMagic);
+    stream.writeInt(stateVersion);
+
+    stream.writeFloat(bowPressure);
+    stream.writeFloat(bowSpeed);
+    stream.writeFloat(friction);
+
+    stream.writeFloat(attackMs);
+    stream.writeFloat(naturalResonanceMs);
+}
+
+void ElectroBowAudioProcessor::setStateInformation(
+    const void* data,
+    int sizeInBytes)
+{
+    if (data == nullptr ||
+        sizeInBytes <= 0)
+    {
+        return;
+    }
+
+    juce::MemoryInputStream stream(
+        data,
+        static_cast<size_t>(
+            sizeInBytes),
+        false);
+
+    constexpr int stateMagic =
+        0x45424F57;
+
+    constexpr int stateVersion = 1;
+
+    const int magic =
+        stream.readInt();
+
+    const int version =
+        stream.readInt();
+
+    if (magic != stateMagic ||
+        version != stateVersion)
+    {
+        return;
+    }
+
+    bowPressure =
+        std::clamp(
+            stream.readFloat(),
+            0.0f,
+            1.0f);
+
+    bowSpeed =
+        std::clamp(
+            stream.readFloat(),
+            0.0f,
+            1.0f);
+
+    friction =
+        std::clamp(
+            stream.readFloat(),
+            0.0f,
+            1.0f);
+
+    attackMs =
+        std::max(
+            0.0f,
+            stream.readFloat());
+
+    naturalResonanceMs =
+        std::max(
+            0.0f,
+            stream.readFloat());
+
+    voiceManager.setBowParameters(
+        bowPressure,
+        bowSpeed,
+        friction);
+
+    voiceManager.setEnvelopeParameters(
+        attackMs,
+        naturalResonanceMs);
+}
+
+float ElectroBowAudioProcessor::getPitchFrequencyHz()
+    const noexcept
+{
+    for (int i = 0;
+         i < VoiceManager::kMaxVoices;
+         ++i)
+    {
+        if (voiceManager.isVoiceActive(i))
+        {
+            return voiceManager.getVoiceFrequencyHz(
+                i);
+        }
+    }
+
+    return 0.0f;
+}
+
+float ElectroBowAudioProcessor::getPitchConfidence()
+    const noexcept
+{
+    for (int i = 0;
+         i < VoiceManager::kMaxVoices;
+         ++i)
+    {
+        if (voiceManager.isVoiceActive(i))
+        {
+            return voiceManager.getVoiceStrength(
+                i);
+        }
+    }
+
+    return 0.0f;
+}
+
+int ElectroBowAudioProcessor::getPitchMidiNote()
+    const noexcept
+{
+    const float frequency =
+        getPitchFrequencyHz();
+
+    if (frequency <= 0.0f ||
+        !std::isfinite(frequency))
+    {
+        return 0;
+    }
+
+    const float midi =
+        69.0f +
+        12.0f *
+        std::log2(
+            frequency /
+            440.0f);
+
+    const int note =
+        static_cast<int>(
+            std::lround(midi));
+
+    return std::clamp(
+        note,
+        0,
+        127);
+}
+
+int ElectroBowAudioProcessor::getActiveVoiceCount()
+    const noexcept
+{
+    return voiceManager.getActiveVoiceCount();
+}
+
+float ElectroBowAudioProcessor::getVoiceFrequencyHz(
+    int index) const noexcept
+{
+    return voiceManager.getVoiceFrequencyHz(
+        index);
+}
+
+float ElectroBowAudioProcessor::getVoiceStrength(
+    int index) const noexcept
+{
+    return voiceManager.getVoiceStrength(
+        index);
+}
+
+juce::AudioProcessor*
+JUCE_CALLTYPE createPluginFilter()
+{
     return new ElectroBowAudioProcessor();
 }
