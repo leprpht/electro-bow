@@ -5,6 +5,17 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-10-01
+
+### Changed
+
+- Improved pitch detection and voice processing with more reliable analysis and reset behavior.
+- Replaced note release decay with configurable natural resonance for more natural bowed-string behavior.
+
+### Fixed
+
+- Fixed natural resonance and note release behavior.
+
 ## [1.2.0] - 2026-10-01
 
 ### Added
