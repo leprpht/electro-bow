@@ -2,31 +2,27 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
+#include "BowTrigger.h"
 #include "PitchDetector.h"
 #include "PolyphonicAnalyzer.h"
 #include "VoiceManager.h"
 
 #include <array>
+#include <cstdint>
 #include <vector>
 
-class ElectroBowAudioProcessor : public juce::AudioProcessor
-{
-public:
+class ElectroBowAudioProcessor : public juce::AudioProcessor {
+  public:
     ElectroBowAudioProcessor();
     ~ElectroBowAudioProcessor() override = default;
 
-    void prepareToPlay(
-        double sampleRate,
-        int samplesPerBlock) override;
+    void prepareToPlay(double sampleRate, int samplesPerBlock) override;
 
     void releaseResources() override;
 
-    bool isBusesLayoutSupported(
-        const BusesLayout& layouts) const override;
+    bool isBusesLayoutSupported(const BusesLayout& layouts) const override;
 
-    void processBlock(
-        juce::AudioBuffer<float>&,
-        juce::MidiBuffer&) override;
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
     juce::AudioProcessorEditor* createEditor() override;
 
@@ -48,19 +44,13 @@ public:
 
     void setCurrentProgram(int index) override;
 
-    const juce::String getProgramName(
-        int index) override;
+    const juce::String getProgramName(int index) override;
 
-    void changeProgramName(
-        int index,
-        const juce::String& newName) override;
+    void changeProgramName(int index, const juce::String& newName) override;
 
-    void getStateInformation(
-        juce::MemoryBlock& destData) override;
+    void getStateInformation(juce::MemoryBlock& destData) override;
 
-    void setStateInformation(
-        const void* data,
-        int sizeInBytes) override;
+    void setStateInformation(const void* data, int sizeInBytes) override;
 
     /*
         Debug / UI access.
@@ -82,15 +72,11 @@ public:
 
     float getVoiceStrength(int index) const noexcept;
 
-private:
+  private:
     PolyphonicAnalyzer::PitchEstimate
-    trackIsolatedVoice(
-        int voiceId,
-        const std::vector<float>& samples,
-        double sampleRate);
+    trackIsolatedVoice(int voiceId, const std::vector<float>& samples, double sampleRate);
 
-    int findTrackerSlot(
-        int voiceId) const noexcept;
+    int findTrackerSlot(int voiceId) const noexcept;
 
     int findFreeTrackerSlot() const noexcept;
 
@@ -108,24 +94,26 @@ private:
         These operate on the separated voice signals,
         rather than on the complete chord.
     */
-    std::array<
-        PitchDetector,
-        PolyphonicAnalyzer::kMaxVoices
-    > isolatedTrackers;
+    std::array<PitchDetector, PolyphonicAnalyzer::kMaxVoices> isolatedTrackers;
 
     /*
         Maps analyzer voice IDs to PitchDetector slots.
     */
-    std::array<
-        int,
-        PolyphonicAnalyzer::kMaxVoices
-    > isolatedTrackerVoiceIds{};
+    std::array<int, PolyphonicAnalyzer::kMaxVoices> isolatedTrackerVoiceIds{};
 
     /*
         Owns the actual STK Bowed instances and their
         per-voice envelopes.
     */
     VoiceManager voiceManager;
+
+    /*
+        Tracks the physical input attack. Analyzer candidates may change
+        during a pluck as its harmonics decay, but that is not a new note-on.
+    */
+    BowTrigger bowTrigger;
+    bool pendingNoteOn = false;
+    std::uint64_t lastAnalyzerGeneration = 0;
 
     /*
         Reused every processBlock.
@@ -145,6 +133,5 @@ private:
     float attackMs = 50.0f;
     float naturalResonanceMs = 200.0f;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(
-        ElectroBowAudioProcessor)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ElectroBowAudioProcessor)
 };
