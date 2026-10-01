@@ -169,6 +169,8 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     }
 
     for (int sample = 0; sample < numSamples; ++sample) {
+        // Capture only the rising physical attack. The analyzer may publish
+        // several different spectral descriptions of the same pluck later.
         if (bowTrigger.processSample(monoScratch[static_cast<std::size_t>(sample)])) {
             pendingNoteOn = true;
         }
@@ -187,8 +189,12 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
     const bool hasFreshAnalysis = analysisGeneration != lastAnalyzerGeneration;
 
-    const bool allowNewVoices =
-        pendingNoteOn || (voiceManager.getActiveVoiceCount() == 0 && bowTrigger.isNoteActive());
+    // A high envelope is not a new attack. In particular, do not reopen
+    // note-on eligibility merely because analyzer loss has released every
+    // voice while the tail of the same pluck is still above the threshold.
+    // New voices are admitted only by the rising-edge event captured in
+    // pendingNoteOn.
+    const bool allowNewVoices = pendingNoteOn;
 
     voiceManager.updateDetectedVoices(polyphonicAnalyzer, allowNewVoices);
 

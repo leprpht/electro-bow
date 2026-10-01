@@ -5,6 +5,9 @@
 
 class BowTrigger {
   public:
+    // Detects physical attack/release state from the input amplitude. This is
+    // intentionally separate from spectral voice detection: harmonics and
+    // pitch confidence may change during one physical pluck.
     void prepare(double newSampleRate) {
         sampleRate = std::max(1.0, newSampleRate);
         reset();
@@ -53,6 +56,9 @@ class BowTrigger {
     }
 
     bool consumeRelease() {
+        // The current processor uses analyzer disappearance to begin natural
+        // voice release; this accessor remains available for a future policy
+        // that wants to combine physical release with analyzer state.
         const bool result = justReleased;
         justReleased = false;
         return result;

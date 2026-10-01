@@ -110,6 +110,9 @@ class VoiceManager {
                 voiceIndex = findVoiceByFrequency(detected.trackedFrequencyHz, matched);
             }
 
+            // New STK attacks are permitted only for a physical note-on. If
+            // the analyzer changes candidates during an existing pluck,
+            // continuity handling below must update/reuse a live voice.
             if (voiceIndex < 0 && allowNewVoices)
                 voiceIndex = findFreeVoice();
 
@@ -376,6 +379,8 @@ class VoiceManager {
     }
 
     void startVoice(Voice& voice, int analyzerId, float frequency, float strength) {
+        // This is the sole synthesis note-on path. Pitch changes must use
+        // updateExistingVoice() so they do not restart the Bowed attack.
         voice.bowed.clear();
 
         voice.bowed.setFrequency(static_cast<stk::StkFloat>(frequency));
@@ -414,6 +419,9 @@ class VoiceManager {
     }
 
     void updateExistingVoice(Voice& voice, int analyzerId, float frequency, float strength) {
+        // Analyzer IDs and spectral candidates can change as a pluck decays;
+        // updating frequency here preserves one physical attack as one STK
+        // voice.
         if (frequency > 0.0f && std::isfinite(frequency)) {
             voice.frequencyHz = frequency;
 
