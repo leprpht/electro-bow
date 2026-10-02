@@ -25,6 +25,63 @@ endif()
 add_subdirectory("${JUCE_PATH}" JUCE)
 
 # ---------------------------------------------------------------------------
+# React/TypeScript/Tailwind Web UI.
+#
+# The frontend is built into three deterministic files and embedded in the
+# plugin binary below. This keeps installed VST3 bundles self-contained.
+
+set(ELECTROBOW_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/UI")
+set(ELECTROBOW_UI_DIST_DIR "${ELECTROBOW_UI_DIR}/dist")
+set(ELECTROBOW_UI_FILES
+    "${ELECTROBOW_UI_DIST_DIR}/index.html"
+    "${ELECTROBOW_UI_DIST_DIR}/app.js"
+    "${ELECTROBOW_UI_DIST_DIR}/app.css")
+
+find_program(NPM_EXECUTABLE npm)
+if(NOT NPM_EXECUTABLE)
+    message(FATAL_ERROR
+        "ElectroBow: npm was not found. Install Node.js 20+ and npm, then run "
+        "'npm ci' in UI/.")
+endif()
+
+if(NOT EXISTS "${ELECTROBOW_UI_DIR}/node_modules")
+    message(FATAL_ERROR
+        "ElectroBow: UI dependencies are not installed. Run 'npm ci' in UI/ "
+        "before configuring CMake.")
+endif()
+
+foreach(UI_FILE IN LISTS ELECTROBOW_UI_FILES)
+    if(NOT EXISTS "${UI_FILE}")
+        message(FATAL_ERROR
+            "ElectroBow: built UI assets are missing. Run 'npm run build' in UI/ "
+            "before configuring CMake.")
+    endif()
+endforeach()
+
+file(GLOB_RECURSE ELECTROBOW_UI_SOURCES CONFIGURE_DEPENDS
+    "${ELECTROBOW_UI_DIR}/src/*"
+    "${ELECTROBOW_UI_DIR}/index.html"
+    "${ELECTROBOW_UI_DIR}/package.json"
+    "${ELECTROBOW_UI_DIR}/package-lock.json"
+    "${ELECTROBOW_UI_DIR}/tsconfig.json"
+    "${ELECTROBOW_UI_DIR}/vite.config.ts")
+
+add_custom_command(
+    OUTPUT ${ELECTROBOW_UI_FILES}
+    COMMAND "${NPM_EXECUTABLE}" run build
+    WORKING_DIRECTORY "${ELECTROBOW_UI_DIR}"
+    DEPENDS ${ELECTROBOW_UI_SOURCES}
+    COMMENT "Building ElectroBow React/Tailwind UI"
+    VERBATIM)
+
+add_custom_target(ElectroBowWebUI DEPENDS ${ELECTROBOW_UI_FILES})
+
+juce_add_binary_data(ElectroBowWebUIData
+    NAMESPACE ElectroBowWebUIData
+    HEADER_NAME ElectroBowWebUIData.h
+    SOURCES ${ELECTROBOW_UI_FILES})
+
+# ---------------------------------------------------------------------------
 # aubio 0.4.9 - vendored in ThirdParty/aubio-src.
 #
 # Minimal static target for pitch detection using aubio's YIN algorithm.
@@ -188,7 +245,9 @@ juce_add_plugin(ElectroBow
     PLUGIN_MANUFACTURER_CODE Elcb
     PLUGIN_CODE Elbw
     FORMATS VST3
-    PRODUCT_NAME "ElectroBow")
+    PRODUCT_NAME "ElectroBow"
+    NEEDS_WEB_BROWSER TRUE
+    NEEDS_WEBVIEW2 TRUE)
 
 # ---------------------------------------------------------------------------
 # Third-party include directories.
@@ -214,6 +273,8 @@ target_sources(ElectroBow
         Source/BowEnvelope.h
         Source/VoiceManager.h)
 
+add_dependencies(ElectroBow ElectroBowWebUIData)
+
 target_compile_features(ElectroBow
     PRIVATE
         cxx_std_17)
@@ -224,7 +285,7 @@ target_compile_features(ElectroBow
 target_compile_definitions(ElectroBow
     PRIVATE
         _USE_MATH_DEFINES=1
-        JUCE_WEB_BROWSER=0
+        JUCE_WEB_BROWSER=1
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0)
 
@@ -234,7 +295,9 @@ target_compile_definitions(ElectroBow
 target_link_libraries(ElectroBow
     PRIVATE
         juce::juce_audio_utils
+        juce::juce_gui_extra
         juce::juce_dsp
+        ElectroBowWebUIData
         aubio_static
         stk_bowed
 
