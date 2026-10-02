@@ -51,7 +51,7 @@ jobs:
             libfreetype6-dev \
             libgl1-mesa-dev \
             libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
+            libwebkit2gtk-4.1-dev \
             libx11-dev \
             libxcomposite-dev \
             libxcursor-dev \
@@ -68,6 +68,7 @@ jobs:
             -Uri "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2903.40" `
             -OutFile $package
           Expand-Archive -Path $package -DestinationPath "$env:RUNNER_TEMP\WebView2"
+          "WEBVIEW2_PACKAGE_LOCATION=$((($env:RUNNER_TEMP + '\WebView2').Replace('\', '/')))" >> $env:GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -105,7 +106,7 @@ jobs:
 
       - name: Build Windows VST3
         if: matrix.name == 'windows'
-        run: python build.py .ci/JUCE --config Release --cmake-arg CMAKE_C_COMPILER_LAUNCHER=ccache --cmake-arg CMAKE_CXX_COMPILER_LAUNCHER=ccache --cmake-arg "JUCE_WEBVIEW2_PACKAGE_LOCATION=$env:RUNNER_TEMP\WebView2"
+        run: python build.py .ci/JUCE --config Release --cmake-arg CMAKE_C_COMPILER_LAUNCHER=ccache --cmake-arg CMAKE_CXX_COMPILER_LAUNCHER=ccache --cmake-arg "JUCE_WEBVIEW2_PACKAGE_LOCATION=$env:WEBVIEW2_PACKAGE_LOCATION"
 
       - name: Build Linux VST3
         if: matrix.name == 'linux'
