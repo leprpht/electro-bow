@@ -67,8 +67,11 @@ jobs:
           Invoke-WebRequest `
             -Uri "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2903.40" `
             -OutFile $package
-          Expand-Archive -Path $package -DestinationPath "$env:RUNNER_TEMP\WebView2"
-          "WEBVIEW2_PACKAGE_LOCATION=$((($env:RUNNER_TEMP + '\WebView2').Replace('\', '/')))" >> $env:GITHUB_ENV
+          $packageRoot = "$env:RUNNER_TEMP\WebView2"
+          $packageDir = "$packageRoot\Microsoft.Web.WebView2.1.0.2903.40"
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+          Expand-Archive -Path $package -DestinationPath $packageDir
+          "WEBVIEW2_PACKAGE_LOCATION=$($packageRoot.Replace('\', '/'))" >> $env:GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v5
