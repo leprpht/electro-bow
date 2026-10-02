@@ -60,6 +60,10 @@ cmake --build build --config Release
 ```
 
 The generated VST3 plugin is placed under `build/ElectroBow_artefacts/Release/VST3/` (the exact bundle/file layout varies slightly by platform).
+The Windows release is a VST3 package, not a VST2 `.dll`: after extracting
+`ElectroBow-vst3-windows.zip`, copy the included `ElectroBow.vst3` folder to a
+VST3 scan location such as `C:\Program Files\Common Files\VST3`, then rescan
+plugins in the DAW.
 
 The release workflow builds the macOS plugin as a universal binary for both Apple Silicon (`arm64`) and Intel (`x86_64`) Macs. Local builds use all available CPU cores through CMake's parallel build mode.
 
@@ -148,7 +152,7 @@ git push origin v1.3.0
 
 The workflow file must be committed and pushed before creating the tag. It can also be started manually from the Actions tab; manual runs build the artifacts but do not publish a release.
 
-The workflow builds and tests the plugin before packaging one VST3 archive per operating system. Release notes are created from the matching version section in `CHANGELOG.md`.
+The workflow builds and tests the plugin before packaging one VST3 archive per operating system. Each archive has `ElectroBow.vst3` at its root; on Windows the plugin binary is inside that package at `Contents/x86_64-win/ElectroBow.vst3`. Release notes are created from the matching version section in `CHANGELOG.md`.
 
 Keep the changelog in this strict structure:
 

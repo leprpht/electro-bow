@@ -127,15 +127,31 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p package
-          vst3_dir="$(find build/ElectroBow_artefacts -type d -name VST3 -print -quit)"
-          test -n "$vst3_dir"
-          cp -R "$vst3_dir" package/
+          vst3_bundle="$(find build/ElectroBow_artefacts -type d -name '*.vst3' -print -quit)"
+          test -n "$vst3_bundle"
+          cp -R "$vst3_bundle" package/ElectroBow.vst3
+
+          # A VST3 is a platform package, not a Windows .dll.  Check the
+          # platform-specific payload so a release cannot be published with
+          # only the wrapper directory or an empty artifact.
+          test -d package/ElectroBow.vst3
+          case "${{ matrix.name }}" in
+            windows)
+              test -f package/ElectroBow.vst3/Contents/x86_64-win/ElectroBow.vst3
+              ;;
+            macos)
+              test -f package/ElectroBow.vst3/Contents/MacOS/ElectroBow
+              ;;
+            linux)
+              test -f package/ElectroBow.vst3/Contents/x86_64-linux/ElectroBow.so
+              ;;
+          esac
 
       - name: Upload VST3 artifact
         uses: actions/upload-artifact@v4
         with:
           name: ElectroBow-vst3-${{ matrix.name }}
-          path: package/VST3
+          path: package
           if-no-files-found: error
 
   release:
@@ -167,6 +183,7 @@ jobs:
           test -f ElectroBow-vst3-windows.zip
           test -f ElectroBow-vst3-macos.zip
           test -f ElectroBow-vst3-linux.zip
+          unzip -Z1 ElectroBow-vst3-windows.zip | grep -Fx 'ElectroBow.vst3/Contents/x86_64-win/ElectroBow.vst3'
 
       - name: Extract changelog section
         shell: bash
