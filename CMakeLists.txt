@@ -81,6 +81,11 @@ juce_add_binary_data(ElectroBowWebUIData
     HEADER_NAME ElectroBowWebUIData.h
     SOURCES ${ELECTROBOW_UI_FILES})
 
+# The binary-data target has custom commands for generated C++ sources. Make
+# those commands wait for the frontend build on multi-config generators such
+# as Visual Studio, otherwise parallel builds can compile the files too soon.
+add_dependencies(ElectroBowWebUIData ElectroBowWebUI)
+
 # ---------------------------------------------------------------------------
 # aubio 0.4.9 - vendored in ThirdParty/aubio-src.
 #
