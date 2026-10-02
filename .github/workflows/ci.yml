@@ -48,6 +48,7 @@ jobs:
             libfreetype6-dev \
             libgl1-mesa-dev \
             libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
             libx11-dev \
             libxcomposite-dev \
             libxcursor-dev \
