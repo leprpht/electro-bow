@@ -1,5 +1,6 @@
 # CMake
 build/
+JUCE/
 UI/node_modules/
 UI/dist/
 cmake-build-*/

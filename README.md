@@ -13,6 +13,20 @@ On Windows, install Visual Studio with the **Desktop development with C++** work
 
 ## Build
 
+To prepare a new checkout, install the required developer dependencies and enable
+the repository hooks with the setup script:
+
+```sh
+./setup.sh                 # macOS/Linux
+setup.bat                  # Windows Command Prompt
+```
+
+The scripts verify Git, Node.js/npm, Python, CMake, a C++ compiler, and
+`clang-format`; download JUCE 9.0.2 into `JUCE/` when needed; install the UI
+dependencies with `npm ci`; and configure the local Git hooks. They do not pull
+or modify repository history. Install platform-specific compiler packages and
+the Windows WebView2 SDK separately when your build requires them.
+
 Use the same Python command on Windows, macOS, and Linux. Pass the path to your JUCE checkout the first time:
 
 ```sh
