@@ -5,6 +5,17 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.3] - 2026-10-02
+
+### Fixed
+
+- Improved voice stability during polyphonic pitch analysis.
+- Prevented weak or noisy FFT frames from clearing all currently detected voices.
+- Improved voice continuity during temporary pitch-analysis dropouts.
+- Prevented YIN pitch-tracking confidence from affecting voice volume.
+- Kept voice strength based on the spectral strength estimate instead of pitch-tracker confidence.
+- Improved pitch correction stability by limiting YIN corrections to a reasonable pitch range, reducing unwanted octave and harmonic jumps.
+
 ## [1.2.2] - 2026-10-01
 
 ### Changed
