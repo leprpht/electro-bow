@@ -4,6 +4,7 @@
 from pathlib import Path
 import argparse
 import os
+import shutil
 import subprocess
 from typing import Optional
 
@@ -20,6 +21,16 @@ def has_build_files(build_dir: Path) -> bool:
         + list(build_dir.glob("*.vcxproj"))
     )
     return any(path.exists() for path in generated_files)
+
+
+def require_command(command: str, description: str) -> str:
+    """Return an executable name suitable for subprocess on this platform."""
+    executable = command
+    if os.name == "nt" and command == "npm":
+        executable = "npm.cmd"
+    if not shutil.which(executable):
+        raise RuntimeError(f"{description} was not found in PATH")
+    return executable
 
 
 def cached_juce_path(cache_file: Path) -> Optional[Path]:
@@ -51,10 +62,11 @@ def prepare_ui() -> None:
     if not (UI_DIR / "package.json").is_file():
         raise RuntimeError(f"UI package.json was not found at {UI_DIR}")
 
-    npm = "npm.cmd" if os.name == "nt" else "npm"
-    if not (UI_DIR / "node_modules").is_dir():
-        subprocess.run([npm, "ci"], cwd=UI_DIR, check=True)
+    npm = require_command("npm", "npm")
+    if not (UI_DIR / "package-lock.json").is_file():
+        raise RuntimeError(f"UI package-lock.json was not found at {UI_DIR}")
 
+    subprocess.run([npm, "ci"], cwd=UI_DIR, check=True)
     subprocess.run([npm, "run", "build"], cwd=UI_DIR, check=True)
 
 
@@ -70,6 +82,11 @@ def main() -> int:
         help="Additional CMake cache entry, without the -D prefix",
     )
     args = parser.parse_args()
+
+    try:
+        cmake = require_command("cmake", "CMake")
+    except RuntimeError as error:
+        parser.error(str(error))
 
     build_dir = Path(args.build_dir)
     if not build_dir.is_absolute():
@@ -93,7 +110,7 @@ def main() -> int:
 
     try:
         prepare_ui()
-    except (OSError, RuntimeError) as error:
+    except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         parser.error(f"frontend preparation failed: {error}")
 
     cache_file = build_dir / "CMakeCache.txt"
@@ -107,7 +124,7 @@ def main() -> int:
     if needs_configure:
         subprocess.run(
             [
-                "cmake",
+                cmake,
                 "-S",
                 str(PROJECT_DIR),
                 "-B",
@@ -119,7 +136,7 @@ def main() -> int:
         )
 
     subprocess.run(
-        ["cmake", "--build", str(build_dir), "--config", args.config, "--parallel"],
+        [cmake, "--build", str(build_dir), "--config", args.config, "--parallel"],
         check=True,
     )
     return 0

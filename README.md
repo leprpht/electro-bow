@@ -45,22 +45,6 @@ python3 build.py       # macOS/Linux
 python build.py        # Windows
 ```
 
-### Windows without Python
-
-Python is not required on Windows. Double-click `build.bat`, or run it from Command Prompt. The script uses the folder containing the batch file as the project directory, so the project can be placed anywhere.
-
-Before the first build, install CMake and Visual Studio with the **Desktop development with C++** workload, and make sure `cmake` is available on `PATH`. Then either:
-
-- place the JUCE source checkout in a folder named `JUCE` beside this project; or
-- set the JUCE path before building:
-
-```bat
-set JUCE_PATH=C:\path\to\JUCE
-build.bat
-```
-
-`build.bat` runs `configure.bat` automatically when the `build/` directory has not been configured yet. To reconfigure manually, run `configure.bat` first. Both scripts build the `Release` configuration.
-
 If a JUCE checkout is placed in a `JUCE/` folder beside the project, `build.py` detects it automatically. You can also set `JUCE_PATH` once instead of passing it as an argument:
 
 ```sh
