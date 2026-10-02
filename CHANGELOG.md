@@ -5,6 +5,17 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-10-02
+
+### Fixed
+
+- Fixed release archives so the Windows `ElectroBow.vst3` package is placed at the archive root and contains its platform binary.
+- Added release validation to prevent publishing incomplete VST3 artifacts.
+
+### Changed
+
+- Documented VST3 installation in FL Studio and clarified that releases do not include a VST2 `.dll`.
+
 ## [1.3.0] - 2026-10-02
 
 ### Added
