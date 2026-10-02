@@ -7,6 +7,7 @@ ElectroBow is a JUCE-based VST3 audio plugin that detects the pitch of incoming 
 - CMake 3.22 or newer
 - A JUCE source checkout (JUCE is not bundled with this repository)
 - A C++17 compiler
+- Node.js 20 or newer and npm (used to build the embedded React UI)
 
 On Windows, install Visual Studio with the **Desktop development with C++** workload. On macOS, install Xcode or the Xcode Command Line Tools. On Linux, install GCC or Clang and the usual build tools for your distribution.
 
@@ -17,6 +18,11 @@ Use the same Python command on Windows, macOS, and Linux. Pass the path to your 
 ```sh
 python3 build.py "$HOME/path/to/JUCE"
 ```
+
+The first build installs the frontend dependencies from `UI/package-lock.json` and
+builds the TypeScript/React/Tailwind bundle before CMake embeds it in the plugin.
+If you configure with CMake directly, run `npm ci && npm run build` from `UI/`
+first.
 
 On Windows, use `python` instead of `python3` if that is the command available on your system. The script configures the project automatically when needed and builds the `Release` configuration. Subsequent builds need no JUCE argument because the path is stored in the CMake build directory:
 
@@ -98,7 +104,10 @@ Visual Studio is only used as the compiler/generator on Windows; no solution fil
 
 ## Project layout
 
-- `Source/PluginProcessor.*` and `Source/PluginEditor.*` contain the plugin implementation.
+- `Source/PluginProcessor.*` contains the audio/business logic and the small native UI bridge.
+- `Source/PluginEditor.*` hosts JUCE's WebView and serves the embedded frontend assets.
+- `UI/` contains the TypeScript/React/Tailwind frontend. Its production bundle is generated in
+  `UI/dist/` and embedded into the VST3 during the CMake build.
 - `Source/PitchDetector.h` contains the aubio-based pitch detector.
 - `ThirdParty/` contains the vendored aubio and STK sources used by the plugin.
 - `CMakeLists.txt` defines the platform-independent build.

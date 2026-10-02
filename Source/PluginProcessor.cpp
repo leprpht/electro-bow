@@ -4,6 +4,11 @@
 #include <algorithm>
 #include <cmath>
 
+namespace {
+constexpr const char* noteNames[] = {"C",  "C#", "D",  "D#", "E",  "F",
+                                     "F#", "G",  "G#", "A",  "A#", "B"};
+}
+
 ElectroBowAudioProcessor::ElectroBowAudioProcessor()
     : AudioProcessor(BusesProperties()
                          .withInput("Input", juce::AudioChannelSet::stereo(), true)
@@ -92,6 +97,18 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
     for (auto& tracker : isolatedTrackers)
         tracker.prepare(sampleRate);
 
+    bowPressure = std::clamp(requestedBowPressure.load(), 0.0f, 1.0f);
+    bowSpeed = std::clamp(requestedBowSpeed.load(), 0.0f, 1.0f);
+    friction = std::clamp(requestedFriction.load(), 0.0f, 1.0f);
+    attackMs = std::max(0.0f, requestedAttackMs.load());
+    naturalResonanceMs = std::max(0.0f, requestedNaturalResonanceMs.load());
+
+    audioBowPressure = bowPressure;
+    audioBowSpeed = bowSpeed;
+    audioFriction = friction;
+    audioAttackMs = attackMs;
+    audioNaturalResonanceMs = naturalResonanceMs;
+
     voiceManager.prepare(sampleRate, attackMs, naturalResonanceMs);
 
     voiceManager.setBowParameters(bowPressure, bowSpeed, friction);
@@ -126,6 +143,28 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     juce::ScopedNoDenormals noDenormals;
 
     juce::ignoreUnused(midi);
+
+    const float nextBowPressure = std::clamp(requestedBowPressure.load(), 0.0f, 1.0f);
+    const float nextBowSpeed = std::clamp(requestedBowSpeed.load(), 0.0f, 1.0f);
+    const float nextFriction = std::clamp(requestedFriction.load(), 0.0f, 1.0f);
+    const float nextAttackMs = std::max(0.0f, requestedAttackMs.load());
+    const float nextNaturalResonanceMs = std::max(0.0f, requestedNaturalResonanceMs.load());
+
+    if (std::abs(nextBowPressure - audioBowPressure) > 0.000001f ||
+        std::abs(nextBowSpeed - audioBowSpeed) > 0.000001f ||
+        std::abs(nextFriction - audioFriction) > 0.000001f) {
+        voiceManager.setBowParameters(nextBowPressure, nextBowSpeed, nextFriction);
+        audioBowPressure = nextBowPressure;
+        audioBowSpeed = nextBowSpeed;
+        audioFriction = nextFriction;
+    }
+
+    if (std::abs(nextAttackMs - audioAttackMs) > 0.000001f ||
+        std::abs(nextNaturalResonanceMs - audioNaturalResonanceMs) > 0.000001f) {
+        voiceManager.setEnvelopeParameters(nextAttackMs, nextNaturalResonanceMs);
+        audioAttackMs = nextAttackMs;
+        audioNaturalResonanceMs = nextNaturalResonanceMs;
+    }
 
     const int numChannels = buffer.getNumChannels();
 
@@ -317,9 +356,11 @@ void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInB
 
     naturalResonanceMs = std::max(0.0f, stream.readFloat());
 
-    voiceManager.setBowParameters(bowPressure, bowSpeed, friction);
-
-    voiceManager.setEnvelopeParameters(attackMs, naturalResonanceMs);
+    requestedBowPressure.store(bowPressure);
+    requestedBowSpeed.store(bowSpeed);
+    requestedFriction.store(friction);
+    requestedAttackMs.store(attackMs);
+    requestedNaturalResonanceMs.store(naturalResonanceMs);
 }
 
 float ElectroBowAudioProcessor::getPitchFrequencyHz() const noexcept {
@@ -366,6 +407,67 @@ float ElectroBowAudioProcessor::getVoiceFrequencyHz(int index) const noexcept {
 
 float ElectroBowAudioProcessor::getVoiceStrength(int index) const noexcept {
     return voiceManager.getVoiceStrength(index);
+}
+
+juce::var ElectroBowAudioProcessor::getUiState() const {
+    auto* state = new juce::DynamicObject();
+    auto* parameters = new juce::DynamicObject();
+
+    parameters->setProperty("bowPressure", requestedBowPressure.load());
+    parameters->setProperty("bowSpeed", requestedBowSpeed.load());
+    parameters->setProperty("friction", requestedFriction.load());
+    parameters->setProperty("attackMs", requestedAttackMs.load());
+    parameters->setProperty("naturalResonanceMs", requestedNaturalResonanceMs.load());
+    state->setProperty("parameters", juce::var(parameters));
+
+    const float frequency = getPitchFrequencyHz();
+    const int midiNote = getPitchMidiNote();
+    const bool hasPitch = frequency > 0.0f && std::isfinite(frequency);
+
+    auto* pitch = new juce::DynamicObject();
+    pitch->setProperty("note", hasPitch ? juce::String(noteNames[midiNote % 12]) +
+                                              juce::String((midiNote / 12) - 1)
+                                        : juce::String("—"));
+    pitch->setProperty("frequencyHz", hasPitch ? frequency : 0.0f);
+    pitch->setProperty("confidence", hasPitch ? getPitchConfidence() : 0.0f);
+    state->setProperty("pitch", juce::var(pitch));
+
+    juce::Array<juce::var> voices;
+    for (int i = 0; i < VoiceManager::kMaxVoices; ++i) {
+        if (!voiceManager.isVoiceActive(i))
+            continue;
+
+        auto* voice = new juce::DynamicObject();
+        voice->setProperty("frequencyHz", getVoiceFrequencyHz(i));
+        voice->setProperty("strength", getVoiceStrength(i));
+        voices.add(juce::var(voice));
+    }
+    state->setProperty("voices", voices);
+
+    return juce::var(state);
+}
+
+void ElectroBowAudioProcessor::setUiParameter(const juce::String& parameterId,
+                                              float value) noexcept {
+    if (!std::isfinite(value))
+        return;
+
+    if (parameterId == "bowPressure") {
+        bowPressure = std::clamp(value, 0.0f, 1.0f);
+        requestedBowPressure.store(bowPressure);
+    } else if (parameterId == "bowSpeed") {
+        bowSpeed = std::clamp(value, 0.0f, 1.0f);
+        requestedBowSpeed.store(bowSpeed);
+    } else if (parameterId == "friction") {
+        friction = std::clamp(value, 0.0f, 1.0f);
+        requestedFriction.store(friction);
+    } else if (parameterId == "attackMs") {
+        attackMs = std::max(0.0f, value);
+        requestedAttackMs.store(attackMs);
+    } else if (parameterId == "naturalResonanceMs") {
+        naturalResonanceMs = std::max(0.0f, value);
+        requestedNaturalResonanceMs.store(naturalResonanceMs);
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter() {

@@ -9,6 +9,7 @@ from typing import Optional
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
+UI_DIR = PROJECT_DIR / "UI"
 
 
 def has_build_files(build_dir: Path) -> bool:
@@ -45,6 +46,18 @@ def cached_cmake_arg(cache_file: Path, arg: str) -> bool:
     )
 
 
+def prepare_ui() -> None:
+    """Install and build the embedded React frontend before CMake configures."""
+    if not (UI_DIR / "package.json").is_file():
+        raise RuntimeError(f"UI package.json was not found at {UI_DIR}")
+
+    npm = "npm.cmd" if os.name == "nt" else "npm"
+    if not (UI_DIR / "node_modules").is_dir():
+        subprocess.run([npm, "ci"], cwd=UI_DIR, check=True)
+
+    subprocess.run([npm, "run", "build"], cwd=UI_DIR, check=True)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("juce_path", nargs="?", help="Path to the JUCE source tree")
@@ -77,6 +90,11 @@ def main() -> int:
 
     if not (juce_path_obj / "CMakeLists.txt").is_file():
         parser.error(f"JUCE CMakeLists.txt was not found at {juce_path_obj}")
+
+    try:
+        prepare_ui()
+    except (OSError, RuntimeError) as error:
+        parser.error(f"frontend preparation failed: {error}")
 
     cache_file = build_dir / "CMakeCache.txt"
     needs_configure = (

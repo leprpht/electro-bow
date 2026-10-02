@@ -1,5 +1,7 @@
 # CMake
 build/
+UI/node_modules/
+UI/dist/
 cmake-build-*/
 CMakeCache.txt
 CMakeFiles/

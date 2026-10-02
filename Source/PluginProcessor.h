@@ -8,6 +8,7 @@
 #include "VoiceManager.h"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -72,6 +73,12 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     float getVoiceStrength(int index) const noexcept;
 
+    // State exposed to the WebView UI. Parameter writes are queued atomically
+    // and applied by the audio thread at the start of its next block.
+    juce::var getUiState() const;
+
+    void setUiParameter(const juce::String& parameterId, float value) noexcept;
+
   private:
     PolyphonicAnalyzer::PitchEstimate
     trackIsolatedVoice(int voiceId, const std::vector<float>& samples, double sampleRate);
@@ -132,6 +139,18 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     float attackMs = 50.0f;
     float naturalResonanceMs = 200.0f;
+
+    std::atomic<float> requestedBowPressure{0.5f};
+    std::atomic<float> requestedBowSpeed{0.5f};
+    std::atomic<float> requestedFriction{0.127f};
+    std::atomic<float> requestedAttackMs{50.0f};
+    std::atomic<float> requestedNaturalResonanceMs{200.0f};
+
+    float audioBowPressure = 0.5f;
+    float audioBowSpeed = 0.5f;
+    float audioFriction = 0.127f;
+    float audioAttackMs = 50.0f;
+    float audioNaturalResonanceMs = 200.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ElectroBowAudioProcessor)
 };

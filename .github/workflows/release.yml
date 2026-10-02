@@ -50,12 +50,28 @@ jobs:
             libfontconfig1-dev \
             libfreetype6-dev \
             libgl1-mesa-dev \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
             libx11-dev \
             libxcomposite-dev \
             libxcursor-dev \
             libxinerama-dev \
             libxi-dev \
             libxrandr-dev
+
+      - name: Install WebView2 SDK
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $package = "$env:RUNNER_TEMP\Microsoft.Web.WebView2.zip"
+          Invoke-WebRequest `
+            -Uri "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.2903.40" `
+            -OutFile $package
+          $packageRoot = "$env:RUNNER_TEMP\WebView2"
+          $packageDir = "$packageRoot\Microsoft.Web.WebView2.1.0.2903.40"
+          New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+          Expand-Archive -Path $package -DestinationPath $packageDir
+          "WEBVIEW2_PACKAGE_LOCATION=$($packageRoot.Replace('\', '/'))" >> $env:GITHUB_ENV
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -91,8 +107,12 @@ jobs:
           restore-keys: |
             electrobow-${{ runner.os }}-${{ runner.arch }}-${{ matrix.name }}-juce-${{ env.JUCE_VERSION }}-
 
-      - name: Build VST3
-        if: matrix.name != 'macos'
+      - name: Build Windows VST3
+        if: matrix.name == 'windows'
+        run: python build.py .ci/JUCE --config Release --cmake-arg CMAKE_C_COMPILER_LAUNCHER=ccache --cmake-arg CMAKE_CXX_COMPILER_LAUNCHER=ccache --cmake-arg "JUCE_WEBVIEW2_PACKAGE_LOCATION=$env:WEBVIEW2_PACKAGE_LOCATION"
+
+      - name: Build Linux VST3
+        if: matrix.name == 'linux'
         run: python build.py .ci/JUCE --config Release --cmake-arg CMAKE_C_COMPILER_LAUNCHER=ccache --cmake-arg CMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build universal macOS VST3
