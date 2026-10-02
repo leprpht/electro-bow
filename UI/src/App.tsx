@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { getPluginState, subscribeToState, updateParameter } from "./juce";
-import {
-  defaultState,
-  type ParameterId,
-  type PluginState,
-} from "./types";
+import { defaultState, type ParameterId, type PluginState } from "./types";
 
 type SliderProps = {
   id: ParameterId;
@@ -19,17 +15,7 @@ type SliderProps = {
   onChange: (id: ParameterId, value: number) => void;
 };
 
-function Slider({
-  id,
-  label,
-  description,
-  value,
-  min,
-  max,
-  step,
-  format,
-  onChange,
-}: SliderProps) {
+function Slider({ id, label, description, value, min, max, step, format, onChange }: SliderProps) {
   const percentage = ((value - min) / (max - min)) * 100;
 
   return (
@@ -62,7 +48,10 @@ function SignalBars({ confidence }: { confidence: number }) {
   const activeBars = Math.round(confidence * 12);
 
   return (
-    <div className="flex h-8 items-end gap-1" aria-label={`Signal ${Math.round(confidence * 100)} percent`}>
+    <div
+      className="flex h-8 items-end gap-1"
+      aria-label={`Signal ${Math.round(confidence * 100)} percent`}
+    >
       {Array.from({ length: 12 }, (_, index) => (
         <span
           className={`signal-bar ${index < activeBars ? "signal-bar-active" : ""}`}
@@ -194,7 +183,9 @@ function App() {
           <div className="flex items-start justify-between">
             <div>
               <div className="section-kicker">Instrument</div>
-              <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">Shape the bow</h1>
+              <h1 className="mt-1 text-xl font-semibold tracking-tight text-white">
+                Shape the bow
+              </h1>
             </div>
             <div className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-300">
               Live

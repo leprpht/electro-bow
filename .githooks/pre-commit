@@ -28,3 +28,21 @@ for file in $files; do
     clang-format -i "$file"
     git add -- "$file"
 done
+
+ui_files=$(git diff --cached --name-only --diff-filter=ACMR -- \
+    'UI/*.css' 'UI/*.html' 'UI/*.json' 'UI/*.ts' 'UI/*.tsx' \
+    'UI/src/*.css' 'UI/src/*.html' 'UI/src/*.json' 'UI/src/*.ts' 'UI/src/*.tsx' || true)
+
+if [ -n "$ui_files" ]; then
+    prettier="UI/node_modules/.bin/prettier"
+    if [ ! -x "$prettier" ]; then
+        echo "pre-commit: Prettier is required for staged UI files but was not found." >&2
+        echo "Run 'npm ci' in UI/ first." >&2
+        exit 1
+    fi
+
+    for file in $ui_files; do
+        "$prettier" --write "$file"
+        git add -- "$file"
+    done
+fi

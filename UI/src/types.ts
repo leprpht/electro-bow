@@ -1,9 +1,5 @@
 export type ParameterId =
-  | "bowPressure"
-  | "bowSpeed"
-  | "friction"
-  | "attackMs"
-  | "naturalResonanceMs";
+  "bowPressure" | "bowSpeed" | "friction" | "attackMs" | "naturalResonanceMs";
 
 export type PluginState = {
   parameters: Record<ParameterId, number>;
