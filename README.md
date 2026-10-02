@@ -141,11 +141,11 @@ Every commit will format staged project C/C++ files and stage the formatting cha
 
 ## Releases
 
-Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.2.2` or `1.2.2` semantic-version tag is pushed, for example:
+Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.3.0` or `1.3.0` semantic-version tag is pushed, for example:
 
 ```sh
-git tag v1.2.2
-git push origin v1.2.2
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 The workflow file must be committed and pushed before creating the tag. It can also be started manually from the Actions tab; manual runs build the artifacts but do not publish a release.

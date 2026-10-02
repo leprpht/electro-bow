@@ -5,6 +5,18 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-10-02
+
+### Added
+
+- Added an embedded React/Tailwind user interface for monitoring pitch, tracking confidence, active voices, and plugin parameters.
+- Added a JUCE WebView bridge for synchronizing plugin state and parameter changes with the frontend.
+
+### Changed
+
+- Improved polyphonic voice tracking stability and preserved input dynamics during analysis dropouts.
+- Updated cross-platform CI and release builds to generate the frontend bundle and package the embedded UI.
+
 ## [1.2.3] - 2026-10-02
 
 ### Fixed
