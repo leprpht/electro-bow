@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+set -eu
+
+changelog="CHANGELOG.md"
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+    case "$local_ref" in
+        refs/tags/*) ;;
+        *) continue ;;
+    esac
+
+    # A zero local SHA means that the tag is being deleted.
+    case "$local_sha" in
+        0000000000000000000000000000000000000000) continue ;;
+    esac
+
+    tag=${local_ref#refs/tags/}
+    version=${tag#v}
+
+    commit=$(git rev-parse "$local_sha^{commit}")
+
+    if ! git cat-file -e "$commit:$changelog" 2>/dev/null; then
+        echo "pre-push: refusing to push tag '$tag'." >&2
+        echo "pre-push: $changelog does not exist in the tagged commit." >&2
+        exit 1
+    fi
+
+    if ! git show "$commit:$changelog" |
+        awk -v version="$version" '
+            $0 == "## [" version "]" ||
+            index($0, "## [" version "] - ") == 1 {
+                found=1
+            }
+            END {
+                exit !found
+            }
+        '
+    then
+        echo "pre-push: refusing to push tag '$tag'." >&2
+        echo "pre-push: $changelog in the tagged commit has no '## [$version]' entry." >&2
+        exit 1
+    fi
+
+    echo "pre-push: verified tag '$tag' against $changelog in commit $commit."
+done
+
+exit 0

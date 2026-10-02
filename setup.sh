@@ -74,7 +74,7 @@ fi
 echo "Installing UI dependencies..."
 npm ci --prefix "$project_dir/UI"
 
-echo "Enabling repository Git hooks..."
+echo "Enabling repository Git hooks (pre-commit and pre-push)..."
 git -C "$project_dir" config core.hooksPath .githooks
 
 echo "Setup complete. JUCE: $juce_dir"
