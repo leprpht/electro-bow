@@ -38,6 +38,7 @@ Makefile
 
 # Local build/configuration logs
 _*.txt
+build.log
 
 # Editor and OS files
 .DS_Store
