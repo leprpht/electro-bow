@@ -5,6 +5,18 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2026-10-03
+
+### Added
+
+- Added a dedicated continuous input-dynamics envelope for musical intensity.
+
+### Changed
+
+- Separated fast trigger/note-state detection from continuous musical input dynamics.
+- Applied per-sample input intensity to STK Bowed excitation while preserving per-voice strength and envelopes.
+- Kept DAW bow parameters combined with realtime input dynamics instead of replacing them.
+
 ## [1.3.3] - 2026-10-03
 
 ### Changed
