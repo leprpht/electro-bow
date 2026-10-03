@@ -319,7 +319,7 @@ if(BUILD_TESTING)
     add_executable(ElectroBowPitchDetectorTests
         tests/PitchDetectorTests.cpp
         Source/PluginProcessor.cpp
-        Source/PluginEditor.cpp)
+        tests/PluginEditorStub.cpp)
 
     target_include_directories(ElectroBowPitchDetectorTests
         PRIVATE
@@ -340,7 +340,6 @@ if(BUILD_TESTING)
         PRIVATE
             juce::juce_core
             juce::juce_audio_utils
-            juce::juce_gui_extra
             ElectroBowWebUIData
             aubio_static
             stk_bowed)
