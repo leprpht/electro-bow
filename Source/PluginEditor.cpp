@@ -55,10 +55,15 @@ ElectroBowAudioProcessorEditor::~ElectroBowAudioProcessorEditor() {
 
 std::optional<juce::WebBrowserComponent::Resource>
 ElectroBowAudioProcessorEditor::getResource(const juce::String& url) const {
-    const auto path =
-        url == "/"
-            ? juce::String("index.html")
-            : url.fromLastOccurrenceOf("/", false, false).upToFirstOccurrenceOf("?", false, false);
+    // Resource-provider URLs differ slightly between JUCE backends. Normalize
+    // the final path component so query strings/fragments and leading slashes
+    // cannot make an embedded asset look missing.
+    auto path = url.fromLastOccurrenceOf("/", false, false);
+
+    if (path.isEmpty())
+        path = "index.html";
+
+    path = path.upToFirstOccurrenceOf("?", false, false).upToFirstOccurrenceOf("#", false, false);
 
     if (path == "index.html")
         return makeResource("index_html", "text/html");

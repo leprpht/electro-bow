@@ -5,6 +5,19 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.6] - 2026-10-04
+
+### Changed
+
+- Finalized the realtime MVP review with the existing per-voice pitch stability,
+  contextual harmonic handling, physical-pluck trigger separation, polyphonic
+  continuity, and continuous input-dynamics behavior preserved.
+- Made embedded UI asset URLs relative and hardened JUCE resource-provider path
+  handling across WebView2/WebKit URL forms, preventing valid bundled assets
+  from being reported as missing during page startup.
+- Confirmed the existing implementation with the automated pitch, trigger,
+  dynamics, analyzer, voice-manager, and processor tests.
+
 ## [1.3.5] - 2026-10-03
 
 ### Added
