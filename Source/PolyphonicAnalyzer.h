@@ -47,6 +47,16 @@ class PolyphonicAnalyzer {
 
         float trackerConfidence = 0.0f;
 
+        // Per-voice pitch state.  A detector observation is not immediately
+        // allowed to become the pitch used by the synth: it must remain
+        // coherent for more than one analysis hop first.
+        float candidateFrequencyHz = 0.0f;
+        float candidateConfidence = 0.0f;
+        int candidateStableFrames = 0;
+        float confirmedFrequencyHz = 0.0f;
+        float confirmedConfidence = 0.0f;
+        int missingFrames = 0;
+
         bool active = false;
     };
 
@@ -155,6 +165,9 @@ class PolyphonicAnalyzer {
     // This prevents a fundamental such as 110 Hz from being replaced by
     // 220 Hz, 330 Hz, etc. during transient/harmonic instability.
     static constexpr float maximumTrackerCorrectionCents = 100.0f;
+    static constexpr int maximumMissingFrames = 8;
+    static constexpr int framesToConfirmPitchChange = 3;
+    static constexpr float minimumUnmatchedVoiceStrength = 0.30f;
 
     struct SpectralPeak {
         int bin = 0;
@@ -473,6 +486,39 @@ class PolyphonicAnalyzer {
         return best;
     }
 
+    int matchHarmonicPreviousVoice(float frequency, const std::vector<bool>& used) const {
+        int best = -1;
+        float bestCents = 100000.0f;
+
+        for (int i = 0; i < static_cast<int>(voices.size()); ++i) {
+            if (used[static_cast<size_t>(i)] || !voices[static_cast<size_t>(i)].active)
+                continue;
+
+            const float confirmed = voices[static_cast<size_t>(i)].confirmedFrequencyHz > 0.0f
+                                        ? voices[static_cast<size_t>(i)].confirmedFrequencyHz
+                                        : voices[static_cast<size_t>(i)].trackedFrequencyHz;
+
+            if (confirmed <= 0.0f || frequency <= confirmed)
+                continue;
+
+            const float ratio = frequency / confirmed;
+            const int roundedRatio = static_cast<int>(std::lround(ratio));
+
+            if (roundedRatio < 2 || roundedRatio > 5 ||
+                std::abs(ratio - static_cast<float>(roundedRatio)) > 0.08f)
+                continue;
+
+            const float cents = std::abs(1200.0f * std::log2(ratio / roundedRatio));
+
+            if (cents < bestCents) {
+                best = i;
+                bestCents = cents;
+            }
+        }
+
+        return best;
+    }
+
     int matchHistoricalVoice(float frequency) const {
         int bestId = -1;
         float bestCents = 100000.0f;
@@ -517,6 +563,28 @@ class PolyphonicAnalyzer {
             voiceHistory.end());
     }
 
+    void retainPreviousVoices() {
+        auto& next = nextVoiceScratch;
+        next.clear();
+
+        for (const auto& previous : voices) {
+            if (!previous.active || previous.missingFrames >= maximumMissingFrames)
+                continue;
+
+            Voice retained = previous;
+            ++retained.missingFrames;
+            retained.trackerConfidence *= 0.9f;
+            next.push_back(std::move(retained));
+        }
+
+        voices.swap(next);
+
+        if (!voices.empty()) {
+            analysisReliable = true;
+            updateVoiceHistory();
+        }
+    }
+
     void analyse() {
         ++analysisGeneration;
         analysisReliable = false;
@@ -550,6 +618,7 @@ class PolyphonicAnalyzer {
         // its broadband floor. Do not manufacture
         // candidates from random/noisy frames.
         if (maximumMagnitude <= 1.0e-7f || maximumMagnitude < averageMagnitude * 4.0f) {
+            retainPreviousVoices();
             return;
         }
 
@@ -680,7 +749,15 @@ class PolyphonicAnalyzer {
         for (size_t voiceIndex = 0; voiceIndex < candidates.size(); ++voiceIndex) {
             const auto& candidate = candidates[voiceIndex];
 
-            const int previous = matchPreviousVoice(candidate.frequencyHz, used);
+            int previous = matchPreviousVoice(candidate.frequencyHz, used);
+
+            // A strong partial can temporarily look like a new fundamental.
+            // Associate only the explicitly harmonic-shaped cases with the
+            // old voice.  A direct, well-supported candidate remains eligible
+            // to start an independent polyphonic voice.
+            if (previous < 0 && candidate.sourceHarmonic > 1 && !candidate.hasFundamentalPeak) {
+                previous = matchHarmonicPreviousVoice(candidate.frequencyHz, used);
+            }
 
             int historicalId = previous >= 0 ? voices[static_cast<size_t>(previous)].id
                                              : matchHistoricalVoice(candidate.frequencyHz);
@@ -690,6 +767,17 @@ class PolyphonicAnalyzer {
                     return voice.id == historicalId;
                 })) {
                 historicalId = -1;
+            }
+
+            // Do not turn a one-hop, weak spectral residue into a new voice
+            // while established voices are sounding. Strong independent
+            // notes still enter immediately; a weak one-hop residue is
+            // ignored rather than becoming a new attack.
+            const float candidateStrength = candidate.score / std::max(1.0e-7f, maximumMagnitude);
+
+            if (!voices.empty() && previous < 0 && historicalId < 0 &&
+                candidateStrength < minimumUnmatchedVoiceStrength) {
+                continue;
             }
 
             spectrum = sourceSpectrum;
@@ -748,6 +836,9 @@ class PolyphonicAnalyzer {
             const float previousTrackedFrequency =
                 previous >= 0 ? voices[static_cast<size_t>(previous)].trackedFrequencyHz : 0.0f;
 
+            const Voice* previousVoice =
+                previous >= 0 ? &voices[static_cast<size_t>(previous)] : nullptr;
+
             voice.id = historicalId >= 0 ? historicalId : nextVoiceId++;
 
             voice.peakFrequencyHz = candidate.frequencyHz;
@@ -803,6 +894,41 @@ class PolyphonicAnalyzer {
 
             voice.trackerConfidence = voice.strength;
 
+            voice.candidateFrequencyHz = spectralFrequency;
+            voice.candidateConfidence = voice.strength;
+            voice.candidateStableFrames = 1;
+            voice.confirmedFrequencyHz = spectralFrequency;
+            voice.confirmedConfidence = voice.strength;
+            voice.missingFrames = 0;
+
+            if (previousVoice != nullptr) {
+                const float previousConfirmed = previousVoice->confirmedFrequencyHz > 0.0f
+                                                    ? previousVoice->confirmedFrequencyHz
+                                                    : previousVoice->trackedFrequencyHz;
+
+                if (previousVoice->candidateFrequencyHz > 0.0f &&
+                    frequenciesAreClose(previousVoice->candidateFrequencyHz, spectralFrequency)) {
+                    voice.candidateStableFrames = previousVoice->candidateStableFrames + 1;
+                }
+
+                voice.confirmedFrequencyHz = previousConfirmed;
+                voice.confirmedConfidence = previousVoice->confirmedConfidence;
+
+                const bool isPitchChange =
+                    previousConfirmed > 0.0f &&
+                    !frequenciesAreClose(previousConfirmed, spectralFrequency);
+
+                if (!isPitchChange || voice.candidateStableFrames >= framesToConfirmPitchChange) {
+                    voice.confirmedFrequencyHz = spectralFrequency;
+                    voice.confirmedConfidence = voice.strength;
+                }
+
+                // During a short harmonic excursion, keep the old confirmed
+                // pitch and feed that to the tracker/voice manager.
+                voice.trackedFrequencyHz = voice.confirmedFrequencyHz;
+                voice.trackerConfidence = voice.confirmedConfidence;
+            }
+
             if (trackedFrequency > 0.0f && std::isfinite(trackedFrequency) &&
                 std::isfinite(spectralFrequency)) {
                 const float ratio = trackedFrequency / spectralFrequency;
@@ -811,9 +937,14 @@ class PolyphonicAnalyzer {
                     const float cents = std::abs(1200.0f * std::log2(ratio));
 
                     if (cents <= maximumTrackerCorrectionCents) {
-                        voice.trackedFrequencyHz = trackedFrequency;
-
-                        voice.trackerConfidence = std::clamp(estimate.confidence, 0.0f, 1.0f);
+                        if (previousVoice == nullptr ||
+                            voice.candidateStableFrames >= framesToConfirmPitchChange ||
+                            frequenciesAreClose(voice.confirmedFrequencyHz, spectralFrequency)) {
+                            voice.trackedFrequencyHz = trackedFrequency;
+                            voice.trackerConfidence = std::clamp(estimate.confidence, 0.0f, 1.0f);
+                            voice.confirmedFrequencyHz = voice.trackedFrequencyHz;
+                            voice.confirmedConfidence = voice.trackerConfidence;
+                        }
                     }
                 }
             }
@@ -834,6 +965,26 @@ class PolyphonicAnalyzer {
             }
 
             next.push_back(std::move(voice));
+        }
+
+        // Keep a recently missing voice alive.  This is a voice-local grace
+        // period, not a global trigger debounce, so other notes may still be
+        // admitted immediately.
+        for (const auto& previousVoice : voices) {
+            if (!previousVoice.active || previousVoice.missingFrames >= maximumMissingFrames)
+                continue;
+
+            const bool wasMatched =
+                std::any_of(next.begin(), next.end(), [&previousVoice](const Voice& current) {
+                    return current.id == previousVoice.id;
+                });
+
+            if (wasMatched)
+                continue;
+
+            Voice retained = previousVoice;
+            ++retained.missingFrames;
+            next.push_back(std::move(retained));
         }
 
         voices.swap(next);
