@@ -332,6 +332,7 @@ if(BUILD_TESTING)
     target_compile_definitions(ElectroBowPitchDetectorTests
         PRIVATE
             ELECTROBOW_TEST_BUILD=1
+            M_SQRT1_2=0.70710678118654752440
             JUCE_USE_CURL=0
             JucePlugin_Name="ElectroBow")
 
