@@ -318,8 +318,7 @@ target_link_libraries(ElectroBow
 if(BUILD_TESTING)
     add_executable(ElectroBowPitchDetectorTests
         tests/PitchDetectorTests.cpp
-        Source/PluginProcessor.cpp
-        tests/PluginEditorStub.cpp)
+        Source/PluginProcessor.cpp)
 
     target_include_directories(ElectroBowPitchDetectorTests
         PRIVATE
@@ -332,15 +331,15 @@ if(BUILD_TESTING)
 
     target_compile_definitions(ElectroBowPitchDetectorTests
         PRIVATE
-            JUCE_WEB_BROWSER=1
+            ELECTROBOW_TEST_BUILD=1
             JUCE_USE_CURL=0
             JucePlugin_Name="ElectroBow")
 
     target_link_libraries(ElectroBowPitchDetectorTests
         PRIVATE
             juce::juce_core
-            juce::juce_audio_utils
-            ElectroBowWebUIData
+            juce::juce_graphics
+            juce::juce_audio_processors_headless
             aubio_static
             stk_bowed)
 
