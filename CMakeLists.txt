@@ -317,11 +317,13 @@ target_link_libraries(ElectroBow
 
 if(BUILD_TESTING)
     add_executable(ElectroBowPitchDetectorTests
-        tests/PitchDetectorTests.cpp)
+        tests/PitchDetectorTests.cpp
+        Source/PluginProcessor.cpp)
 
     target_include_directories(ElectroBowPitchDetectorTests
         PRIVATE
-            "${AUBIO_SRC_DIR}/src")
+            "${AUBIO_SRC_DIR}/src"
+            "${STK_SRC_DIR}/include")
 
     target_compile_features(ElectroBowPitchDetectorTests
         PRIVATE
@@ -329,13 +331,18 @@ if(BUILD_TESTING)
 
     target_compile_definitions(ElectroBowPitchDetectorTests
         PRIVATE
-            JUCE_WEB_BROWSER=0
-            JUCE_USE_CURL=0)
+            ELECTROBOW_TEST_BUILD=1
+            M_SQRT1_2=0.70710678118654752440
+            JUCE_USE_CURL=0
+            JucePlugin_Name="ElectroBow")
 
     target_link_libraries(ElectroBowPitchDetectorTests
         PRIVATE
             juce::juce_core
-            aubio_static)
+            juce::juce_graphics
+            juce::juce_audio_processors_headless
+            aubio_static
+            stk_bowed)
 
     add_test(
         NAME ElectroBowPitchDetectorTests

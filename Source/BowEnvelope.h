@@ -34,8 +34,10 @@ class BowEnvelope {
     }
 
     void sustain() {
-        if (state != State::Idle)
-            state = State::Sustain;
+        // An analyzer refresh may arrive before the configured attack has
+        // completed. Keep that attack running; process() will enter Sustain
+        // naturally once the target is reached. Forcing Sustain here would
+        // turn a 50 ms attack into one analysis hop.
     }
 
     void setSustainLevel(float newLevel) {

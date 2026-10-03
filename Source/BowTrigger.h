@@ -15,8 +15,11 @@ class BowTrigger {
 
     void reset() {
         envelope = 0.0f;
+        onsetBaseline = 0.0f;
         wasAboveThreshold = false;
         releaseCounter = 0;
+        retriggerCooldown = 0;
+        retriggerArmed = true;
         justTriggered = false;
         justReleased = false;
     }
@@ -34,10 +37,33 @@ class BowTrigger {
 
         const float level = std::clamp(envelope * sensitivity, 0.0f, 1.0f);
 
+        // Keep a deliberately slower reference level for detecting a new
+        // physical pluck while another string is still audible.  The normal
+        // threshold edge below handles the first attack; this differential
+        // path is only for a later, distinct rise above an existing sustain.
+        onsetBaseline += (level - onsetBaseline) * timeToCoefficient(onsetBaselineMs);
+
+        if (retriggerCooldown > 0)
+            --retriggerCooldown;
+
+        if (!retriggerArmed && level - onsetBaseline < retriggerRearmThreshold)
+            retriggerArmed = true;
+
         if (!wasAboveThreshold && level >= triggerThreshold) {
             wasAboveThreshold = true;
             releaseCounter = 0;
             justTriggered = true;
+            retriggerCooldown = retriggerCooldownSamples();
+            retriggerArmed = false;
+        } else if (wasAboveThreshold && retriggerArmed && retriggerCooldown == 0 &&
+                   level >= triggerThreshold && level - onsetBaseline >= retriggerRiseThreshold) {
+            // Do not require every sounding string to decay to silence
+            // before allowing another note in a chord or repeated pluck.
+            // The cooldown turns the rise of one strong transient into one
+            // event rather than a sequence of duplicate attacks.
+            justTriggered = true;
+            retriggerCooldown = retriggerCooldownSamples();
+            retriggerArmed = false;
         }
 
         if (wasAboveThreshold && level <= releaseThreshold) {
@@ -91,8 +117,10 @@ class BowTrigger {
 
     float detectorAttackMs = 2.0f;
     float detectorReleaseMs = 30.0f;
+    float onsetBaselineMs = 80.0f;
 
     float envelope = 0.0f;
+    float onsetBaseline = 0.0f;
 
     bool wasAboveThreshold = false;
 
@@ -100,6 +128,16 @@ class BowTrigger {
     bool justReleased = false;
 
     int releaseCounter = 0;
+    int retriggerCooldown = 0;
+    bool retriggerArmed = true;
 
     static constexpr int releaseSamplesRequired = 256;
+    static constexpr float retriggerRiseThreshold = 0.035f;
+    static constexpr float retriggerRearmThreshold = 0.015f;
+    static constexpr float retriggerCooldownMs = 30.0f;
+
+    int retriggerCooldownSamples() const noexcept {
+        return std::max(1, static_cast<int>(std::lround(
+                               sampleRate * static_cast<double>(retriggerCooldownMs) * 0.001)));
+    }
 };

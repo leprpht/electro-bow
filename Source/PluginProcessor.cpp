@@ -1,5 +1,7 @@
 ﻿#include "PluginProcessor.h"
+#ifndef ELECTROBOW_TEST_BUILD
 #include "PluginEditor.h"
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -280,7 +282,11 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 }
 
 juce::AudioProcessorEditor* ElectroBowAudioProcessor::createEditor() {
+#ifdef ELECTROBOW_TEST_BUILD
+    return nullptr;
+#else
     return new ElectroBowAudioProcessorEditor(*this);
+#endif
 }
 
 bool ElectroBowAudioProcessor::hasEditor() const {
