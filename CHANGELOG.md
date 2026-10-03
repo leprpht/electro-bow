@@ -5,6 +5,18 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.2] - 2026-10-03
+
+### Changed
+
+- Improved voice continuity during unreliable spectral analysis frames.
+- Added per-voice pitch smoothing and safer releasing-voice reuse.
+- Applied input dynamics continuously to bow excitation and voice envelopes.
+
+### Fixed
+
+- Prevented pitch-analysis dropouts and physical release transitions from causing unwanted retriggers.
+
 ## [1.3.1] - 2026-10-02
 
 ### Fixed

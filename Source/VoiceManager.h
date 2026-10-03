@@ -75,6 +75,11 @@ class VoiceManager {
 
         lastAnalysisGeneration = analysisGeneration;
 
+        if (!analyzer.isAnalysisReliable()) {
+            markAllVoicesLost();
+            return;
+        }
+
         std::array<bool, kMaxVoices> matched{};
 
         const auto& detectedVoices = analyzer.getVoices();
@@ -113,8 +118,12 @@ class VoiceManager {
             // New STK attacks are permitted only for a physical note-on. If
             // the analyzer changes candidates during an existing pluck,
             // continuity handling below must update/reuse a live voice.
-            if (voiceIndex < 0 && allowNewVoices)
+            if (voiceIndex < 0 && allowNewVoices) {
                 voiceIndex = findFreeVoice();
+
+                if (voiceIndex < 0)
+                    voiceIndex = findReleasingVoice();
+            }
 
             if (voiceIndex < 0 && !allowNewVoices) {
                 // Once the physical attack has been consumed, an unmatched
@@ -130,10 +139,29 @@ class VoiceManager {
 
             Voice& voice = voices[static_cast<std::size_t>(voiceIndex)];
 
-            if (!voice.active) {
-                startVoice(voice, detected.id, detected.trackedFrequencyHz, strength);
+            if (voice.releasing) {
+                if (inputLevel < 0.05f)
+                    continue;
+
+                voiceIndex = -1;
+
+                if (allowNewVoices)
+                    voiceIndex = findFreeVoice();
+
+                if (voiceIndex < 0 && allowNewVoices)
+                    voiceIndex = findReleasingVoice();
+
+                if (voiceIndex < 0)
+                    continue;
+            }
+
+            Voice& selectedVoice = voices[static_cast<std::size_t>(voiceIndex)];
+
+            if (!selectedVoice.active || selectedVoice.releasing) {
+                startVoice(selectedVoice, detected.id, detected.trackedFrequencyHz, strength);
             } else {
-                updateExistingVoice(voice, detected.id, detected.trackedFrequencyHz, strength);
+                updateExistingVoice(selectedVoice, detected.id, detected.trackedFrequencyHz,
+                                    strength);
             }
 
             matched[static_cast<std::size_t>(voiceIndex)] = true;
@@ -156,6 +184,24 @@ class VoiceManager {
             if (voice.lostFrames >= kLostFramesBeforeRelease) {
                 beginRelease(voice);
             }
+        }
+    }
+
+    void releaseAll() {
+        for (auto& voice : voices)
+            beginRelease(voice);
+    }
+
+    void setInputLevel(float newInputLevel) {
+        inputLevel = limit01(newInputLevel);
+
+        for (auto& voice : voices) {
+            if (!voice.active || voice.releasing)
+                continue;
+
+            voice.envelope.setSustainLevel(voice.strength * (0.2f + 0.8f * inputLevel));
+
+            applyBowParameters(voice);
         }
     }
 
@@ -283,6 +329,37 @@ class VoiceManager {
         return -1;
     }
 
+    void markAllVoicesLost() {
+        for (auto& voice : voices) {
+            if (!voice.active || voice.releasing)
+                continue;
+
+            ++voice.lostFrames;
+
+            if (voice.lostFrames >= kLostFramesBeforeRelease)
+                beginRelease(voice);
+        }
+    }
+
+    int findReleasingVoice() const noexcept {
+        int bestIndex = -1;
+        float lowestLevel = 2.0f;
+
+        for (int i = 0; i < kMaxVoices; ++i) {
+            const Voice& voice = voices[static_cast<std::size_t>(i)];
+
+            if (!voice.active || !voice.releasing)
+                continue;
+
+            if (voice.envelope.getLevel() < lowestLevel) {
+                lowestLevel = voice.envelope.getLevel();
+                bestIndex = i;
+            }
+        }
+
+        return bestIndex;
+    }
+
     int findVoiceByAnalyzerId(int analyzerId,
                               const std::array<bool, kMaxVoices>& matched) const noexcept {
         for (int i = 0; i < kMaxVoices; ++i) {
@@ -388,6 +465,7 @@ class VoiceManager {
         applyBowParameters(voice);
 
         float amplitude = 0.05f + strength * 0.95f;
+        amplitude *= 0.2f + 0.8f * inputLevel;
 
         amplitude = std::max(0.05f, amplitude);
 
@@ -407,7 +485,7 @@ class VoiceManager {
         voice.envelope.reset();
         voice.envelope.setAttackMs(attackMs);
         voice.envelope.setNaturalResonanceMs(naturalResonanceMs);
-        voice.envelope.trigger(strength);
+        voice.envelope.trigger(strength * (0.2f + 0.8f * inputLevel));
 
         voice.analyzerVoiceId = analyzerId;
         voice.frequencyHz = frequency;
@@ -434,6 +512,7 @@ class VoiceManager {
         voice.releasing = false;
 
         voice.envelope.sustain();
+        voice.envelope.setSustainLevel(strength * (0.2f + 0.8f * inputLevel));
     }
 
     void beginRelease(Voice& voice) {
@@ -450,11 +529,14 @@ class VoiceManager {
     }
 
     void applyBowParameters(Voice& voice) {
-        voice.bowed.controlChange(2, static_cast<stk::StkFloat>(bowPressure * 128.0f));
+        const float dynamicPressure = bowPressure * (0.2f + 0.8f * inputLevel);
+        const float dynamicSpeed = bowSpeed * (0.5f + 0.5f * inputLevel);
+
+        voice.bowed.controlChange(2, static_cast<stk::StkFloat>(dynamicPressure * 128.0f));
 
         voice.bowed.controlChange(4, static_cast<stk::StkFloat>(friction * 128.0f));
 
-        voice.bowed.controlChange(100, static_cast<stk::StkFloat>(bowSpeed * 128.0f));
+        voice.bowed.controlChange(100, static_cast<stk::StkFloat>(dynamicSpeed * 128.0f));
     }
 
     void resetVoice(Voice& voice) {
@@ -474,6 +556,7 @@ class VoiceManager {
 
     float attackMs = 50.0f;
     float naturalResonanceMs = 50.0f;
+    float inputLevel = 0.0f;
 
     std::array<Voice, kMaxVoices> voices{};
     std::uint64_t lastAnalysisGeneration = 0;

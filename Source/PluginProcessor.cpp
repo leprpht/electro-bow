@@ -210,8 +210,18 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     for (int sample = 0; sample < numSamples; ++sample) {
         // Capture only the rising physical attack. The analyzer may publish
         // several different spectral descriptions of the same pluck later.
-        if (bowTrigger.processSample(monoScratch[static_cast<std::size_t>(sample)])) {
+        const bool triggered =
+            bowTrigger.processSample(monoScratch[static_cast<std::size_t>(sample)]);
+
+        voiceManager.setInputLevel(bowTrigger.getLevel());
+
+        if (triggered) {
             pendingNoteOn = true;
+        }
+
+        if (bowTrigger.consumeRelease()) {
+            voiceManager.releaseAll();
+            pendingNoteOn = false;
         }
     }
 
@@ -234,6 +244,8 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // New voices are admitted only by the rising-edge event captured in
     // pendingNoteOn.
     const bool allowNewVoices = pendingNoteOn;
+
+    voiceManager.setInputLevel(bowTrigger.getLevel());
 
     voiceManager.updateDetectedVoices(polyphonicAnalyzer, allowNewVoices);
 

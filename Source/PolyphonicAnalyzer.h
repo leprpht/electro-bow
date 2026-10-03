@@ -22,14 +22,10 @@ class PolyphonicAnalyzer {
         float confidence = 0.0f;
     };
 
-    using PitchTracker =
-        std::function<PitchEstimate(const std::vector<float>&, double)>;
+    using PitchTracker = std::function<PitchEstimate(const std::vector<float>&, double)>;
 
     using IndexedPitchTracker =
-        std::function<PitchEstimate(
-            int,
-            const std::vector<float>&,
-            double)>;
+        std::function<PitchEstimate(int, const std::vector<float>&, double)>;
 
     struct Voice {
         int id = -1;
@@ -54,20 +50,16 @@ class PolyphonicAnalyzer {
         bool active = false;
     };
 
-    explicit PolyphonicAnalyzer(PitchTracker tracker = {})
-        : pitchTracker(std::move(tracker))
-    {
+    explicit PolyphonicAnalyzer(PitchTracker tracker = {}) : pitchTracker(std::move(tracker)) {
         reset();
     }
 
-    void prepare(double rate)
-    {
+    void prepare(double rate) {
         sampleRate = std::max(1.0, rate);
         reset();
     }
 
-    void reset()
-    {
+    void reset() {
         input.assign(kFFTSize, 0.0f);
         frame.assign(kFFTSize, 0.0f);
         spectrum.assign(kFFTSize, {});
@@ -98,33 +90,29 @@ class PolyphonicAnalyzer {
         samplesReceived = 0;
         nextVoiceId = 0;
         analysisGeneration = 0;
+        analysisReliable = false;
     }
 
-    void setPitchTracker(PitchTracker tracker)
-    {
+    void setPitchTracker(PitchTracker tracker) {
         pitchTracker = std::move(tracker);
         indexedPitchTracker = {};
     }
 
-    void setPitchTracker(IndexedPitchTracker tracker)
-    {
+    void setPitchTracker(IndexedPitchTracker tracker) {
         indexedPitchTracker = std::move(tracker);
         pitchTracker = {};
     }
 
-    void push(const float* samples, int count)
-    {
+    void push(const float* samples, int count) {
         if (samples == nullptr || count <= 0)
             return;
 
-        for (int i = 0; i < count; ++i)
-        {
+        for (int i = 0; i < count; ++i) {
             input[static_cast<size_t>(writePosition)] = samples[i];
             writePosition = (writePosition + 1) % kFFTSize;
             ++samplesReceived;
 
-            if (++samplesSinceAnalysis >= kHopSize)
-            {
+            if (++samplesSinceAnalysis >= kHopSize) {
                 samplesSinceAnalysis = 0;
 
                 if (samplesReceived >= kFFTSize)
@@ -133,19 +121,20 @@ class PolyphonicAnalyzer {
         }
     }
 
-    const std::vector<Voice>& getVoices() const noexcept
-    {
+    const std::vector<Voice>& getVoices() const noexcept {
         return voices;
     }
 
-    std::uint64_t getAnalysisGeneration() const noexcept
-    {
+    std::uint64_t getAnalysisGeneration() const noexcept {
         return analysisGeneration;
     }
 
+    bool isAnalysisReliable() const noexcept {
+        return analysisReliable;
+    }
+
   private:
-    static constexpr float pi =
-        3.14159265358979323846f;
+    static constexpr float pi = 3.14159265358979323846f;
 
     static constexpr float minimumFrequencyHz = 30.0f;
     static constexpr float maximumFrequencyHz = 2000.0f;
@@ -190,10 +179,8 @@ class PolyphonicAnalyzer {
         int age = 0;
     };
 
-    void fft(bool inverse)
-    {
-        for (int i = 1, j = 0; i < kFFTSize; ++i)
-        {
+    void fft(bool inverse) {
+        for (int i = 1, j = 0; i < kFFTSize; ++i) {
             int bit = kFFTSize >> 1;
 
             for (; j & bit; bit >>= 1)
@@ -201,200 +188,105 @@ class PolyphonicAnalyzer {
 
             j ^= bit;
 
-            if (i < j)
-            {
-                std::swap(
-                    spectrum[static_cast<size_t>(i)],
-                    spectrum[static_cast<size_t>(j)]);
+            if (i < j) {
+                std::swap(spectrum[static_cast<size_t>(i)], spectrum[static_cast<size_t>(j)]);
             }
         }
 
-        for (int length = 2;
-             length <= kFFTSize;
-             length <<= 1)
-        {
-            const float sign =
-                inverse ? 1.0f : -1.0f;
+        for (int length = 2; length <= kFFTSize; length <<= 1) {
+            const float sign = inverse ? 1.0f : -1.0f;
 
-            const auto step =
-                std::polar(
-                    1.0f,
-                    sign * 2.0f * pi /
-                        static_cast<float>(length));
+            const auto step = std::polar(1.0f, sign * 2.0f * pi / static_cast<float>(length));
 
-            for (int start = 0;
-                 start < kFFTSize;
-                 start += length)
-            {
+            for (int start = 0; start < kFFTSize; start += length) {
                 std::complex<float> w(1.0f, 0.0f);
 
-                for (int j = 0;
-                     j < length / 2;
-                     ++j)
-                {
-                    const auto even =
-                        spectrum[
-                            static_cast<size_t>(start + j)];
+                for (int j = 0; j < length / 2; ++j) {
+                    const auto even = spectrum[static_cast<size_t>(start + j)];
 
-                    const auto odd =
-                        spectrum[
-                            static_cast<size_t>(
-                                start + j + length / 2)] *
-                        w;
+                    const auto odd = spectrum[static_cast<size_t>(start + j + length / 2)] * w;
 
-                    spectrum[
-                        static_cast<size_t>(start + j)] =
-                        even + odd;
+                    spectrum[static_cast<size_t>(start + j)] = even + odd;
 
-                    spectrum[
-                        static_cast<size_t>(
-                            start + j + length / 2)] =
-                        even - odd;
+                    spectrum[static_cast<size_t>(start + j + length / 2)] = even - odd;
 
                     w *= step;
                 }
             }
         }
 
-        if (inverse)
-        {
+        if (inverse) {
             for (auto& value : spectrum)
                 value /= static_cast<float>(kFFTSize);
         }
     }
 
-    void fillCurrentFrame()
-    {
-        for (int i = 0; i < kFFTSize; ++i)
-        {
-            const int index =
-                (writePosition + i) % kFFTSize;
+    void fillCurrentFrame() {
+        for (int i = 0; i < kFFTSize; ++i) {
+            const int index = (writePosition + i) % kFFTSize;
 
-            const float window =
-                0.5f -
-                0.5f *
-                    std::cos(
-                        2.0f *
-                        pi *
-                        static_cast<float>(i) /
-                        static_cast<float>(kFFTSize - 1));
+            const float window = 0.5f - 0.5f * std::cos(2.0f * pi * static_cast<float>(i) /
+                                                        static_cast<float>(kFFTSize - 1));
 
-            frame[static_cast<size_t>(i)] =
-                input[static_cast<size_t>(index)] *
-                window;
+            frame[static_cast<size_t>(i)] = input[static_cast<size_t>(index)] * window;
         }
     }
 
-    int firstAnalysisBin() const
-    {
-        return std::max(
-            2,
-            static_cast<int>(
-                std::ceil(
-                    minimumFrequencyHz *
-                    kFFTSize /
-                    sampleRate)));
+    int firstAnalysisBin() const {
+        return std::max(2, static_cast<int>(std::ceil(minimumFrequencyHz * kFFTSize / sampleRate)));
     }
 
-    int lastAnalysisBin() const
-    {
-        return std::min(
-            kFFTSize / 2 - 2,
-            static_cast<int>(
-                std::floor(
-                    maximumPeakFrequencyHz *
-                    kFFTSize /
-                    sampleRate)));
+    int lastAnalysisBin() const {
+        return std::min(kFFTSize / 2 - 2, static_cast<int>(std::floor(maximumPeakFrequencyHz *
+                                                                      kFFTSize / sampleRate)));
     }
 
-    float magnitudeAtBin(int bin) const
-    {
-        if (bin < 0 ||
-            bin >= kFFTSize / 2)
-        {
+    float magnitudeAtBin(int bin) const {
+        if (bin < 0 || bin >= kFFTSize / 2) {
             return 0.0f;
         }
 
-        return std::abs(
-            spectrum[static_cast<size_t>(bin)]);
+        return std::abs(spectrum[static_cast<size_t>(bin)]);
     }
 
-    float localMagnitudeAtBin(float bin) const
-    {
-        const int center =
-            static_cast<int>(std::lround(bin));
+    float localMagnitudeAtBin(float bin) const {
+        const int center = static_cast<int>(std::lround(bin));
 
         float maximum = 0.0f;
 
-        for (int offset =
-                 -harmonicSearchRadiusBins;
-             offset <= harmonicSearchRadiusBins;
-             ++offset)
-        {
-            maximum =
-                std::max(
-                    maximum,
-                    magnitudeAtBin(center + offset));
+        for (int offset = -harmonicSearchRadiusBins; offset <= harmonicSearchRadiusBins; ++offset) {
+            maximum = std::max(maximum, magnitudeAtBin(center + offset));
         }
 
         return maximum;
     }
 
-    bool isLocalPeakNearBin(
-        float bin,
-        float threshold) const
-    {
-        const int center =
-            static_cast<int>(std::lround(bin));
+    bool isLocalPeakNearBin(float bin, float threshold) const {
+        const int center = static_cast<int>(std::lround(bin));
 
-        for (int offset = -1;
-             offset <= 1;
-             ++offset)
-        {
-            const int peakBin =
-                center + offset;
+        for (int offset = -1; offset <= 1; ++offset) {
+            const int peakBin = center + offset;
 
-            const float magnitude =
-                magnitudeAtBin(peakBin);
+            const float magnitude = magnitudeAtBin(peakBin);
 
-            if (magnitude < threshold ||
-                magnitude <
-                    magnitudeAtBin(peakBin - 1) ||
-                magnitude <
-                    magnitudeAtBin(peakBin + 1))
-            {
+            if (magnitude < threshold || magnitude < magnitudeAtBin(peakBin - 1) ||
+                magnitude < magnitudeAtBin(peakBin + 1)) {
                 continue;
             }
 
             float peakOffset = 0.0f;
 
-            const float left =
-                magnitudeAtBin(peakBin - 1);
+            const float left = magnitudeAtBin(peakBin - 1);
 
-            const float right =
-                magnitudeAtBin(peakBin + 1);
+            const float right = magnitudeAtBin(peakBin + 1);
 
-            const float curvature =
-                left -
-                2.0f * magnitude +
-                right;
+            const float curvature = left - 2.0f * magnitude + right;
 
-            if (std::abs(curvature) > 1.0e-6f)
-            {
-                peakOffset =
-                    std::clamp(
-                        0.5f *
-                            (left - right) /
-                            curvature,
-                        -0.5f,
-                        0.5f);
+            if (std::abs(curvature) > 1.0e-6f) {
+                peakOffset = std::clamp(0.5f * (left - right) / curvature, -0.5f, 0.5f);
             }
 
-            if (std::abs(
-                    static_cast<float>(peakBin) +
-                    peakOffset -
-                    bin) <= 0.25f)
-            {
+            if (std::abs(static_cast<float>(peakBin) + peakOffset - bin) <= 0.25f) {
                 return true;
             }
         }
@@ -402,95 +294,52 @@ class PolyphonicAnalyzer {
         return false;
     }
 
-    const std::vector<SpectralPeak>&
-    findPeaks(float threshold)
-    {
-        const int first =
-            firstAnalysisBin();
+    const std::vector<SpectralPeak>& findPeaks(float threshold) {
+        const int first = firstAnalysisBin();
 
-        const int last =
-            lastAnalysisBin();
+        const int last = lastAnalysisBin();
 
         spectralPeaks.clear();
 
-        for (int bin = first;
-             bin <= last;
-             ++bin)
-        {
-            const float magnitude =
-                magnitudeAtBin(bin);
+        for (int bin = first; bin <= last; ++bin) {
+            const float magnitude = magnitudeAtBin(bin);
 
-            if (magnitude < threshold ||
-                magnitude <
-                    magnitudeAtBin(bin - 1) ||
-                magnitude <
-                    magnitudeAtBin(bin + 1))
-            {
+            if (magnitude < threshold || magnitude < magnitudeAtBin(bin - 1) ||
+                magnitude < magnitudeAtBin(bin + 1)) {
                 continue;
             }
 
             float offset = 0.0f;
 
-            const float left =
-                magnitudeAtBin(bin - 1);
+            const float left = magnitudeAtBin(bin - 1);
 
-            const float center =
-                magnitude;
+            const float center = magnitude;
 
-            const float right =
-                magnitudeAtBin(bin + 1);
+            const float right = magnitudeAtBin(bin + 1);
 
-            const float curvature =
-                left -
-                2.0f * center +
-                right;
+            const float curvature = left - 2.0f * center + right;
 
-            if (std::abs(curvature) > 1.0e-6f)
-            {
-                offset =
-                    std::clamp(
-                        0.5f *
-                            (left - right) /
-                            curvature,
-                        -0.5f,
-                        0.5f);
+            if (std::abs(curvature) > 1.0e-6f) {
+                offset = std::clamp(0.5f * (left - right) / curvature, -0.5f, 0.5f);
             }
 
             spectralPeaks.push_back(
-                {
-                    bin,
-                    (static_cast<float>(bin) +
-                     offset) *
-                        static_cast<float>(sampleRate) /
-                        kFFTSize,
-                    magnitude
-                });
+                {bin,
+                 (static_cast<float>(bin) + offset) * static_cast<float>(sampleRate) / kFFTSize,
+                 magnitude});
         }
 
         std::sort(
-            spectralPeaks.begin(),
-            spectralPeaks.end(),
-            [](const SpectralPeak& a,
-               const SpectralPeak& b)
-            {
-                return a.magnitude > b.magnitude;
-            });
+            spectralPeaks.begin(), spectralPeaks.end(),
+            [](const SpectralPeak& a, const SpectralPeak& b) { return a.magnitude > b.magnitude; });
 
         selectedPeaks.clear();
 
-        for (const auto& peak :
-             spectralPeaks)
-        {
+        for (const auto& peak : spectralPeaks) {
             bool tooClose = false;
 
-            for (const auto& other :
-                 selectedPeaks)
-            {
-                if (std::abs(
-                        peak.bin -
-                        other.bin) <
-                    peakSpacingBins)
-                {
+            for (const auto& other : selectedPeaks) {
+                if (std::abs(peak.bin - other.bin) < peakSpacingBins) {
                     tooClose = true;
                     break;
                 }
@@ -501,10 +350,7 @@ class PolyphonicAnalyzer {
 
             selectedPeaks.push_back(peak);
 
-            if (selectedPeaks.size() >=
-                static_cast<size_t>(
-                    kMaxVoices * 8))
-            {
+            if (selectedPeaks.size() >= static_cast<size_t>(kMaxVoices * 8)) {
                 break;
             }
         }
@@ -512,211 +358,113 @@ class PolyphonicAnalyzer {
         return selectedPeaks;
     }
 
-    Candidate scoreCandidate(
-        float frequencyHz,
-        float maximumMagnitude) const
-    {
+    Candidate scoreCandidate(float frequencyHz, float maximumMagnitude) const {
         Candidate result;
 
-        result.frequencyHz =
-            frequencyHz;
+        result.frequencyHz = frequencyHz;
 
         float score = 0.0f;
         int supportedHarmonics = 0;
 
-        static constexpr float weights[] =
-        {
-            1.0f,
-            0.70f,
-            0.50f,
-            0.36f,
-            0.27f,
-            0.20f,
-            0.15f,
-            0.11f,
-            0.08f,
-            0.06f
-        };
+        static constexpr float weights[] = {1.0f,  0.70f, 0.50f, 0.36f, 0.27f,
+                                            0.20f, 0.15f, 0.11f, 0.08f, 0.06f};
 
-        for (int harmonic = 1;
-             harmonic <= 10;
-             ++harmonic)
-        {
-            const float harmonicFrequency =
-                frequencyHz *
-                static_cast<float>(harmonic);
+        for (int harmonic = 1; harmonic <= 10; ++harmonic) {
+            const float harmonicFrequency = frequencyHz * static_cast<float>(harmonic);
 
-            if (harmonicFrequency >=
-                sampleRate * 0.48f)
-            {
+            if (harmonicFrequency >= sampleRate * 0.48f) {
                 break;
             }
 
-            const float bin =
-                harmonicFrequency *
-                kFFTSize /
-                static_cast<float>(sampleRate);
+            const float bin = harmonicFrequency * kFFTSize / static_cast<float>(sampleRate);
 
-            const float magnitude =
-                localMagnitudeAtBin(bin);
+            const float magnitude = localMagnitudeAtBin(bin);
 
-            score +=
-                magnitude *
-                weights[harmonic - 1];
+            score += magnitude * weights[harmonic - 1];
 
-            if (magnitude >=
-                    maximumMagnitude * 0.035f &&
-                isLocalPeakNearBin(
-                    bin,
-                    maximumMagnitude * 0.035f))
-            {
+            if (magnitude >= maximumMagnitude * 0.035f &&
+                isLocalPeakNearBin(bin, maximumMagnitude * 0.035f)) {
                 ++supportedHarmonics;
             }
         }
 
         result.score = score;
-        result.supportedHarmonics =
-            supportedHarmonics;
+        result.supportedHarmonics = supportedHarmonics;
 
         result.fundamentalMagnitude =
-            localMagnitudeAtBin(
-                frequencyHz *
-                kFFTSize /
-                static_cast<float>(sampleRate));
+            localMagnitudeAtBin(frequencyHz * kFFTSize / static_cast<float>(sampleRate));
 
         result.hasFundamentalPeak =
-            isLocalPeakNearBin(
-                frequencyHz *
-                    kFFTSize /
-                    static_cast<float>(sampleRate),
-                maximumMagnitude *
-                    minimumFundamentalRatio);
+            isLocalPeakNearBin(frequencyHz * kFFTSize / static_cast<float>(sampleRate),
+                               maximumMagnitude * minimumFundamentalRatio);
 
         return result;
     }
 
-    void appendFundamentalCandidates(
-        const SpectralPeak& sourcePeak,
-        float maximumMagnitude,
-        std::vector<Candidate>& candidates) const
-    {
-        const float sourceFrequency =
-            sourcePeak.frequencyHz;
+    void appendFundamentalCandidates(const SpectralPeak& sourcePeak, float maximumMagnitude,
+                                     std::vector<Candidate>& candidates) const {
+        const float sourceFrequency = sourcePeak.frequencyHz;
 
-        for (int harmonic = 1;
-             harmonic <= 8;
-             ++harmonic)
-        {
-            const float candidateFrequency =
-                sourceFrequency /
-                static_cast<float>(harmonic);
+        for (int harmonic = 1; harmonic <= 8; ++harmonic) {
+            const float candidateFrequency = sourceFrequency / static_cast<float>(harmonic);
 
-            if (candidateFrequency <
-                    minimumFrequencyHz ||
-                candidateFrequency >
-                    maximumFrequencyHz)
-            {
+            if (candidateFrequency < minimumFrequencyHz ||
+                candidateFrequency > maximumFrequencyHz) {
                 continue;
             }
 
             const float fundamentalMagnitude =
-                localMagnitudeAtBin(
-                    candidateFrequency *
-                    kFFTSize /
-                    static_cast<float>(sampleRate));
+                localMagnitudeAtBin(candidateFrequency * kFFTSize / static_cast<float>(sampleRate));
 
-            if (harmonic > 1 &&
-                fundamentalMagnitude <
-                    maximumMagnitude *
-                        minimumFundamentalRatio)
-            {
+            if (harmonic > 1 && fundamentalMagnitude < maximumMagnitude * minimumFundamentalRatio) {
                 continue;
             }
 
-            const auto scored =
-                scoreCandidate(
-                    candidateFrequency,
-                    maximumMagnitude);
+            const auto scored = scoreCandidate(candidateFrequency, maximumMagnitude);
 
-            if (harmonic > 1 &&
-                scored.supportedHarmonics < 2)
-            {
+            if (harmonic > 1 && scored.supportedHarmonics < 2) {
                 continue;
             }
 
-            if (harmonic > 1 &&
-                !scored.hasFundamentalPeak &&
-                scored.supportedHarmonics < 3)
-            {
+            if (harmonic > 1 && !scored.hasFundamentalPeak && scored.supportedHarmonics < 3) {
                 continue;
             }
 
             Candidate candidate = scored;
 
-            candidate.dominantPeakFrequencyHz =
-                sourceFrequency;
+            candidate.dominantPeakFrequencyHz = sourceFrequency;
 
-            candidate.dominantPeakMagnitude =
-                sourcePeak.magnitude;
+            candidate.dominantPeakMagnitude = sourcePeak.magnitude;
 
-            candidate.fundamentalMagnitude =
-                fundamentalMagnitude;
+            candidate.fundamentalMagnitude = fundamentalMagnitude;
 
-            candidate.sourceHarmonic =
-                harmonic;
+            candidate.sourceHarmonic = harmonic;
 
             candidates.push_back(candidate);
         }
     }
 
-    static bool frequenciesAreClose(
-        float a,
-        float b)
-    {
-        return a > 0.0f &&
-               b > 0.0f &&
-               std::abs(
-                   1200.0f *
-                   std::log2(a / b)) <
-                   45.0f;
+    static bool frequenciesAreClose(float a, float b) {
+        return a > 0.0f && b > 0.0f && std::abs(1200.0f * std::log2(a / b)) < 45.0f;
     }
 
-    int matchPreviousVoice(
-        float frequency,
-        const std::vector<bool>& used) const
-    {
+    int matchPreviousVoice(float frequency, const std::vector<bool>& used) const {
         int best = -1;
         float bestCents = 100000.0f;
 
-        for (int i = 0;
-             i < static_cast<int>(voices.size());
-             ++i)
-        {
-            if (used[static_cast<size_t>(i)] ||
-                !voices[
-                    static_cast<size_t>(i)]
-                    .active)
-            {
+        for (int i = 0; i < static_cast<int>(voices.size()); ++i) {
+            if (used[static_cast<size_t>(i)] || !voices[static_cast<size_t>(i)].active) {
                 continue;
             }
 
-            const float old =
-                voices[
-                    static_cast<size_t>(i)]
-                    .peakFrequencyHz;
+            const float old = voices[static_cast<size_t>(i)].peakFrequencyHz;
 
             if (old <= 0.0f)
                 continue;
 
-            const float cents =
-                std::abs(
-                    1200.0f *
-                    std::log2(
-                        frequency / old));
+            const float cents = std::abs(1200.0f * std::log2(frequency / old));
 
-            if (cents < 250.0f &&
-                cents < bestCents)
-            {
+            if (cents < 250.0f && cents < bestCents) {
                 best = i;
                 bestCents = cents;
             }
@@ -725,28 +473,17 @@ class PolyphonicAnalyzer {
         return best;
     }
 
-    int matchHistoricalVoice(
-        float frequency) const
-    {
+    int matchHistoricalVoice(float frequency) const {
         int bestId = -1;
         float bestCents = 100000.0f;
 
-        for (const auto& historical :
-             voiceHistory)
-        {
+        for (const auto& historical : voiceHistory) {
             if (historical.frequencyHz <= 0.0f)
                 continue;
 
-            const float cents =
-                std::abs(
-                    1200.0f *
-                    std::log2(
-                        frequency /
-                        historical.frequencyHz));
+            const float cents = std::abs(1200.0f * std::log2(frequency / historical.frequencyHz));
 
-            if (cents < 250.0f &&
-                cents < bestCents)
-            {
+            if (cents < 250.0f && cents < bestCents) {
                 bestId = historical.id;
                 bestCents = cents;
             }
@@ -755,77 +492,39 @@ class PolyphonicAnalyzer {
         return bestId;
     }
 
-    void updateVoiceHistory()
-    {
-        for (auto& historical :
-             voiceHistory)
-        {
+    void updateVoiceHistory() {
+        for (auto& historical : voiceHistory) {
             ++historical.age;
         }
 
-        for (const auto& voice :
-             voices)
-        {
-            auto existing =
-                std::find_if(
-                    voiceHistory.begin(),
-                    voiceHistory.end(),
-                    [&voice](
-                        const HistoricalVoice&
-                            historical)
-                    {
-                        return historical.id ==
-                               voice.id;
-                    });
+        for (const auto& voice : voices) {
+            auto existing = std::find_if(
+                voiceHistory.begin(), voiceHistory.end(),
+                [&voice](const HistoricalVoice& historical) { return historical.id == voice.id; });
 
-            if (existing ==
-                voiceHistory.end())
-            {
-                voiceHistory.push_back(
-                    {
-                        voice.id,
-                        voice.peakFrequencyHz,
-                        0
-                    });
-            }
-            else
-            {
-                existing->frequencyHz =
-                    voice.peakFrequencyHz;
+            if (existing == voiceHistory.end()) {
+                voiceHistory.push_back({voice.id, voice.peakFrequencyHz, 0});
+            } else {
+                existing->frequencyHz = voice.peakFrequencyHz;
 
                 existing->age = 0;
             }
         }
 
         voiceHistory.erase(
-            std::remove_if(
-                voiceHistory.begin(),
-                voiceHistory.end(),
-                [](const HistoricalVoice&
-                       historical)
-                {
-                    return historical.age > 8;
-                }),
+            std::remove_if(voiceHistory.begin(), voiceHistory.end(),
+                           [](const HistoricalVoice& historical) { return historical.age > 8; }),
             voiceHistory.end());
     }
 
-    void analyse()
-    {
+    void analyse() {
         ++analysisGeneration;
+        analysisReliable = false;
 
         fillCurrentFrame();
 
-        for (int i = 0;
-             i < kFFTSize;
-             ++i)
-        {
-            spectrum[
-                static_cast<size_t>(i)] =
-                {
-                    frame[
-                        static_cast<size_t>(i)],
-                    0.0f
-                };
+        for (int i = 0; i < kFFTSize; ++i) {
+            spectrum[static_cast<size_t>(i)] = {frame[static_cast<size_t>(i)], 0.0f};
         }
 
         fft(false);
@@ -833,86 +532,48 @@ class PolyphonicAnalyzer {
         float maximumMagnitude = 0.0f;
         float averageMagnitude = 0.0f;
 
-        const int first =
-            firstAnalysisBin();
+        const int first = firstAnalysisBin();
 
-        const int last =
-            lastAnalysisBin();
+        const int last = lastAnalysisBin();
 
-        for (int bin = first;
-             bin <= last;
-             ++bin)
-        {
-            const float magnitude =
-                magnitudeAtBin(bin);
+        for (int bin = first; bin <= last; ++bin) {
+            const float magnitude = magnitudeAtBin(bin);
 
-            maximumMagnitude =
-                std::max(
-                    maximumMagnitude,
-                    magnitude);
+            maximumMagnitude = std::max(maximumMagnitude, magnitude);
 
-            averageMagnitude +=
-                magnitude;
+            averageMagnitude += magnitude;
         }
 
-        averageMagnitude /=
-            static_cast<float>(
-                std::max(
-                    1,
-                    last - first + 1));
+        averageMagnitude /= static_cast<float>(std::max(1, last - first + 1));
 
         // A tonal spectrum has a clear peak above
         // its broadband floor. Do not manufacture
         // candidates from random/noisy frames.
-        if (maximumMagnitude <= 1.0e-7f ||
-            maximumMagnitude <
-                averageMagnitude * 4.0f)
-        {
-            voices.clear();
+        if (maximumMagnitude <= 1.0e-7f || maximumMagnitude < averageMagnitude * 4.0f) {
             return;
         }
 
         const auto& peaks =
-            findPeaks(
-                std::max(
-                    maximumMagnitude *
-                        minimumPeakRatio,
-                    averageMagnitude * 3.0f));
+            findPeaks(std::max(maximumMagnitude * minimumPeakRatio, averageMagnitude * 3.0f));
 
-        auto& candidates =
-            candidateScratch;
+        auto& candidates = candidateScratch;
 
         candidates.clear();
 
-        for (const auto& peak :
-             peaks)
-        {
-            appendFundamentalCandidates(
-                peak,
-                maximumMagnitude,
-                candidates);
+        for (const auto& peak : peaks) {
+            appendFundamentalCandidates(peak, maximumMagnitude, candidates);
         }
 
-        auto& mergedCandidates =
-            mergedCandidateScratch;
+        auto& mergedCandidates = mergedCandidateScratch;
 
         mergedCandidates.clear();
 
-        for (const auto& candidate :
-             candidates)
-        {
+        for (const auto& candidate : candidates) {
             bool merged = false;
 
-            for (auto& existing :
-                 mergedCandidates)
-            {
-                if (frequenciesAreClose(
-                        existing.frequencyHz,
-                        candidate.frequencyHz))
-                {
-                    if (candidate.score >
-                        existing.score)
-                    {
+            for (auto& existing : mergedCandidates) {
+                if (frequenciesAreClose(existing.frequencyHz, candidate.frequencyHz)) {
+                    if (candidate.score > existing.score) {
                         existing = candidate;
                     }
 
@@ -922,77 +583,48 @@ class PolyphonicAnalyzer {
             }
 
             if (!merged)
-                mergedCandidates.push_back(
-                    candidate);
+                mergedCandidates.push_back(candidate);
         }
 
         candidates.clear();
 
         // Remove weak subharmonic candidates when
         // a stronger direct candidate explains them.
-        auto& filteredCandidates =
-            filteredCandidateScratch;
+        auto& filteredCandidates = filteredCandidateScratch;
 
         filteredCandidates.clear();
 
-        for (const auto& candidate :
-             mergedCandidates)
-        {
+        for (const auto& candidate : mergedCandidates) {
             bool isWeakSubharmonic =
-                candidate.sourceHarmonic > 1 &&
-                !candidate.hasFundamentalPeak &&
-                candidate.fundamentalMagnitude <
-                    candidate.dominantPeakMagnitude *
-                        0.12f;
+                candidate.sourceHarmonic > 1 && !candidate.hasFundamentalPeak &&
+                candidate.fundamentalMagnitude < candidate.dominantPeakMagnitude * 0.12f;
 
             bool hasDirectExplanation = false;
 
-            if (isWeakSubharmonic)
-            {
-                for (const auto& direct :
-                     mergedCandidates)
-                {
-                    if (direct.sourceHarmonic != 1 ||
-                        direct.frequencyHz <=
-                            candidate.frequencyHz)
-                    {
+            if (isWeakSubharmonic) {
+                for (const auto& direct : mergedCandidates) {
+                    if (direct.sourceHarmonic != 1 || direct.frequencyHz <= candidate.frequencyHz) {
                         continue;
                     }
 
-                    const float ratio =
-                        direct.frequencyHz /
-                        candidate.frequencyHz;
+                    const float ratio = direct.frequencyHz / candidate.frequencyHz;
 
-                    const int roundedRatio =
-                        static_cast<int>(
-                            std::lround(ratio));
+                    const int roundedRatio = static_cast<int>(std::lround(ratio));
 
-                    if (roundedRatio >= 2 &&
-                        roundedRatio <= 10 &&
-                        std::abs(
-                            ratio -
-                            static_cast<float>(
-                                roundedRatio)) <
-                            0.08f &&
-                        direct.score >
-                            candidate.score *
-                                0.35f)
-                    {
-                        hasDirectExplanation =
-                            true;
+                    if (roundedRatio >= 2 && roundedRatio <= 10 &&
+                        std::abs(ratio - static_cast<float>(roundedRatio)) < 0.08f &&
+                        direct.score > candidate.score * 0.35f) {
+                        hasDirectExplanation = true;
                         break;
                     }
                 }
             }
 
-            if (isWeakSubharmonic &&
-                hasDirectExplanation)
-            {
+            if (isWeakSubharmonic && hasDirectExplanation) {
                 continue;
             }
 
-            filteredCandidates.push_back(
-                candidate);
+            filteredCandidates.push_back(candidate);
         }
 
         // Remove higher candidates whose harmonic
@@ -1000,120 +632,63 @@ class PolyphonicAnalyzer {
         // candidate.
         candidates.clear();
 
-        for (const auto& candidate :
-             filteredCandidates)
-        {
-            bool explainedByLowerVoice =
-                false;
+        for (const auto& candidate : filteredCandidates) {
+            bool explainedByLowerVoice = false;
 
-            if (candidate.supportedHarmonics > 0)
-            {
-                for (const auto& lower :
-                     filteredCandidates)
-                {
-                    if (lower.frequencyHz >=
-                            candidate.frequencyHz ||
-                        lower.supportedHarmonics < 2)
-                    {
+            if (candidate.supportedHarmonics > 0) {
+                for (const auto& lower : filteredCandidates) {
+                    if (lower.frequencyHz >= candidate.frequencyHz ||
+                        lower.supportedHarmonics < 2) {
                         continue;
                     }
 
-                    const float ratio =
-                        candidate.frequencyHz /
-                        lower.frequencyHz;
+                    const float ratio = candidate.frequencyHz / lower.frequencyHz;
 
-                    const int roundedRatio =
-                        static_cast<int>(
-                            std::lround(ratio));
+                    const int roundedRatio = static_cast<int>(std::lround(ratio));
 
-                    if (roundedRatio >= 2 &&
-                        roundedRatio <= 10 &&
-                        std::abs(
-                            ratio -
-                            static_cast<float>(
-                                roundedRatio)) <
-                            0.08f &&
-                        (candidate.supportedHarmonics >= 2 ||
-                         lower.supportedHarmonics >= 3))
-                    {
-                        explainedByLowerVoice =
-                            true;
+                    if (roundedRatio >= 2 && roundedRatio <= 10 &&
+                        std::abs(ratio - static_cast<float>(roundedRatio)) < 0.08f &&
+                        (candidate.supportedHarmonics >= 2 || lower.supportedHarmonics >= 3)) {
+                        explainedByLowerVoice = true;
                         break;
                     }
                 }
             }
 
             if (!explainedByLowerVoice)
-                candidates.push_back(
-                    candidate);
+                candidates.push_back(candidate);
         }
 
-        std::sort(
-            candidates.begin(),
-            candidates.end(),
-            [](const Candidate& a,
-               const Candidate& b)
-            {
-                return a.score >
-                       b.score;
-            });
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
 
-        if (candidates.size() >
-            static_cast<size_t>(kMaxVoices))
-        {
-            candidates.resize(
-                static_cast<size_t>(
-                    kMaxVoices));
+        if (candidates.size() > static_cast<size_t>(kMaxVoices)) {
+            candidates.resize(static_cast<size_t>(kMaxVoices));
         }
 
         sourceSpectrum = spectrum;
 
-        auto& next =
-            nextVoiceScratch;
+        auto& next = nextVoiceScratch;
 
         next.clear();
-        next.reserve(
-            candidates.size());
+        next.reserve(candidates.size());
 
-        auto& used =
-            usedScratch;
+        auto& used = usedScratch;
 
-        used.assign(
-            voices.size(),
-            false);
+        used.assign(voices.size(), false);
 
-        for (size_t voiceIndex = 0;
-             voiceIndex < candidates.size();
-             ++voiceIndex)
-        {
-            const auto& candidate =
-                candidates[voiceIndex];
+        for (size_t voiceIndex = 0; voiceIndex < candidates.size(); ++voiceIndex) {
+            const auto& candidate = candidates[voiceIndex];
 
-            const int previous =
-                matchPreviousVoice(
-                    candidate.frequencyHz,
-                    used);
+            const int previous = matchPreviousVoice(candidate.frequencyHz, used);
 
-            int historicalId =
-                previous >= 0
-                    ? voices[
-                          static_cast<size_t>(
-                              previous)]
-                          .id
-                    : matchHistoricalVoice(
-                          candidate.frequencyHz);
+            int historicalId = previous >= 0 ? voices[static_cast<size_t>(previous)].id
+                                             : matchHistoricalVoice(candidate.frequencyHz);
 
             if (historicalId >= 0 &&
-                std::any_of(
-                    next.begin(),
-                    next.end(),
-                    [historicalId](
-                        const Voice& voice)
-                    {
-                        return voice.id ==
-                               historicalId;
-                    }))
-            {
+                std::any_of(next.begin(), next.end(), [historicalId](const Voice& voice) {
+                    return voice.id == historicalId;
+                })) {
                 historicalId = -1;
             }
 
@@ -1121,97 +696,47 @@ class PolyphonicAnalyzer {
 
             // Build a normalized soft spectral mask
             // for this candidate.
-            for (int bin = 0;
-                 bin < kFFTSize / 2;
-                 ++bin)
-            {
+            for (int bin = 0; bin < kFFTSize / 2; ++bin) {
                 float weight = 0.0f;
                 float totalWeight = 0.0f;
 
-                for (size_t candidateIndex = 0;
-                     candidateIndex <
-                         candidates.size();
-                     ++candidateIndex)
-                {
-                    float distance =
-                        static_cast<float>(
-                            kFFTSize);
+                for (size_t candidateIndex = 0; candidateIndex < candidates.size();
+                     ++candidateIndex) {
+                    float distance = static_cast<float>(kFFTSize);
 
-                    for (int harmonic = 1;
-                         harmonic <= 10;
-                         ++harmonic)
-                    {
-                        const float partial =
-                            candidates[
-                                candidateIndex]
-                                .frequencyHz *
-                            static_cast<float>(
-                                harmonic) *
-                            kFFTSize /
-                            static_cast<float>(
-                                sampleRate);
+                    for (int harmonic = 1; harmonic <= 10; ++harmonic) {
+                        const float partial = candidates[candidateIndex].frequencyHz *
+                                              static_cast<float>(harmonic) * kFFTSize /
+                                              static_cast<float>(sampleRate);
 
-                        distance =
-                            std::min(
-                                distance,
-                                std::abs(
-                                    static_cast<float>(
-                                        bin) -
-                                    partial));
+                        distance = std::min(distance, std::abs(static_cast<float>(bin) - partial));
                     }
 
-                    if (distance <=
-                        static_cast<float>(
-                            peakSpacingBins))
-                    {
+                    if (distance <= static_cast<float>(peakSpacingBins)) {
                         const float candidateWeight =
-                            std::max(
-                                0.001f,
-                                static_cast<float>(
-                                    peakSpacingBins + 1) -
-                                distance);
+                            std::max(0.001f, static_cast<float>(peakSpacingBins + 1) - distance);
 
-                        totalWeight +=
-                            candidateWeight;
+                        totalWeight += candidateWeight;
 
-                        if (candidateIndex ==
-                            voiceIndex)
-                        {
-                            weight =
-                                candidateWeight;
+                        if (candidateIndex == voiceIndex) {
+                            weight = candidateWeight;
                         }
                     }
                 }
 
-                if (totalWeight <= 0.0f)
-                {
-                    spectrum[
-                        static_cast<size_t>(
-                            bin)] = {};
+                if (totalWeight <= 0.0f) {
+                    spectrum[static_cast<size_t>(bin)] = {};
 
-                    if (bin > 0)
-                    {
-                        spectrum[
-                            static_cast<size_t>(
-                                kFFTSize - bin)] = {};
+                    if (bin > 0) {
+                        spectrum[static_cast<size_t>(kFFTSize - bin)] = {};
                     }
-                }
-                else
-                {
-                    const float mask =
-                        weight /
-                        totalWeight;
+                } else {
+                    const float mask = weight / totalWeight;
 
-                    spectrum[
-                        static_cast<size_t>(
-                            bin)] *= mask;
+                    spectrum[static_cast<size_t>(bin)] *= mask;
 
-                    if (bin > 0)
-                    {
-                        spectrum[
-                            static_cast<size_t>(
-                                kFFTSize - bin)] *=
-                            mask;
+                    if (bin > 0) {
+                        spectrum[static_cast<size_t>(kFFTSize - bin)] *= mask;
                     }
                 }
             }
@@ -1220,59 +745,32 @@ class PolyphonicAnalyzer {
 
             Voice voice;
 
-            voice.id =
-                historicalId >= 0
-                    ? historicalId
-                    : nextVoiceId++;
+            const float previousTrackedFrequency =
+                previous >= 0 ? voices[static_cast<size_t>(previous)].trackedFrequencyHz : 0.0f;
 
-            voice.peakFrequencyHz =
-                candidate.frequencyHz;
+            voice.id = historicalId >= 0 ? historicalId : nextVoiceId++;
 
-            voice.dominantPeakFrequencyHz =
-                candidate.dominantPeakFrequencyHz;
+            voice.peakFrequencyHz = candidate.frequencyHz;
+
+            voice.dominantPeakFrequencyHz = candidate.dominantPeakFrequencyHz;
 
             voice.strength =
-                std::clamp(
-                    candidate.score /
-                        std::max(
-                            1.0e-7f,
-                            maximumMagnitude),
-                    0.0f,
-                    1.0f);
+                std::clamp(candidate.score / std::max(1.0e-7f, maximumMagnitude), 0.0f, 1.0f);
 
-            voice.samples.resize(
-                static_cast<size_t>(
-                    kFFTSize));
+            voice.samples.resize(static_cast<size_t>(kFFTSize));
 
-            for (int i = 0;
-                 i < kFFTSize;
-                 ++i)
-            {
-                voice.samples[
-                    static_cast<size_t>(i)] =
-                    spectrum[
-                        static_cast<size_t>(i)]
-                        .real();
+            for (int i = 0; i < kFFTSize; ++i) {
+                voice.samples[static_cast<size_t>(i)] = spectrum[static_cast<size_t>(i)].real();
             }
 
             voice.active = true;
 
             PitchEstimate estimate;
 
-            if (indexedPitchTracker)
-            {
-                estimate =
-                    indexedPitchTracker(
-                        voice.id,
-                        voice.samples,
-                        sampleRate);
-            }
-            else if (pitchTracker)
-            {
-                estimate =
-                    pitchTracker(
-                        voice.samples,
-                        sampleRate);
+            if (indexedPitchTracker) {
+                estimate = indexedPitchTracker(voice.id, voice.samples, sampleRate);
+            } else if (pitchTracker) {
+                estimate = pitchTracker(voice.samples, sampleRate);
             }
 
             // ------------------------------------------------------------
@@ -1297,61 +795,50 @@ class PolyphonicAnalyzer {
             // 112 Hz is accepted as a useful refinement.
             // ------------------------------------------------------------
 
-            const float spectralFrequency =
-                candidate.frequencyHz;
+            const float spectralFrequency = candidate.frequencyHz;
 
-            const float trackedFrequency =
-                estimate.frequencyHz;
+            const float trackedFrequency = estimate.frequencyHz;
 
-            voice.trackedFrequencyHz =
-                spectralFrequency;
+            voice.trackedFrequencyHz = spectralFrequency;
 
-            voice.trackerConfidence =
-                voice.strength;
+            voice.trackerConfidence = voice.strength;
 
-            if (trackedFrequency > 0.0f &&
-                std::isfinite(trackedFrequency) &&
-                std::isfinite(spectralFrequency))
-            {
-                const float ratio =
-                    trackedFrequency /
-                    spectralFrequency;
+            if (trackedFrequency > 0.0f && std::isfinite(trackedFrequency) &&
+                std::isfinite(spectralFrequency)) {
+                const float ratio = trackedFrequency / spectralFrequency;
 
-                if (ratio > 0.0f &&
-                    std::isfinite(ratio))
-                {
-                    const float cents =
-                        std::abs(
-                            1200.0f *
-                            std::log2(ratio));
+                if (ratio > 0.0f && std::isfinite(ratio)) {
+                    const float cents = std::abs(1200.0f * std::log2(ratio));
 
-                    if (cents <=
-                        maximumTrackerCorrectionCents)
-                    {
-                        voice.trackedFrequencyHz =
-                            trackedFrequency;
+                    if (cents <= maximumTrackerCorrectionCents) {
+                        voice.trackedFrequencyHz = trackedFrequency;
 
-                        voice.trackerConfidence =
-                            std::clamp(
-                                estimate.confidence,
-                                0.0f,
-                                1.0f);
+                        voice.trackerConfidence = std::clamp(estimate.confidence, 0.0f, 1.0f);
                     }
                 }
             }
 
-            if (previous >= 0)
-            {
-                used[
-                    static_cast<size_t>(
-                        previous)] = true;
+            if (previousTrackedFrequency > 0.0f && voice.trackedFrequencyHz > 0.0f) {
+                const float cents = std::abs(
+                    1200.0f * std::log2(voice.trackedFrequencyHz / previousTrackedFrequency));
+
+                if (std::isfinite(cents) && cents <= 250.0f) {
+                    constexpr float smoothing = 0.35f;
+                    voice.trackedFrequencyHz = previousTrackedFrequency * (1.0f - smoothing) +
+                                               voice.trackedFrequencyHz * smoothing;
+                }
             }
 
-            next.push_back(
-                std::move(voice));
+            if (previous >= 0) {
+                used[static_cast<size_t>(previous)] = true;
+            }
+
+            next.push_back(std::move(voice));
         }
 
         voices.swap(next);
+
+        analysisReliable = true;
 
         updateVoiceHistory();
     }
@@ -1361,36 +848,26 @@ class PolyphonicAnalyzer {
     std::vector<float> input;
     std::vector<float> frame;
 
-    std::vector<std::complex<float>>
-        spectrum;
+    std::vector<std::complex<float>> spectrum;
 
-    std::vector<std::complex<float>>
-        sourceSpectrum;
+    std::vector<std::complex<float>> sourceSpectrum;
 
     std::vector<Voice> voices;
-    std::vector<HistoricalVoice>
-        voiceHistory;
+    std::vector<HistoricalVoice> voiceHistory;
 
-    std::vector<SpectralPeak>
-        spectralPeaks;
+    std::vector<SpectralPeak> spectralPeaks;
 
-    std::vector<SpectralPeak>
-        selectedPeaks;
+    std::vector<SpectralPeak> selectedPeaks;
 
-    std::vector<Candidate>
-        candidateScratch;
+    std::vector<Candidate> candidateScratch;
 
-    std::vector<Candidate>
-        mergedCandidateScratch;
+    std::vector<Candidate> mergedCandidateScratch;
 
-    std::vector<Candidate>
-        filteredCandidateScratch;
+    std::vector<Candidate> filteredCandidateScratch;
 
-    std::vector<Voice>
-        nextVoiceScratch;
+    std::vector<Voice> nextVoiceScratch;
 
-    std::vector<bool>
-        usedScratch;
+    std::vector<bool> usedScratch;
 
     PitchTracker pitchTracker;
     IndexedPitchTracker indexedPitchTracker;
@@ -1401,4 +878,5 @@ class PolyphonicAnalyzer {
     int nextVoiceId = 0;
 
     std::uint64_t analysisGeneration = 0;
+    bool analysisReliable = false;
 };
