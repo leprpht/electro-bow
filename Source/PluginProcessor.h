@@ -3,6 +3,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 
 #include "BowTrigger.h"
+#include "InputDynamics.h"
 #include "PitchDetector.h"
 #include "PolyphonicAnalyzer.h"
 #include "VoiceManager.h"
@@ -119,6 +120,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
         during a pluck as its harmonics decay, but that is not a new note-on.
     */
     BowTrigger bowTrigger;
+    InputDynamics inputDynamics;
     bool pendingNoteOn = false;
     std::uint64_t lastAnalyzerGeneration = 0;
 
@@ -129,6 +131,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
         processing.
     */
     std::vector<float> monoScratch;
+    std::vector<float> dynamicsScratch;
 
     /*
         Current instrument parameters.
