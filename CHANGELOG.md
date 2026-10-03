@@ -5,6 +5,19 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-10-03
+
+### Changed
+
+- Added per-voice pitch candidate, confidence, stability, and confirmed-pitch tracking.
+- Preserved active voices through short unreliable analysis gaps with voice-local grace state.
+- Improved harmonic continuity handling for temporary octave and partial detections.
+
+### Fixed
+
+- Prevented transient fundamental/harmonic/fundamental observations from retriggering one physical pluck.
+- Prevented weak one-frame spectral residues from creating unwanted voices.
+
 ## [1.3.2] - 2026-10-03
 
 ### Changed
