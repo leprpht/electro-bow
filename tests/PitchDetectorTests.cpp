@@ -1,3 +1,4 @@
+#include "../Source/BowEnvelope.h"
 #include "../Source/InputDynamics.h"
 #include "../Source/PitchDetector.h"
 #include "../Source/PolyphonicAnalyzer.h"
@@ -250,7 +251,30 @@ int main() {
     }
 
     // ------------------------------------------------------------
-    // 6. Musical input dynamics are independent from note triggering
+    // 6. Analyzer refreshes must not truncate a configured bow attack
+    // ------------------------------------------------------------
+
+    {
+        BowEnvelope envelope;
+        envelope.prepare(sampleRate);
+        envelope.setAttackMs(50.0f);
+        envelope.trigger(1.0f);
+
+        for (int i = 0; i < 512; ++i)
+            envelope.process();
+
+        envelope.sustain();
+
+        const float levelAfterRefresh = envelope.process();
+
+        if (levelAfterRefresh >= 0.5f) {
+            std::cerr << "Analyzer refresh truncated the bow attack\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 7. Musical input dynamics are independent from note triggering
     // ------------------------------------------------------------
 
     {
