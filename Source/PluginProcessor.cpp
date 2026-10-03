@@ -85,10 +85,12 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
     const int safeBlockSize = juce::jmax(1, samplesPerBlock);
 
     monoScratch.assign(static_cast<std::size_t>(safeBlockSize), 0.0f);
+    dynamicsScratch.assign(static_cast<std::size_t>(safeBlockSize), 0.0f);
 
     polyphonicAnalyzer.prepare(sampleRate);
 
     bowTrigger.prepare(sampleRate);
+    inputDynamics.prepare(sampleRate);
     pendingNoteOn = false;
     lastAnalyzerGeneration = 0;
 
@@ -120,6 +122,7 @@ void ElectroBowAudioProcessor::releaseResources() {
     voiceManager.reset();
 
     bowTrigger.reset();
+    inputDynamics.reset();
     pendingNoteOn = false;
     lastAnalyzerGeneration = 0;
 
@@ -208,12 +211,14 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     }
 
     for (int sample = 0; sample < numSamples; ++sample) {
+        const float inputSample = monoScratch[static_cast<std::size_t>(sample)];
+
         // Capture only the rising physical attack. The analyzer may publish
         // several different spectral descriptions of the same pluck later.
-        const bool triggered =
-            bowTrigger.processSample(monoScratch[static_cast<std::size_t>(sample)]);
+        const bool triggered = bowTrigger.processSample(inputSample);
 
-        voiceManager.setInputLevel(bowTrigger.getLevel());
+        dynamicsScratch[static_cast<std::size_t>(sample)] =
+            inputDynamics.processSample(inputSample);
 
         if (triggered) {
             pendingNoteOn = true;
@@ -245,7 +250,7 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
     // pendingNoteOn.
     const bool allowNewVoices = pendingNoteOn;
 
-    voiceManager.setInputLevel(bowTrigger.getLevel());
+    voiceManager.setInputLevel(inputDynamics.getLevel());
 
     voiceManager.updateDetectedVoices(polyphonicAnalyzer, allowNewVoices);
 
@@ -262,6 +267,10 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         Render all active Bowed voices.
     */
     for (int sample = 0; sample < numSamples; ++sample) {
+        // Apply the continuous musical envelope immediately before rendering
+        // each sample. VoiceManager combines this global input intensity with
+        // each voice's own spectral strength and envelope state.
+        voiceManager.setInputLevel(dynamicsScratch[static_cast<std::size_t>(sample)]);
         const float output = voiceManager.processSample();
 
         for (int channel = 0; channel < numChannels; ++channel) {
