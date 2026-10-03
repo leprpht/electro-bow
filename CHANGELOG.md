@@ -5,6 +5,18 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-10-03
+
+### Added
+
+- Added retriggering for distinct plucks and attacks during sustained notes.
+- Added expanded pitch-detector and bow-trigger coverage for sustained and repeated attacks.
+
+### Changed
+
+- Preserved bow attacks when analyzer refreshes arrive before the attack envelope completes.
+- Updated the test build to exercise plugin processing and bow synthesis code directly.
+
 ## [1.3.4] - 2026-10-03
 
 ### Added
