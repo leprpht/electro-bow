@@ -1,4 +1,5 @@
 #include "../Source/BowEnvelope.h"
+#include "../Source/BowTrigger.h"
 #include "../Source/InputDynamics.h"
 #include "../Source/PitchDetector.h"
 #include "../Source/PolyphonicAnalyzer.h"
@@ -274,7 +275,42 @@ int main() {
     }
 
     // ------------------------------------------------------------
-    // 7. Musical input dynamics are independent from note triggering
+    // 7. A later pluck must be detected while an earlier note sustains
+    // ------------------------------------------------------------
+
+    {
+        BowTrigger trigger;
+        trigger.prepare(sampleRate);
+
+        int triggerCount = 0;
+        for (int i = 0; i < 4096; ++i)
+            triggerCount += trigger.processSample(0.20f) ? 1 : 0;
+
+        // The first strong attack is one event, not a string of events while
+        // its envelope rises.
+        if (triggerCount != 1) {
+            std::cerr << "Strong pluck produced duplicate trigger events\n";
+            return 1;
+        }
+
+        // Leave a quiet sustained input above release threshold, then add a
+        // second physical pluck.  This is the condition needed to add a note
+        // while another voice remains active.
+        for (int i = 0; i < 8192; ++i)
+            trigger.processSample(0.04f);
+
+        bool laterPluckDetected = false;
+        for (int i = 0; i < 2048; ++i)
+            laterPluckDetected |= trigger.processSample(0.45f);
+
+        if (!laterPluckDetected) {
+            std::cerr << "Later pluck was missed while sustain remained active\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 8. Musical input dynamics are independent from note triggering
     // ------------------------------------------------------------
 
     {
