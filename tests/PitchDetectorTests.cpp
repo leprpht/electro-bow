@@ -2,11 +2,14 @@
 #include "../Source/BowTrigger.h"
 #include "../Source/InputDynamics.h"
 #include "../Source/PitchDetector.h"
+#include "../Source/PluginProcessor.h"
 #include "../Source/PolyphonicAnalyzer.h"
+#include "../Source/VoiceManager.h"
 
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -72,6 +75,19 @@ bool containsPeak(const PolyphonicAnalyzer& analyzer, float targetFrequency, flo
     }
 
     return false;
+}
+
+void pushUntilAnalysis(PolyphonicAnalyzer& analyzer, const std::vector<float>& samples) {
+    analyzer.push(samples.data(), static_cast<int>(samples.size()));
+}
+
+std::vector<float> makeChord(std::initializer_list<int> notes, float amplitude = 0.2f,
+                             int frames = 2) {
+    std::vector<float> result(static_cast<std::size_t>(PolyphonicAnalyzer::kFFTSize * frames),
+                              0.0f);
+    for (const auto note : notes)
+        addNote(result, note, amplitude);
+    return result;
 }
 
 void printPitchResult(const char* name, const PitchDetector& detector) {
@@ -310,7 +326,60 @@ int main() {
     }
 
     // ------------------------------------------------------------
-    // 8. Musical input dynamics are independent from note triggering
+    // 8. Bow trigger release is delivered once after sustained silence
+    // ------------------------------------------------------------
+
+    {
+        BowTrigger trigger;
+        trigger.prepare(sampleRate);
+
+        for (int i = 0; i < 2048; ++i)
+            trigger.processSample(0.2f);
+
+        int releases = 0;
+        for (int i = 0; i < 8192; ++i) {
+            trigger.processSample(0.0f);
+            releases += trigger.consumeRelease() ? 1 : 0;
+        }
+
+        if (releases != 1 || trigger.isNoteActive()) {
+            std::cerr << "Bow trigger release was not a single completed event\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 9. Bow envelope handles immediate attack, sustain, and release
+    // ------------------------------------------------------------
+
+    {
+        BowEnvelope envelope;
+        envelope.prepare(sampleRate);
+        envelope.setAttackMs(0.0f);
+        envelope.setNaturalResonanceMs(0.0f);
+        envelope.trigger(0.25f);
+
+        if (!approximately(envelope.process(), 0.25f, 0.0001f)) {
+            std::cerr << "Zero-time bow attack did not reach its target\n";
+            return 1;
+        }
+
+        envelope.setSustainLevel(0.75f);
+        if (!approximately(envelope.process(), 0.75f, 0.0001f)) {
+            std::cerr << "Bow sustain did not follow the live target\n";
+            return 1;
+        }
+
+        envelope.release();
+        envelope.process();
+        if (envelope.isActive() || envelope.getLevel() != 0.0f) {
+            std::cerr << "Zero-time bow release did not finish\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 10. Musical input dynamics are independent from note triggering
     // ------------------------------------------------------------
 
     {
@@ -334,6 +403,22 @@ int main() {
 
         if (!(hardLevel > softLevel * 2.0f) || !(returnedLevel < hardLevel)) {
             std::cerr << "Input dynamics follower did not track soft/hard/soft input\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 11. Dynamics rejects non-finite input without corrupting state
+    // ------------------------------------------------------------
+
+    {
+        InputDynamics dynamics;
+        dynamics.prepare(sampleRate);
+        dynamics.processSample(0.25f);
+        dynamics.processSample(std::numeric_limits<float>::quiet_NaN());
+
+        if (!std::isfinite(dynamics.getLevel()) || dynamics.getLevel() < 0.0f) {
+            std::cerr << "Input dynamics accepted a non-finite value\n";
             return 1;
         }
     }
@@ -590,6 +675,173 @@ int main() {
             !containsPeak(analyzer, midiToFrequency(65), 10.0f)) {
             std::cerr << "Four-note chord did not recover expected fundamentals\n";
 
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 12. Analyzer retains a missing voice only for its bounded grace period
+    // ------------------------------------------------------------
+
+    {
+        PolyphonicAnalyzer analyzer;
+        analyzer.prepare(sampleRate);
+
+        const auto note = makeChord({57});
+        pushUntilAnalysis(analyzer, note);
+
+        if (analyzer.getVoices().empty() || !analyzer.isAnalysisReliable()) {
+            std::cerr << "Analyzer did not publish its initial voice\n";
+            return 1;
+        }
+
+        std::vector<float> silence(static_cast<std::size_t>(PolyphonicAnalyzer::kHopSize), 0.0f);
+        pushUntilAnalysis(analyzer, silence);
+
+        if (analyzer.getVoices().empty()) {
+            std::cerr << "Analyzer released a voice before its grace period\n";
+            return 1;
+        }
+
+        // Four hops flush the overlapping FFT window. The remaining hops
+        // exceed the analyzer's eight-generation missing-voice allowance.
+        for (int i = 0; i < 20; ++i)
+            pushUntilAnalysis(analyzer, silence);
+
+        if (!analyzer.getVoices().empty() || analyzer.isAnalysisReliable()) {
+            std::cerr << "Analyzer did not expire a missing voice\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 13. VoiceManager starts independent STK voices and respects admission
+    // ------------------------------------------------------------
+
+    {
+        PolyphonicAnalyzer twoNotes;
+        twoNotes.prepare(sampleRate);
+        const auto chord = makeChord({50, 57});
+        pushUntilAnalysis(twoNotes, chord);
+
+        VoiceManager manager;
+        manager.prepare(sampleRate, 0.0f, 0.0f);
+        manager.setInputLevel(1.0f);
+        manager.setBowParameters(0.5f, 0.5f, 0.127f);
+        manager.updateDetectedVoices(twoNotes, true);
+
+        if (manager.getActiveVoiceCount() != 2) {
+            std::cerr << "VoiceManager did not start both analyzed notes\n";
+            return 1;
+        }
+
+        float renderedEnergy = 0.0f;
+        for (int i = 0; i < 2048; ++i)
+            renderedEnergy += std::abs(manager.processSample());
+
+        if (!(renderedEnergy > 0.0f)) {
+            std::cerr << "Active STK voices produced no output\n";
+            return 1;
+        }
+
+        PolyphonicAnalyzer threeNotes;
+        threeNotes.prepare(sampleRate);
+        const auto expandedChord = makeChord({50, 57, 60});
+        pushUntilAnalysis(threeNotes, expandedChord);
+        manager.updateDetectedVoices(threeNotes, false);
+
+        if (manager.getActiveVoiceCount() != 2) {
+            std::cerr << "VoiceManager admitted a voice without a note-on\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 14. VoiceManager releases only the voice lost by the analyzer
+    // ------------------------------------------------------------
+
+    {
+        PolyphonicAnalyzer chordAnalyzer;
+        chordAnalyzer.prepare(sampleRate);
+        const auto chord = makeChord({50, 57});
+        pushUntilAnalysis(chordAnalyzer, chord);
+
+        VoiceManager manager;
+        manager.prepare(sampleRate, 0.0f, 0.0f);
+        manager.setInputLevel(1.0f);
+        manager.updateDetectedVoices(chordAnalyzer, true);
+
+        PolyphonicAnalyzer oneNoteAnalyzer;
+        oneNoteAnalyzer.prepare(sampleRate);
+        const auto oneNote = makeChord({50});
+        pushUntilAnalysis(oneNoteAnalyzer, oneNote);
+
+        // Feed three distinct analyzer generations. The A3 is unmatched in
+        // each one and must release without taking D3 with it.
+        for (int i = 0; i < 3; ++i) {
+            pushUntilAnalysis(oneNoteAnalyzer,
+                              std::vector<float>(PolyphonicAnalyzer::kHopSize, 0.0f));
+            manager.updateDetectedVoices(oneNoteAnalyzer, false);
+        }
+
+        for (int i = 0; i < 16; ++i)
+            manager.processSample();
+
+        if (manager.getActiveVoiceCount() != 1 ||
+            !approximately(manager.getVoiceFrequencyHz(0), midiToFrequency(50), 10.0f)) {
+            std::cerr << "VoiceManager did not preserve the continuing voice on release\n";
+            return 1;
+        }
+    }
+
+    // ------------------------------------------------------------
+    // 15. Processor integrates input, analysis, STK rendering, and release
+    // ------------------------------------------------------------
+
+    {
+        ElectroBowAudioProcessor processor;
+        constexpr int blockSize = 256;
+        processor.prepareToPlay(sampleRate, blockSize);
+
+        juce::MidiBuffer midi;
+        double renderedEnergy = 0.0;
+
+        for (int block = 0; block < 64; ++block) {
+            juce::AudioBuffer<float> buffer(2, blockSize);
+
+            for (int sample = 0; sample < blockSize; ++sample) {
+                const int index = block * blockSize + sample;
+                const float value = 0.4f * std::sin(2.0f * pi * 220.0f * static_cast<float>(index) /
+                                                    static_cast<float>(sampleRate));
+                buffer.setSample(0, sample, value);
+                buffer.setSample(1, sample, value);
+            }
+
+            processor.processBlock(buffer, midi);
+
+            for (int sample = 0; sample < blockSize; ++sample) {
+                const float left = buffer.getSample(0, sample);
+                const float right = buffer.getSample(1, sample);
+
+                if (!std::isfinite(left) || !std::isfinite(right) ||
+                    !approximately(left, right, 0.000001f)) {
+                    std::cerr << "Processor produced invalid or mismatched stereo output\n";
+                    return 1;
+                }
+
+                renderedEnergy += std::abs(left);
+            }
+        }
+
+        if (processor.getActiveVoiceCount() != 1 || !(renderedEnergy > 0.0)) {
+            std::cerr << "Processor did not create and render its analyzed voice\n";
+            return 1;
+        }
+
+        processor.releaseResources();
+
+        if (processor.getActiveVoiceCount() != 0) {
+            std::cerr << "Processor did not clear voices on resource release\n";
             return 1;
         }
     }
