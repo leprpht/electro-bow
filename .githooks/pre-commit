@@ -1,8 +1,14 @@
-#!/usr/bin/env sh
-set -eu
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
 
 if ! command -v clang-format >/dev/null 2>&1; then
-    for llvm_bin in /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin; do
+    for llvm_bin in \
+        /opt/homebrew/opt/llvm/bin \
+        /usr/local/opt/llvm/bin
+    do
         if [ -x "$llvm_bin/clang-format" ]; then
             PATH="$llvm_bin:$PATH"
             export PATH
@@ -17,32 +23,45 @@ if ! command -v clang-format >/dev/null 2>&1; then
     exit 1
 fi
 
-files=$(git diff --cached --name-only --diff-filter=ACMR -- \
-    '*.c' '*.cc' '*.cpp' '*.cxx' '*.h' '*.hh' '*.hpp' '*.hxx' || true)
-
-for file in $files; do
+while IFS= read -r -d '' file; do
     case "$file" in
         ThirdParty/*) continue ;;
     esac
 
     clang-format -i "$file"
     git add -- "$file"
-done
+done < <(
+    git diff --cached --name-only -z --diff-filter=ACMR -- \
+        '*.c' '*.cc' '*.cpp' '*.cxx' \
+        '*.h' '*.hh' '*.hpp' '*.hxx'
+)
 
-ui_files=$(git diff --cached --name-only --diff-filter=ACMR -- \
-    'UI/*.css' 'UI/*.html' 'UI/*.json' 'UI/*.ts' 'UI/*.tsx' \
-    'UI/src/*.css' 'UI/src/*.html' 'UI/src/*.json' 'UI/src/*.ts' 'UI/src/*.tsx' || true)
+ui_files=()
 
-if [ -n "$ui_files" ]; then
-    prettier="UI/node_modules/.bin/prettier"
-    if [ ! -x "$prettier" ]; then
-        echo "pre-commit: Prettier is required for staged UI files but was not found." >&2
-        echo "Run 'npm ci' in UI/ first." >&2
+while IFS= read -r -d '' file; do
+    ui_files+=("$file")
+done < <(
+    git diff --cached --name-only -z --diff-filter=ACMR -- \
+        'UI/*.css' 'UI/*.html' 'UI/*.json' 'UI/*.ts' 'UI/*.tsx' \
+        'UI/src/*.css' 'UI/src/*.html' 'UI/src/*.json' \
+        'UI/src/*.ts' 'UI/src/*.tsx'
+)
+
+if [ "${#ui_files[@]}" -gt 0 ]; then
+    if ! command -v node >/dev/null 2>&1 ||
+       ! command -v npm >/dev/null 2>&1; then
+        echo "pre-commit: Node.js and npm are required for UI formatting." >&2
         exit 1
     fi
 
-    for file in $ui_files; do
-        "$prettier" --write "$file"
+    if [ ! -d "$repo_root/UI/node_modules/prettier" ]; then
+        echo "pre-commit: Prettier is required for staged UI files but was not found." >&2
+        echo "Run 'npm ci --prefix UI' first." >&2
+        exit 1
+    fi
+
+    for file in "${ui_files[@]}"; do
+        npm --prefix "$repo_root/UI" exec -- prettier --write "$repo_root/$file"
         git add -- "$file"
     done
 fi
