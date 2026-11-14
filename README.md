@@ -153,14 +153,22 @@ Every commit will format staged project C/C++ files and stage the formatting cha
 
 ## Releases
 
-Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.3.0` or `1.3.0` semantic-version tag is pushed, for example:
+Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.4.0` or `1.4.0` semantic-version tag is pushed.
+
+Before tagging, update the version in `CMakeLists.txt`, `UI/package.json`, and
+the root package entries in `UI/package-lock.json`. Add a dated changelog entry
+for the same version and commit these changes. Then create and push an annotated
+tag, for example:
 
 ```sh
-git tag v1.3.0
-git push origin v1.3.0
+git tag -a v1.4.0 -m "Release v1.4.0"
+git push --atomic origin main v1.4.0
 ```
 
-The workflow file must be committed and pushed before creating the tag. It can also be started manually from the Actions tab; manual runs build the artifacts but do not publish a release.
+The pre-push hook checks that the tagged commit contains a matching changelog
+entry. The workflow file must also be present in that commit. The workflow can
+be started manually from the Actions tab; manual runs build the artifacts but
+do not publish a release.
 
 The workflow builds and tests the plugin before packaging one VST3 archive per operating system. Each archive has `ElectroBow.vst3` at its root; on Windows the plugin binary is inside that package at `Contents/x86_64-win/ElectroBow.vst3`. Release notes are created from the matching version section in `CHANGELOG.md`.
 

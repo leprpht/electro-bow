@@ -5,6 +5,28 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-11-14
+
+### Added
+
+- Added Windows and macOS editor smoke tests that open and reopen the production
+  UI and verify embedded assets, styles, and the native plugin-state connection.
+- Added native error messages for unavailable WebView2 and browser data-folder
+  creation failures, with installation and troubleshooting guidance.
+
+### Changed
+
+- Use the native WebKit backend on macOS and select WebView2 only on Windows.
+- Updated the test wrapper to build the editor smoke tests on Windows and macOS.
+- Improved Windows setup and Git hook tooling for frontend dependencies and formatting.
+
+### Fixed
+
+- Fixed Windows UI startup by statically linking the WebView2 loader, removing
+  the dependency on a separate DLL and preventing an incompatible IE fallback.
+- Store Windows browser data in a writable, plugin-specific folder under
+  `%LOCALAPPDATA%` instead of beside the DAW executable.
+
 ## [1.3.6] - 2026-10-04
 
 ### Changed
