@@ -270,6 +270,7 @@ target_sources(ElectroBow
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/PluginProcessor.h
+        Source/FilterBank.h
         Source/PluginEditor.h
         Source/PitchDetector.h
         Source/PolyPitchDetector.h
@@ -318,9 +319,22 @@ target_link_libraries(ElectroBow
 # Unit tests.
 
 if(BUILD_TESTING)
-    add_executable(ElectroBowPitchDetectorTests
-        tests/PitchDetectorTests.cpp
+    add_executable(ElectroBowFilterBankTests
+        tests/FilterBankTests.cpp
         Source/PluginProcessor.cpp)
+    target_compile_features(ElectroBowFilterBankTests PRIVATE cxx_std_17)
+    target_compile_definitions(ElectroBowFilterBankTests PRIVATE
+        ELECTROBOW_TEST_BUILD=1
+        JUCE_USE_CURL=0
+        JucePlugin_Name="ElectroBow")
+    target_link_libraries(ElectroBowFilterBankTests PRIVATE
+        juce::juce_core
+        juce::juce_graphics
+        juce::juce_audio_processors_headless)
+    add_test(NAME ElectroBowFilterBankTests COMMAND ElectroBowFilterBankTests)
+
+    add_executable(ElectroBowPitchDetectorTests
+        tests/PitchDetectorTests.cpp)
 
     target_include_directories(ElectroBowPitchDetectorTests
         PRIVATE

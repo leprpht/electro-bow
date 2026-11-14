@@ -18,7 +18,7 @@ from typing import Optional
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-TEST_TARGETS = ["ElectroBowPitchDetectorTests"]
+TEST_TARGETS = ["ElectroBowFilterBankTests", "ElectroBowPitchDetectorTests"]
 if sys.platform in ("win32", "darwin"):
     TEST_TARGETS.append("ElectroBowEditorSmokeTests")
 

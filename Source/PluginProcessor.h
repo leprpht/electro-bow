@@ -2,16 +2,9 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
-#include "BowTrigger.h"
-#include "InputDynamics.h"
-#include "PitchDetector.h"
-#include "PolyphonicAnalyzer.h"
-#include "VoiceManager.h"
+#include "FilterBank.h"
 
-#include <array>
 #include <atomic>
-#include <cstdint>
-#include <vector>
 
 class ElectroBowAudioProcessor : public juce::AudioProcessor {
   public:
@@ -54,14 +47,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     void setStateInformation(const void* data, int sizeInBytes) override;
 
-    /*
-        Debug / UI access.
-
-        These values are derived from VoiceManager.
-        Continuous frequency in Hz remains the actual
-        pitch representation used by the synthesis.
-    */
-
+    // Legacy UI telemetry stays idle during the transparent filter-bank phase.
     float getPitchFrequencyHz() const noexcept;
 
     float getPitchConfidence() const noexcept;
@@ -74,67 +60,16 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     float getVoiceStrength(int index) const noexcept;
 
-    // State exposed to the WebView UI. Parameter writes are queued atomically
-    // and applied by the audio thread at the start of its next block.
+    // State exposed to the existing WebView UI; controls are inactive in Phase 1.
     juce::var getUiState() const;
 
     void setUiParameter(const juce::String& parameterId, float value) noexcept;
 
   private:
-    PolyphonicAnalyzer::PitchEstimate
-    trackIsolatedVoice(int voiceId, const std::vector<float>& samples, double sampleRate);
-
-    int findTrackerSlot(int voiceId) const noexcept;
-
-    int findFreeTrackerSlot() const noexcept;
+    FilterBank filterBank;
 
     /*
-        Polyphonic spectral analyzer.
-
-        It separates the incoming audio into approximate
-        individual voices and maintains persistent IDs.
-    */
-    PolyphonicAnalyzer polyphonicAnalyzer;
-
-    /*
-        One monophonic PitchDetector per analyzer voice.
-
-        These operate on the separated voice signals,
-        rather than on the complete chord.
-    */
-    std::array<PitchDetector, PolyphonicAnalyzer::kMaxVoices> isolatedTrackers;
-
-    /*
-        Maps analyzer voice IDs to PitchDetector slots.
-    */
-    std::array<int, PolyphonicAnalyzer::kMaxVoices> isolatedTrackerVoiceIds{};
-
-    /*
-        Owns the actual STK Bowed instances and their
-        per-voice envelopes.
-    */
-    VoiceManager voiceManager;
-
-    /*
-        Tracks the physical input attack. Analyzer candidates may change
-        during a pluck as its harmonics decay, but that is not a new note-on.
-    */
-    BowTrigger bowTrigger;
-    InputDynamics inputDynamics;
-    bool pendingNoteOn = false;
-    std::uint64_t lastAnalyzerGeneration = 0;
-
-    /*
-        Reused every processBlock.
-
-        No resize is performed during normal audio
-        processing.
-    */
-    std::vector<float> monoScratch;
-    std::vector<float> dynamicsScratch;
-
-    /*
-        Current instrument parameters.
+        Retained for session/UI compatibility; inactive during Phase 1.
     */
     float bowPressure = 0.5f;
     float bowSpeed = 0.5f;
@@ -148,12 +83,6 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     std::atomic<float> requestedFriction{0.127f};
     std::atomic<float> requestedAttackMs{50.0f};
     std::atomic<float> requestedNaturalResonanceMs{200.0f};
-
-    float audioBowPressure = 0.5f;
-    float audioBowSpeed = 0.5f;
-    float audioFriction = 0.127f;
-    float audioAttackMs = 50.0f;
-    float audioNaturalResonanceMs = 200.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ElectroBowAudioProcessor)
 };

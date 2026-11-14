@@ -1,6 +1,13 @@
 # ElectroBow
 
-ElectroBow is a JUCE-based VST3 audio plugin that detects the pitch of incoming audio and emits MIDI notes.
+ElectroBow is a JUCE-based VST3 audio plugin. The Phase 1 audio path is a transparent
+four-band parallel IIR filter bank at 200, 800, and 3000 Hz, supporting mono and
+stereo with zero added algorithmic latency. The bands currently recombine at
+unity gain; no bow processing runs. Existing bow controls/session data are
+retained, but the controls have no audio effect and pitch/voice displays stay idle.
+
+See [the Phase 1 report](docs/phase1-filter-bank.md) for the filter design,
+reconstruction measurements, CPU results, Release build, and modified files.
 
 ## Requirements
 
@@ -76,7 +83,9 @@ The release workflow builds the macOS plugin as a universal binary for both Appl
 
 ## Tests
 
-The test suite uses CTest and covers generated monophonic and polyphonic signals, including
+The test suite uses CTest and covers filter-bank reconstruction, phase/response,
+transients, stereo isolation, variable buffers, and processor integration. Retained
+component tests also cover generated monophonic and polyphonic signals, including
 isolated voice buffers, guitar-like harmonics, weak fundamentals, continuous pitch bends, and
 noise rejection:
 
@@ -93,7 +102,7 @@ python3 run_tests.py --verbose       # show detailed CTest output
 python3 run_tests.py --list          # list tests without running them
 ```
 
-On Windows, use `python run_tests.py`. The wrapper builds the pitch detector tests
+On Windows, use `python run_tests.py`. The wrapper builds the filter-bank and pitch detector tests
 and, on Windows/macOS, `ElectroBowEditorSmokeTests` before invoking CTest. The
 editor test requires a desktop session and opens the production editor twice,
 checking that the embedded React UI, CSS and native state bridge load correctly.
@@ -120,7 +129,8 @@ Visual Studio is only used as the compiler/generator on Windows; no solution fil
 - `Source/PluginEditor.*` hosts JUCE's WebView and serves the embedded frontend assets.
 - `UI/` contains the TypeScript/React/Tailwind frontend. Its production bundle is generated in
   `UI/dist/` and embedded into the VST3 during the CMake build.
-- `Source/PitchDetector.h` contains the aubio-based pitch detector.
+- `Source/FilterBank.h` contains the four independently accessible filter bands.
+- `Source/PitchDetector.h` contains the retained aubio-based pitch detector.
 - `ThirdParty/` contains the vendored aubio and STK sources used by the plugin.
 - `CMakeLists.txt` defines the platform-independent build.
 
