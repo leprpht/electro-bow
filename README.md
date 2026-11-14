@@ -65,6 +65,13 @@ The Windows release is a VST3 package, not a VST2 `.dll`: after extracting
 VST3 scan location such as `C:\Program Files\Common Files\VST3`, then rescan
 plugins in the DAW.
 
+The Windows UI requires the [Microsoft Edge WebView2 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/).
+Install or repair it and restart the DAW if ElectroBow reports that WebView2 could
+not start. The WebView2 loader is linked into the plugin, so no separate
+`WebView2Loader.dll` is needed. Browser data is stored in
+`%LOCALAPPDATA%\ElectroBow\WebView2`, which must be writable by the current user.
+macOS uses the system WebKit browser and does not require WebView2.
+
 The release workflow builds the macOS plugin as a universal binary for both Apple Silicon (`arm64`) and Intel (`x86_64`) Macs. Local builds use all available CPU cores through CMake's parallel build mode.
 
 ## Tests
@@ -86,8 +93,11 @@ python3 run_tests.py --verbose       # show detailed CTest output
 python3 run_tests.py --list          # list tests without running them
 ```
 
-On Windows, use `python run_tests.py`. The wrapper builds only the
-`ElectroBowPitchDetectorTests` target before invoking CTest. Use `--reconfigure`
+On Windows, use `python run_tests.py`. The wrapper builds the pitch detector tests
+and, on Windows/macOS, `ElectroBowEditorSmokeTests` before invoking CTest. The
+editor test requires a desktop session and opens the production editor twice,
+checking that the embedded React UI, CSS and native state bridge load correctly.
+Use `--reconfigure`
 after changing CMake options, or `--no-build` to run an already-built test binary.
 
 GitHub Actions runs the build and tests on every push and pull request for Windows, macOS, and Linux. Release builds run the same tests before packaging. CMake build directories are cached when the platform, JUCE version, and source inputs match.

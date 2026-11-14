@@ -22,9 +22,14 @@ std::optional<juce::WebBrowserComponent::Resource> makeResource(const char* reso
 
 ElectroBowAudioProcessorEditor::ElectroBowAudioProcessorEditor(ElectroBowAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p) {
+    setSize(760, 540);
+    browserError.setJustificationType(juce::Justification::centred);
+    browserError.setColour(juce::Label::textColourId, juce::Colours::white);
+    addChildComponent(browserError);
+    browserError.setBounds(getLocalBounds().reduced(30));
+
     auto options =
         juce::WebBrowserComponent::Options{}
-            .withBackend(juce::WebBrowserComponent::Options::Backend::webview2)
             .withNativeIntegrationEnabled()
             .withNativeFunction("getPluginState",
                                 [this](const juce::Array<juce::var>&, auto complete) {
@@ -40,11 +45,43 @@ ElectroBowAudioProcessorEditor::ElectroBowAudioProcessorEditor(ElectroBowAudioPr
                                 })
             .withResourceProvider([this](const juce::String& url) { return getResource(url); });
 
+#if JUCE_WINDOWS
+    // The default folder is next to the DAW executable, often in Program Files.
+    // Keep our browser profile in a writable, plugin-specific local directory.
+    const auto browserData = juce::File::getSpecialLocation(juce::File::windowsLocalAppData)
+                                 .getChildFile("ElectroBow")
+                                 .getChildFile("WebView2");
+    if (browserData.createDirectory().failed()) {
+        browserError.setText("ElectroBow could not create its browser data folder:\n" +
+                                 browserData.getFullPathName() +
+                                 "\nCheck that your user account can write to this folder.",
+                             juce::dontSendNotification);
+        browserError.setVisible(true);
+        return;
+    }
+
+    options =
+        options.withBackend(juce::WebBrowserComponent::Options::Backend::webview2)
+            .withWinWebView2Options(
+                juce::WebBrowserComponent::Options::WinWebView2{}.withUserDataFolder(browserData));
+
+    // JUCE otherwise silently falls back to IE, which cannot serve our embedded
+    // resources or run the React UI. Give the user an actionable native message.
+    if (!juce::WebBrowserComponent::areOptionsSupported(options)) {
+        browserError.setText("ElectroBow could not start Microsoft Edge WebView2.\n"
+                             "Install or repair the Microsoft Edge WebView2 Evergreen Runtime, "
+                             "then restart your DAW.",
+                             juce::dontSendNotification);
+        browserError.setVisible(true);
+        return;
+    }
+#endif
+
     webComponent = std::make_unique<juce::WebBrowserComponent>(options);
     addAndMakeVisible(*webComponent);
+    webComponent->setBounds(getLocalBounds());
     webComponent->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
 
-    setSize(760, 540);
     startTimerHz(30);
 }
 
@@ -87,6 +124,7 @@ void ElectroBowAudioProcessorEditor::paint(juce::Graphics& g) {
 }
 
 void ElectroBowAudioProcessorEditor::resized() {
+    browserError.setBounds(getLocalBounds().reduced(30));
     if (webComponent != nullptr)
         webComponent->setBounds(getLocalBounds());
 }
