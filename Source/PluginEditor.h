@@ -18,6 +18,7 @@ class ElectroBowAudioProcessorEditor : public juce::AudioProcessorEditor, privat
   private:
     ElectroBowAudioProcessor& processorRef;
     std::unique_ptr<juce::WebBrowserComponent> webComponent;
+    juce::Label browserError;
 
     std::optional<juce::WebBrowserComponent::Resource> getResource(const juce::String& url) const;
 

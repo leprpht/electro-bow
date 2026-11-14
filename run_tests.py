@@ -18,7 +18,9 @@ from typing import Optional
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-TEST_TARGET = "ElectroBowPitchDetectorTests"
+TEST_TARGETS = ["ElectroBowPitchDetectorTests"]
+if sys.platform in ("win32", "darwin"):
+    TEST_TARGETS.append("ElectroBowEditorSmokeTests")
 
 
 def run(command: list[str], *, quiet: bool = False) -> None:
@@ -125,7 +127,7 @@ def main() -> int:
                 "--config",
                 args.config,
                 "--target",
-                TEST_TARGET,
+                *TEST_TARGETS,
                 "--parallel",
             ]
         )

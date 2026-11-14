@@ -291,7 +291,9 @@ target_compile_definitions(ElectroBow
     PRIVATE
         _USE_MATH_DEFINES=1
         JUCE_WEB_BROWSER=1
-        JUCE_USE_WIN_WEBVIEW2=1
+        # NEEDS_WEBVIEW2 links the static loader; select it in JUCE too so the
+        # installed plugin never searches the DAW's DLL path for a loader.
+        JUCE_USE_WIN_WEBVIEW2_WITH_STATIC_LINKING=1
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0)
 
@@ -347,4 +349,19 @@ if(BUILD_TESTING)
     add_test(
         NAME ElectroBowPitchDetectorTests
         COMMAND ElectroBowPitchDetectorTests)
+
+    # Exercise the actual editor and embedded assets in a native browser. These
+    # platforms provide a desktop session on the CI runners; Linux is headless.
+    if(WIN32 OR APPLE)
+        add_executable(ElectroBowEditorSmokeTests tests/EditorSmokeTests.cpp)
+        target_compile_features(ElectroBowEditorSmokeTests PRIVATE cxx_std_17)
+        target_include_directories(ElectroBowEditorSmokeTests PRIVATE
+            $<TARGET_PROPERTY:ElectroBow,INCLUDE_DIRECTORIES>)
+        target_compile_definitions(ElectroBowEditorSmokeTests PRIVATE
+            $<TARGET_PROPERTY:ElectroBow,COMPILE_DEFINITIONS>
+            $<$<PLATFORM_ID:Windows>:_CONSOLE>)
+        target_link_libraries(ElectroBowEditorSmokeTests PRIVATE ElectroBow)
+        add_test(NAME ElectroBowEditorSmokeTests COMMAND ElectroBowEditorSmokeTests)
+        set_tests_properties(ElectroBowEditorSmokeTests PROPERTIES TIMEOUT 60)
+    endif()
 endif()
