@@ -118,4 +118,15 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
     juce::String lastResult = "browser unavailable or JavaScript did not respond";
 };
 
+#if JUCE_WINDOWS
+// Keep console output for CTest, but use the no-argument GUI entry point that
+// JUCE compiled into the production plugin (not the _CONSOLE-only overload).
+int main() {
+    juce::JUCEApplicationBase::createInstance = []() -> juce::JUCEApplicationBase* {
+        return new EditorSmokeTests();
+    };
+    return juce::JUCEApplicationBase::main();
+}
+#else
 START_JUCE_APPLICATION(EditorSmokeTests)
+#endif

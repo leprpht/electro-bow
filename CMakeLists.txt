@@ -358,8 +358,7 @@ if(BUILD_TESTING)
         target_include_directories(ElectroBowEditorSmokeTests PRIVATE
             $<TARGET_PROPERTY:ElectroBow,INCLUDE_DIRECTORIES>)
         target_compile_definitions(ElectroBowEditorSmokeTests PRIVATE
-            $<TARGET_PROPERTY:ElectroBow,COMPILE_DEFINITIONS>
-            $<$<PLATFORM_ID:Windows>:_CONSOLE>)
+            $<TARGET_PROPERTY:ElectroBow,COMPILE_DEFINITIONS>)
         target_link_libraries(ElectroBowEditorSmokeTests PRIVATE ElectroBow)
         add_test(NAME ElectroBowEditorSmokeTests COMMAND ElectroBowEditorSmokeTests)
         set_tests_properties(ElectroBowEditorSmokeTests PROPERTIES TIMEOUT 60)
