@@ -18,7 +18,7 @@ from typing import Optional
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-TEST_TARGETS = ["ElectroBowPitchDetectorTests"]
+TEST_TARGETS = ["ElectroBowFilterBankTests", "ElectroBowPitchDetectorTests"]
 if sys.platform in ("win32", "darwin"):
     TEST_TARGETS.append("ElectroBowEditorSmokeTests")
 
@@ -109,6 +109,7 @@ def main() -> int:
             str(build_dir),
             f"-DJUCE_PATH={juce_path}",
             "-DBUILD_TESTING=ON",
+            f"-DCMAKE_BUILD_TYPE={args.config}",
             *cmake_args(args.cmake_arg),
         ]
         if args.generator:

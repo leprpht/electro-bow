@@ -9,7 +9,7 @@ if not defined JUCE_PATH set "JUCE_PATH=%PROJECT_DIR%JUCE"
 
 echo Checking required commands...
 
-for %%C in (git node npm python cmake clang-format) do (
+for %%C in (git node npm python cmake clang-format rustup cargo rustc) do (
     where %%C >nul 2>&1
     if errorlevel 1 (
         echo setup: required command '%%C' was not found in PATH.
@@ -17,6 +17,14 @@ for %%C in (git node npm python cmake clang-format) do (
     )
     echo setup: found %%C.
 )
+
+pushd "%PROJECT_DIR%"
+rustup show
+if errorlevel 1 (
+    popd
+    exit /b 1
+)
+popd
 
 if exist "%JUCE_PATH%\CMakeLists.txt" goto juce_found
 if exist "%JUCE_PATH%" goto invalid_juce_path

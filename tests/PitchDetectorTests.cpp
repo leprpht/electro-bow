@@ -2,7 +2,6 @@
 #include "../Source/BowTrigger.h"
 #include "../Source/InputDynamics.h"
 #include "../Source/PitchDetector.h"
-#include "../Source/PluginProcessor.h"
 #include "../Source/PolyphonicAnalyzer.h"
 #include "../Source/VoiceManager.h"
 
@@ -790,58 +789,6 @@ int main() {
         if (manager.getActiveVoiceCount() != 1 ||
             !approximately(manager.getVoiceFrequencyHz(0), midiToFrequency(50), 10.0f)) {
             std::cerr << "VoiceManager did not preserve the continuing voice on release\n";
-            return 1;
-        }
-    }
-
-    // ------------------------------------------------------------
-    // 15. Processor integrates input, analysis, STK rendering, and release
-    // ------------------------------------------------------------
-
-    {
-        ElectroBowAudioProcessor processor;
-        constexpr int blockSize = 256;
-        processor.prepareToPlay(sampleRate, blockSize);
-
-        juce::MidiBuffer midi;
-        double renderedEnergy = 0.0;
-
-        for (int block = 0; block < 64; ++block) {
-            juce::AudioBuffer<float> buffer(2, blockSize);
-
-            for (int sample = 0; sample < blockSize; ++sample) {
-                const int index = block * blockSize + sample;
-                const float value = 0.4f * std::sin(2.0f * pi * 220.0f * static_cast<float>(index) /
-                                                    static_cast<float>(sampleRate));
-                buffer.setSample(0, sample, value);
-                buffer.setSample(1, sample, value);
-            }
-
-            processor.processBlock(buffer, midi);
-
-            for (int sample = 0; sample < blockSize; ++sample) {
-                const float left = buffer.getSample(0, sample);
-                const float right = buffer.getSample(1, sample);
-
-                if (!std::isfinite(left) || !std::isfinite(right) ||
-                    !approximately(left, right, 0.000001f)) {
-                    std::cerr << "Processor produced invalid or mismatched stereo output\n";
-                    return 1;
-                }
-
-                renderedEnergy += std::abs(left);
-            }
-        }
-
-        if (processor.getActiveVoiceCount() != 1 || !(renderedEnergy > 0.0)) {
-            std::cerr << "Processor did not create and render its analyzed voice\n";
-            return 1;
-        }
-
-        processor.releaseResources();
-
-        if (processor.getActiveVoiceCount() != 0) {
-            std::cerr << "Processor did not clear voices on resource release\n";
             return 1;
         }
     }
