@@ -6,6 +6,7 @@ project(ElectroBow VERSION 1.4.0)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 include(CTest)
+include(cmake/RustDsp.cmake)
 
 # ---------------------------------------------------------------------------
 # JUCE
@@ -254,6 +255,16 @@ juce_add_plugin(ElectroBow
     NEEDS_WEB_BROWSER TRUE
     NEEDS_WEBVIEW2 TRUE)
 
+# JUCE writes moduleinfo.json after its initial signing pass. Sign the final
+# bundle so both native and universal Release outputs can be loaded directly.
+if(APPLE)
+    find_program(ELECTROBOW_CODESIGN codesign REQUIRED)
+    add_custom_command(TARGET ElectroBow_VST3 POST_BUILD
+        COMMAND "${ELECTROBOW_CODESIGN}" --force --sign - "$<TARGET_BUNDLE_DIR:ElectroBow_VST3>"
+        COMMAND "${ELECTROBOW_CODESIGN}" --verify --deep --strict "$<TARGET_BUNDLE_DIR:ElectroBow_VST3>"
+        COMMENT "Signing the completed VST3 bundle" VERBATIM)
+endif()
+
 # ---------------------------------------------------------------------------
 # Third-party include directories.
 
@@ -307,6 +318,7 @@ target_link_libraries(ElectroBow
         juce::juce_gui_extra
         juce::juce_dsp
         ElectroBowWebUIData
+        ElectroBowRust
         aubio_static
         stk_bowed
 
@@ -328,6 +340,7 @@ if(BUILD_TESTING)
         JUCE_USE_CURL=0
         JucePlugin_Name="ElectroBow")
     target_link_libraries(ElectroBowFilterBankTests PRIVATE
+        ElectroBowRust
         juce::juce_core
         juce::juce_graphics
         juce::juce_audio_processors_headless)

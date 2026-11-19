@@ -1,0 +1,11 @@
+[workspace]
+members = ["rust/dsp"]
+resolver = "3"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = "thin"
+codegen-units = 1

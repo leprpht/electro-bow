@@ -109,6 +109,7 @@ def main() -> int:
             str(build_dir),
             f"-DJUCE_PATH={juce_path}",
             "-DBUILD_TESTING=ON",
+            f"-DCMAKE_BUILD_TYPE={args.config}",
             *cmake_args(args.cmake_arg),
         ]
         if args.generator:

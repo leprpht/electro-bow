@@ -1,5 +1,9 @@
 #include "../Source/FilterBank.h"
 #include "../Source/PluginProcessor.h"
+#include "reference/CppFilterBankReference.h"
+
+#include <algorithm>
+#include <vector>
 
 #include <chrono>
 #include <complex>
@@ -252,6 +256,62 @@ void testStateAndBands() {
         << "PASS: band access, channel isolation, partitioning, reset, reprepare, transients\n";
 }
 
+// Compare every independent band with the committed C++ implementation, not
+// just the sum: a bypass or a changed crossover cannot hide behind cancellation.
+void testCppParity() {
+    double maximumBandError = 0.0, maximumOutputError = 0.0;
+    const auto signal = makeSignal(16384);
+    for (double rate :
+         {4000.0, 8000.0, 22050.0, 44100.0, 48000.0, 88200.0, 96000.0, 192000.0, 384000.0}) {
+        for (int channels : {1, 2}) {
+            FilterBank rust;
+            CppFilterBankReference cpp;
+            rust.prepare(rate, 2048, channels);
+            cpp.prepare(rate, 2048, channels);
+            for (int pass = 0; pass < 2; ++pass) {
+                if (pass != 0) {
+                    rust.reset();
+                    cpp.reset();
+                }
+                int offset = 0;
+                for (int block = 0; offset < static_cast<int>(signal[0].size()); ++block) {
+                    const std::array<int, 5> sizes{1, 17, 64, 257, 2048};
+                    const int count =
+                        std::min(sizes[static_cast<std::size_t>(block) % sizes.size()],
+                                 static_cast<int>(signal[0].size()) - offset);
+                    const float* input[]{signal[0].data() + offset, signal[1].data() + offset};
+                    rust.split(input, count);
+                    cpp.split(input, count);
+                    for (int band = 0; band < FilterBank::numBands; ++band)
+                        for (int channel = 0; channel < channels; ++channel)
+                            for (int i = 0; i < count; ++i)
+                                maximumBandError =
+                                    std::max(maximumBandError,
+                                             std::abs(static_cast<double>(
+                                                          rust.getBandData(band, channel)[i]) -
+                                                      cpp.getBandData(band, channel)[i]));
+                    std::array<std::array<float, 2048>, 2> rustOutput{}, cppOutput{};
+                    float* rustPointers[]{rustOutput[0].data(), rustOutput[1].data()};
+                    float* cppPointers[]{cppOutput[0].data(), cppOutput[1].data()};
+                    rust.recombine(rustPointers);
+                    cpp.recombine(cppPointers);
+                    for (int channel = 0; channel < channels; ++channel)
+                        for (int i = 0; i < count; ++i)
+                            maximumOutputError =
+                                std::max(maximumOutputError,
+                                         std::abs(static_cast<double>(rustPointers[channel][i]) -
+                                                  cppPointers[channel][i]));
+                    offset += count;
+                }
+            }
+        }
+    }
+    require(maximumBandError < 2.0e-7 && maximumOutputError < 2.0e-7,
+            "Rust preserves the original C++ bands and reconstruction");
+    std::cout << "C++/Rust parity: max band error=" << maximumBandError
+              << ", max output error=" << maximumOutputError << '\n';
+}
+
 void testProcessor() {
     ElectroBowAudioProcessor processor;
     juce::MidiBuffer midi;
@@ -337,6 +397,7 @@ int main() {
     for (double rate :
          {4000.0, 8000.0, 22050.0, 44100.0, 48000.0, 88200.0, 96000.0, 192000.0, 384000.0})
         measureReconstruction(rate);
+    testCppParity();
     testStateAndBands();
     testProcessor();
     benchmark();

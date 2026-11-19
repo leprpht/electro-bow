@@ -118,6 +118,7 @@ def main() -> int:
         not cache_file.is_file()
         or not has_build_files(build_dir)
         or cached_juce_path(cache_file) != juce_path_obj
+        or not cached_cmake_arg(cache_file, f"CMAKE_BUILD_TYPE={args.config}")
         or any(not cached_cmake_arg(cache_file, arg) for arg in args.cmake_arg)
     )
 
@@ -130,6 +131,7 @@ def main() -> int:
                 "-B",
                 str(build_dir),
                 f"-DJUCE_PATH={juce_path_obj}",
+                f"-DCMAKE_BUILD_TYPE={args.config}",
                 *[arg if arg.startswith("-D") else f"-D{arg}" for arg in args.cmake_arg],
             ],
             check=True,

@@ -1,6 +1,11 @@
 # Phase 1 — four-band filter bank
 
-Implemented on `feature/phase1-filter-bank`, 2026-11-15.
+Implemented on `feature/filter-bank`, 2026-11-15.
+
+The DSP implementation was migrated to Rust on 2026-11-19. The topology and
+measurements below are the original baseline; direct C++/Rust parity tests now
+verify every band. See [Rust integration and validation](rust-dsp.md) for current
+source ownership, build prerequisites, and migration results.
 
 ## Integration and scope
 
@@ -158,8 +163,8 @@ All three suites pass: `ElectroBowFilterBankTests`,
 `ElectroBowEditorSmokeTests` (actual embedded UI open/reopen).
 
 Artifact: `build/ElectroBow_artefacts/Release/VST3/ElectroBow.vst3`.
-JUCE generated `moduleinfo.json` after its signing step, leaving the first
-signature stale. The final local bundle was signed again and strict verification
+The original build generated `moduleinfo.json` after its signing step, leaving the first
+signature stale. Current CMake builds sign and verify after manifest generation. The final local bundle was signed again and strict verification
 passed. On macOS, after building:
 
 ```sh

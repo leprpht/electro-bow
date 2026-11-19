@@ -29,6 +29,20 @@ jobs:
       - name: Check out project
         uses: actions/checkout@v4
 
+      - name: Set up pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup show
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          fi
+
+      - name: Check Rust formatting and lints
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets --locked --offline -- -D warnings
+
       - name: Check out JUCE
         uses: actions/checkout@v4
         with:
@@ -100,7 +114,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: build
-          key: electrobow-${{ runner.os }}-${{ runner.arch }}-${{ matrix.name }}-juce-${{ env.JUCE_VERSION }}-${{ hashFiles('CMakeLists.txt', 'build.py') }}
+          key: electrobow-${{ runner.os }}-${{ runner.arch }}-${{ matrix.name }}-juce-${{ env.JUCE_VERSION }}-${{ hashFiles('CMakeLists.txt', 'cmake/**', 'build.py', 'Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rust/**') }}
           restore-keys: |
             electrobow-${{ runner.os }}-${{ runner.arch }}-${{ matrix.name }}-juce-${{ env.JUCE_VERSION }}-
 

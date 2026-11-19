@@ -39,6 +39,10 @@ require_command node
 require_command npm
 require_command python3
 require_command cmake
+require_command rustup
+require_command cargo
+require_command rustc
+(cd "$project_dir" && rustup show)
 require_any_command clang++ c++ g++
 require_command clang-format
 
