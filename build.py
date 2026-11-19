@@ -81,7 +81,15 @@ def main() -> int:
         default=[],
         help="Additional CMake cache entry, without the -D prefix",
     )
+    parser.add_argument(
+        "--parallel",
+        type=int,
+        default=os.environ.get("CMAKE_BUILD_PARALLEL_LEVEL") or min(8, os.cpu_count() or 1),
+        help="Maximum build jobs (defaults to CMAKE_BUILD_PARALLEL_LEVEL or up to 8 CPUs)",
+    )
     args = parser.parse_args()
+    if args.parallel < 1:
+        parser.error("--parallel must be positive")
 
     try:
         cmake = require_command("cmake", "CMake")
@@ -138,7 +146,7 @@ def main() -> int:
         )
 
     subprocess.run(
-        [cmake, "--build", str(build_dir), "--config", args.config, "--parallel"],
+        [cmake, "--build", str(build_dir), "--config", args.config, "--parallel", str(args.parallel)],
         check=True,
     )
     return 0
