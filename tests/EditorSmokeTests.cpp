@@ -30,7 +30,7 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
     void openEditor() {
         // Distinct from the frontend defaults, so a rendered but disconnected
         // React page cannot pass. Reopening also checks browser teardown/reuse.
-        processor->setUiParameter("bowPressure", completedLoads == 0 ? 0.73f : 0.29f);
+        processor->setUiParameter("bowCharacter", completedLoads == 0 ? 0.73f : 0.29f);
         editor = std::make_unique<ElectroBowAudioProcessorEditor>(*processor);
         editor->addToDesktop(juce::ComponentPeer::windowIsTemporary);
         editor->setVisible(true);
@@ -79,9 +79,9 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
         const auto script = juce::String(R"JS(
             (() => {
                 const shell = document.querySelector('.app-shell');
-                const pressure = document.querySelector('input[aria-label="Bow pressure"]');
+                const pressure = document.querySelector('input[aria-label="Bow Character"]');
                 const ready = !!shell && !!pressure
-                    && document.querySelectorAll('input[type="range"]').length === 5
+                    && document.querySelectorAll('input[type="range"]').length === 2
                     && !!document.querySelector('.status-live')
                     && parseFloat(getComputedStyle(shell).paddingTop) > 0
                     && Math.abs(Number(pressure.value) - )JS") +

@@ -37,6 +37,9 @@ class FilterBank {
     void processAttack(double milliseconds) noexcept {
         eb_filter_bank_attack(handle.get(), milliseconds);
     }
+    void processCharacter(double amount) noexcept {
+        eb_filter_bank_character(handle.get(), amount);
+    }
     void reset() noexcept {
         eb_filter_bank_reset(handle.get());
     }

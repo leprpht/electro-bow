@@ -3,6 +3,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 mod attack;
+mod character;
 pub mod filter_bank;
 use filter_bank::FilterBank;
 use std::{ptr, slice};
@@ -185,5 +186,22 @@ pub unsafe extern "C" fn eb_filter_bank_attack(bank: *mut FilterBank, millisecon
         bank.valid_samples,
         milliseconds,
     );
+    1
+}
+
+/// Apply Bow Character to current bands after Attack and before recombination.
+/// # Safety
+/// Same exclusive live-handle and borrowed-buffer contract as reset.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn eb_filter_bank_character(bank: *mut FilterBank, amount: f64) -> i32 {
+    // SAFETY: caller supplies an exclusive live handle or null.
+    let Some(bank) = (unsafe { bank.as_mut() }) else {
+        return 0;
+    };
+    if !amount.is_finite() {
+        return 0;
+    }
+    bank.character
+        .process(&mut bank.bands, bank.channels, bank.valid_samples, amount);
     1
 }

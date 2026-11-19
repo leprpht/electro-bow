@@ -18,6 +18,8 @@ typedef struct EbFilterBank EbFilterBank;
 EbFilterBank* eb_filter_bank_create(double rate, int32_t capacity, int32_t channels);
 void eb_filter_bank_destroy(EbFilterBank* bank);
 void eb_filter_bank_reset(EbFilterBank* bank);
+// Coordinated spectral/friction character, normalized 0..1.
+int32_t eb_filter_bank_character(EbFilterBank* bank, double amount);
 // Continuous spectral attack control, 0..500 ms, on the current split buffers.
 int32_t eb_filter_bank_attack(EbFilterBank* bank, double milliseconds);
 
