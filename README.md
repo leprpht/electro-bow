@@ -1,6 +1,6 @@
 # ElectroBow
 
-ElectroBow is a JUCE-based VST3 audio plugin. The Phase 1 audio path is a transparent
+ElectroBow is a JUCE-based VST3 audio plugin. Audio path is a transparent
 four-band parallel IIR filter bank at 200, 800, and 3000 Hz, supporting mono and
 stereo with zero added algorithmic latency. A continuous Rust attack shaper now softens upper-band transients before
 recombination; Attack at minimum restores unity reconstruction. No bow processing runs. Existing bow controls/session data are
