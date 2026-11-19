@@ -230,12 +230,12 @@ function App() {
             <Slider
               id="attackMs"
               label="Attack"
-              description="Envelope rise"
+              description="Pick transient smoothing"
               value={state.parameters.attackMs}
               min={0}
               max={500}
               step={1}
-              format={(value) => `${Math.round(value)} ms`}
+              format={(value) => `${Math.round(value / 5)}%`}
               onChange={setParameter}
             />
             <Slider

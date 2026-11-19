@@ -66,7 +66,7 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         }
 
         filterBank.split(input.data(), count);
-        // Future per-band DSP belongs here, using getBandData(band, channel).
+        filterBank.processAttack(requestedAttackMs.load());
         filterBank.recombine(output.data());
         offset += count;
     }
@@ -170,7 +170,7 @@ void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInB
 
     friction = std::clamp(stream.readFloat(), 0.0f, 1.0f);
 
-    attackMs = std::max(0.0f, stream.readFloat());
+    attackMs = std::clamp(stream.readFloat(), 0.0f, 500.0f);
 
     naturalResonanceMs = std::max(0.0f, stream.readFloat());
 
@@ -246,7 +246,7 @@ void ElectroBowAudioProcessor::setUiParameter(const juce::String& parameterId,
         friction = std::clamp(value, 0.0f, 1.0f);
         requestedFriction.store(friction);
     } else if (parameterId == "attackMs") {
-        attackMs = std::max(0.0f, value);
+        attackMs = std::clamp(value, 0.0f, 500.0f);
         requestedAttackMs.store(attackMs);
     } else if (parameterId == "naturalResonanceMs") {
         naturalResonanceMs = std::max(0.0f, value);

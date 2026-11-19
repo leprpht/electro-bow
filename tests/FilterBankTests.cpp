@@ -314,6 +314,7 @@ void testCppParity() {
 
 void testProcessor() {
     ElectroBowAudioProcessor processor;
+    processor.setUiParameter("attackMs", 0.0f);
     juce::MidiBuffer midi;
     for (int channels : {1, 2}) {
         auto layout = processor.getBusesLayout();
@@ -357,12 +358,46 @@ void testProcessor() {
         << "PASS: processor mono/stereo, variable/oversized/empty blocks, latency and lifecycle\n";
 }
 
+void testAttackIntegration() {
+    for (double rate : {8000.0, 44100.0, 48000.0, 96000.0, 192000.0}) {
+        ElectroBowAudioProcessor dry, wet;
+        dry.setUiParameter("attackMs", 0.0f);
+        wet.setUiParameter("attackMs", 500.0f);
+        dry.prepareToPlay(rate, 64);
+        wet.prepareToPlay(rate, 64);
+        juce::MidiBuffer midi;
+        double difference = 0.0;
+        for (int block = 0; block < 20; ++block) {
+            juce::AudioBuffer<float> a(2, 257), b(2, 257);
+            for (int i = 0; i < 257; ++i) {
+                const float x = static_cast<float>(
+                    0.5 * std::sin(2.0 * pi * rate * 0.2 * (block * 257 + i) / rate));
+                a.setSample(0, i, x);
+                a.setSample(1, i, x * 0.5f);
+            }
+            b.makeCopyOf(a);
+            dry.processBlock(a, midi);
+            wet.processBlock(b, midi);
+            for (int i = 0; i < 257; ++i) {
+                require(std::isfinite(b.getSample(0, i)), "finite attack output");
+                require(std::abs(b.getSample(0, i) * 0.5f - b.getSample(1, i)) < 1e-7f,
+                        "attack stereo linking preserves channel ratio");
+                difference += std::abs(a.getSample(0, i) - b.getSample(0, i));
+            }
+        }
+        require(difference > 1.0, "Attack parameter reaches Rust DSP");
+        require(wet.getLatencySamples() == 0, "attack adds no buffering latency");
+    }
+}
+
 void benchmark() {
     // Median of seven batches, each one second of stereo audio. This measures
     // DSP + processor dispatch, excluding host, GUI and audio-device scheduling.
     volatile double checksum = 0.0;
     for (int blockSize : {16, 64, 256, 1024}) {
         ElectroBowAudioProcessor processor;
+        processor.setUiParameter("attackMs", 0.0f);
+        processor.setUiParameter("attackMs", 500.0f);
         processor.prepareToPlay(48000.0, blockSize);
         juce::AudioBuffer<float> buffer(2, blockSize);
         const auto input = makeSignal(blockSize);
@@ -400,6 +435,7 @@ int main() {
     testCppParity();
     testStateAndBands();
     testProcessor();
+    testAttackIntegration();
     benchmark();
     std::cout << "All FilterBank tests passed.\n";
 }

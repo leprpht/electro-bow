@@ -60,7 +60,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     float getVoiceStrength(int index) const noexcept;
 
-    // State exposed to the existing WebView UI; controls are inactive in Phase 1.
+    // State exposed to the existing WebView UI; Attack is active; bow controls remain inactive.
     juce::var getUiState() const;
 
     void setUiParameter(const juce::String& parameterId, float value) noexcept;
@@ -69,7 +69,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     FilterBank filterBank;
 
     /*
-        Retained for session/UI compatibility; inactive during Phase 1.
+        Attack controls Rust spectral smoothing. Other controls remain for session compatibility.
     */
     float bowPressure = 0.5f;
     float bowSpeed = 0.5f;

@@ -2,9 +2,9 @@
 
 ElectroBow is a JUCE-based VST3 audio plugin. The Phase 1 audio path is a transparent
 four-band parallel IIR filter bank at 200, 800, and 3000 Hz, supporting mono and
-stereo with zero added algorithmic latency. The bands currently recombine at
-unity gain; no bow processing runs. Existing bow controls/session data are
-retained, but the controls have no audio effect and pitch/voice displays stay idle.
+stereo with zero added algorithmic latency. A continuous Rust attack shaper now softens upper-band transients before
+recombination; Attack at minimum restores unity reconstruction. No bow processing runs. Existing bow controls/session data are
+retained, but only Attack currently affects audio; pitch/voice displays stay idle.
 
 See [the Phase 1 report](docs/phase1-filter-bank.md) for the filter design,
 reconstruction measurements, CPU results, Release build, and modified files.
@@ -238,3 +238,5 @@ Keep the changelog in this strict structure:
 ```
 
 Allowed category headings are `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, and `Security`. The release workflow requires the exact version heading and date before publishing.
+
+See [attack processing](docs/attack-processing.md) for the algorithm and validation.
