@@ -145,14 +145,14 @@ function App() {
           </div>
           <div className="monitor-footer">
             <div>
-              <span className="metric-label">Tracking confidence</span>
+              <span className="metric-label">Tracking inactive</span>
               <span className="metric-value">{confidencePercent}%</span>
             </div>
             <SignalBars confidence={state.pitch.confidence} />
           </div>
           <div className="voices-block">
             <div className="flex items-center justify-between">
-              <span className="section-kicker">Active voices</span>
+              <span className="section-kicker">Voice synthesis inactive</span>
               <span className="font-mono text-xs text-cyan-300">{voices.length}/4</span>
             </div>
             <div className="mt-3 grid grid-cols-2 gap-2">
@@ -172,7 +172,7 @@ function App() {
                 ))
               ) : (
                 <div className="col-span-2 rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs text-slate-500">
-                  Play into the input to reveal tracked voices.
+                  Continuous audio processing; pitch and voice tracking are inactive.
                 </div>
               )}
             </div>
@@ -194,32 +194,10 @@ function App() {
 
           <div className="mt-6 space-y-5">
             <Slider
-              id="bowPressure"
-              label="Bow pressure"
-              description="Contact weight"
-              value={state.parameters.bowPressure}
-              min={0}
-              max={1}
-              step={0.001}
-              format={(value) => `${Math.round(value * 100)}%`}
-              onChange={setParameter}
-            />
-            <Slider
-              id="bowSpeed"
-              label="Bow speed"
-              description="Excitation velocity"
-              value={state.parameters.bowSpeed}
-              min={0}
-              max={1}
-              step={0.001}
-              format={(value) => `${Math.round(value * 100)}%`}
-              onChange={setParameter}
-            />
-            <Slider
-              id="friction"
-              label="Friction"
-              description="String texture"
-              value={state.parameters.friction}
+              id="bowCharacter"
+              label="Bow Character"
+              description="Smooth · textured · rough"
+              value={state.parameters.bowCharacter}
               min={0}
               max={1}
               step={0.001}
@@ -238,23 +216,12 @@ function App() {
               format={(value) => `${Math.round(value / 5)}%`}
               onChange={setParameter}
             />
-            <Slider
-              id="naturalResonanceMs"
-              label="Natural resonance"
-              description="Release tail"
-              value={state.parameters.naturalResonanceMs}
-              min={0}
-              max={1000}
-              step={1}
-              format={(value) => `${Math.round(value)} ms`}
-              onChange={setParameter}
-            />
           </div>
         </section>
       </div>
 
       <footer className="bottomline">
-        <span>ANALYSIS ENGINE / POLYPHONIC YIN</span>
+        <span>RUST DSP / CONTINUOUS AUDIO</span>
         <span className="text-slate-600">ELECTROBOW · 01</span>
       </footer>
     </main>

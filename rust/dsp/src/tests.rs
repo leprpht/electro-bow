@@ -158,6 +158,7 @@ fn processing_has_no_heap_operations_and_band_addresses_stay_stable() {
         for _ in 0..1000 {
             success &= eb_filter_bank_split(bank, input.as_ptr(), 256) == 1;
             success &= eb_filter_bank_attack(bank, 500.0) == 1;
+            success &= eb_filter_bank_character(bank, 1.0) == 1;
             success &= eb_filter_bank_recombine(bank, output.as_ptr()) == 1;
             success &= eb_filter_bank_band(bank, 2, 1) == address;
         }
@@ -237,4 +238,111 @@ fn attack_softens_high_frequency_onsets_and_recovers_sustain() {
     let sustain = energy(&smooth[40000..]) / energy(&dry[40000..]);
     assert!((sustain - 1.0).abs() < 0.02);
     println!("Attack onset energy ratio={ratio:.6}, sustained energy ratio={sustain:.6}");
+}
+
+fn character_render(input: &[f32], amount: f64, scale: f32, chunk: usize, rate: f64) -> Vec<f32> {
+    let mut bank = FilterBank::new(rate, chunk, 1).unwrap();
+    let mut result = Vec::new();
+    for source in input.chunks(chunk) {
+        let source: Vec<_> = source.iter().map(|x| x * scale).collect();
+        bank.split_channel(0, &source);
+        bank.character
+            .process(&mut bank.bands, 1, source.len(), amount);
+        let mut output = vec![0.0; source.len()];
+        bank.recombine_channel(0, &mut output);
+        result.extend(output);
+    }
+    result
+}
+
+#[test]
+fn character_chords_fast_playing_scaling_and_partitioning() {
+    for rate in [8000.0, 44100.0, 48000.0, 96000.0, 192000.0] {
+        let source: Vec<f32> = (0..12000)
+            .map(|i| {
+                let t = i as f64 / rate;
+                let envelope = (-40.0 * (t % 0.06)).exp();
+                (envelope
+                    * [147.0, 220.0, 294.0, 1100.0]
+                        .iter()
+                        .map(|f| 0.15 * (std::f64::consts::TAU * f * t).sin())
+                        .sum::<f64>()) as f32
+            })
+            .collect();
+        for amount in [0.0, 0.5, 1.0] {
+            let a = character_render(&source, amount, 1.0, 256, rate);
+            let b = character_render(&source, amount, 0.1, 17, rate);
+            let c = character_render(&source, amount, 1.0, 17, rate);
+            for ((x, y), z) in a.iter().zip(b).zip(c) {
+                assert!(x.is_finite() && x.abs() < 1.0);
+                assert!((x * 0.1 - y).abs() < 1e-7);
+                assert!((x - z).abs() < 1e-7);
+            }
+            if amount == 0.0 {
+                assert!(a.iter().zip(&source).all(|(a, b)| (a - b).abs() < 2e-7));
+            }
+        }
+    }
+}
+
+#[test]
+fn character_silence_stereo_and_reset() {
+    let mut bank = FilterBank::new(48000.0, 256, 2).unwrap();
+    for amount in [0.0, 0.5, 1.0] {
+        for _ in 0..10 {
+            bank.character.process(&mut bank.bands, 2, 256, amount);
+            assert!(bank.bands.iter().flatten().flatten().all(|x| *x == 0.0));
+        }
+    }
+    let signal: Vec<f32> = (0..256).map(|i| (i as f32 * 0.17).sin() * 0.5).collect();
+    bank.split_channel(0, &signal);
+    bank.split_channel(1, &signal);
+    bank.character.process(&mut bank.bands, 2, 256, 1.0);
+    for band in &bank.bands {
+        assert_eq!(band[0], band[1]);
+    }
+    let first = bank.bands.clone();
+    bank.reset();
+    bank.split_channel(0, &signal);
+    bank.split_channel(1, &signal);
+    bank.character.process(&mut bank.bands, 2, 256, 1.0);
+    // Reset is deterministic, including the stochastic modulation seed.
+    let mut fresh = FilterBank::new(48000.0, 256, 2).unwrap();
+    fresh.split_channel(0, &signal);
+    fresh.split_channel(1, &signal);
+    fresh.character.process(&mut fresh.bands, 2, 256, 1.0);
+    assert_eq!(bank.bands, fresh.bands);
+    assert_ne!(first, bank.bands);
+}
+
+#[test]
+fn character_two_tone_artifact_budget() {
+    let rate = 48000.0;
+    let source: Vec<f32> = (0..96000)
+        .map(|i| {
+            let t = i as f64 / rate;
+            (0.2 * (std::f64::consts::TAU * 900.0 * t).sin()
+                + 0.2 * (std::f64::consts::TAU * 1300.0 * t).sin()) as f32
+        })
+        .collect();
+    let output = character_render(&source, 1.0, 1.0, 256, rate);
+    let tail = &output[48000..];
+    let total = tail.iter().map(|&x| f64::from(x).powi(2)).sum::<f64>() / rate;
+    let mut fundamental = 0.0;
+    for frequency in [900.0, 1300.0] {
+        let mut re = 0.0;
+        let mut im = 0.0;
+        for (i, &x) in tail.iter().enumerate() {
+            let phase = std::f64::consts::TAU * frequency * i as f64 / rate;
+            re += f64::from(x) * phase.cos();
+            im += f64::from(x) * phase.sin();
+        }
+        fundamental += 2.0 * (re * re + im * im) / (rate * rate);
+    }
+    let residual = ((total - fundamental).max(0.0) / total).sqrt();
+    println!(
+        "Character two-tone residual (includes intended texture): {:.3} dBr",
+        20.0 * residual.log10()
+    );
+    assert!(residual < 0.05, "excessive non-fundamental energy");
 }

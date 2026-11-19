@@ -67,6 +67,7 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
 
         filterBank.split(input.data(), count);
         filterBank.processAttack(requestedAttackMs.load());
+        filterBank.processCharacter(requestedBowCharacter.load());
         filterBank.recombine(output.data());
         offset += count;
     }
@@ -132,7 +133,7 @@ void ElectroBowAudioProcessor::getStateInformation(juce::MemoryBlock& destData) 
 
     constexpr int stateMagic = 0x45424F57; // "EBOW"
 
-    constexpr int stateVersion = 1;
+    constexpr int stateVersion = 2;
 
     stream.writeInt(stateMagic);
     stream.writeInt(stateVersion);
@@ -143,6 +144,7 @@ void ElectroBowAudioProcessor::getStateInformation(juce::MemoryBlock& destData) 
 
     stream.writeFloat(attackMs);
     stream.writeFloat(naturalResonanceMs);
+    stream.writeFloat(requestedBowCharacter.load());
 }
 
 void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInBytes) {
@@ -154,13 +156,14 @@ void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInB
 
     constexpr int stateMagic = 0x45424F57;
 
-    constexpr int stateVersion = 1;
+    constexpr int stateVersion = 2;
 
     const int magic = stream.readInt();
 
     const int version = stream.readInt();
 
-    if (magic != stateMagic || version != stateVersion) {
+    if (magic != stateMagic || (version != 1 && version != stateVersion) ||
+        sizeInBytes < (version == 1 ? 28 : 32)) {
         return;
     }
 
@@ -174,6 +177,9 @@ void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInB
 
     naturalResonanceMs = std::max(0.0f, stream.readFloat());
 
+    const float character = version >= 2 ? stream.readFloat() : 0.0f;
+    requestedBowCharacter.store(std::isfinite(character) ? std::clamp(character, 0.0f, 1.0f)
+                                                         : 0.0f);
     requestedBowPressure.store(bowPressure);
     requestedBowSpeed.store(bowSpeed);
     requestedFriction.store(friction);
@@ -206,6 +212,7 @@ juce::var ElectroBowAudioProcessor::getUiState() const {
     auto* state = new juce::DynamicObject();
     auto* parameters = new juce::DynamicObject();
 
+    parameters->setProperty("bowCharacter", requestedBowCharacter.load());
     parameters->setProperty("bowPressure", requestedBowPressure.load());
     parameters->setProperty("bowSpeed", requestedBowSpeed.load());
     parameters->setProperty("friction", requestedFriction.load());
@@ -236,7 +243,9 @@ void ElectroBowAudioProcessor::setUiParameter(const juce::String& parameterId,
     if (!std::isfinite(value))
         return;
 
-    if (parameterId == "bowPressure") {
+    if (parameterId == "bowCharacter") {
+        requestedBowCharacter.store(std::clamp(value, 0.0f, 1.0f));
+    } else if (parameterId == "bowPressure") {
         bowPressure = std::clamp(value, 0.0f, 1.0f);
         requestedBowPressure.store(bowPressure);
     } else if (parameterId == "bowSpeed") {

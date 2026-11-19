@@ -390,6 +390,51 @@ void testAttackIntegration() {
     }
 }
 
+void testCharacterIntegration() {
+    ElectroBowAudioProcessor source, restored;
+    source.setUiParameter("bowCharacter", 0.75f);
+    juce::MemoryBlock state;
+    source.getStateInformation(state);
+    restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+    require(std::abs(static_cast<float>(restored.getUiState()
+                                            .getProperty("parameters", {})
+                                            .getProperty("bowCharacter", 0.0f)) -
+                     0.75f) < 1e-6f,
+            "character state roundtrip");
+    juce::MemoryBlock legacy;
+    juce::MemoryOutputStream stream(legacy, false);
+    stream.writeInt(0x45424F57);
+    stream.writeInt(1);
+    for (float value : {0.5f, 0.5f, 0.127f, 50.0f, 200.0f})
+        stream.writeFloat(value);
+    restored.setStateInformation(legacy.getData(), static_cast<int>(legacy.getSize()));
+    require(static_cast<float>(restored.getUiState()
+                                   .getProperty("parameters", {})
+                                   .getProperty("bowCharacter", -1.0f)) == 0.0f,
+            "legacy sessions use smooth character");
+    source.prepareToPlay(48000.0, 64);
+    restored.prepareToPlay(48000.0, 64);
+    juce::MidiBuffer midi;
+    double difference = 0.0;
+    for (int block = 0; block < 40; ++block) {
+        juce::AudioBuffer<float> a(2, 257), b(2, 257);
+        for (int i = 0; i < 257; ++i) {
+            const float x = 0.3f * std::sin(static_cast<float>(block * 257 + i) * 0.14f);
+            a.setSample(0, i, x);
+            a.setSample(1, i, x);
+        }
+        b.makeCopyOf(a);
+        source.processBlock(a, midi);
+        restored.processBlock(b, midi);
+        for (int i = 0; i < 257; ++i) {
+            require(std::isfinite(a.getSample(0, i)), "finite character output");
+            require(a.getSample(0, i) == a.getSample(1, i), "linked character stereo");
+            difference += std::abs(a.getSample(0, i) - b.getSample(0, i));
+        }
+    }
+    require(difference > 1.0, "Bow Character reaches the audio path");
+}
+
 void benchmark() {
     // Median of seven batches, each one second of stereo audio. This measures
     // DSP + processor dispatch, excluding host, GUI and audio-device scheduling.
@@ -398,6 +443,7 @@ void benchmark() {
         ElectroBowAudioProcessor processor;
         processor.setUiParameter("attackMs", 0.0f);
         processor.setUiParameter("attackMs", 500.0f);
+        processor.setUiParameter("bowCharacter", 1.0f);
         processor.prepareToPlay(48000.0, blockSize);
         juce::AudioBuffer<float> buffer(2, blockSize);
         const auto input = makeSignal(blockSize);
@@ -436,6 +482,7 @@ int main() {
     testStateAndBands();
     testProcessor();
     testAttackIntegration();
+    testCharacterIntegration();
     benchmark();
     std::cout << "All FilterBank tests passed.\n";
 }

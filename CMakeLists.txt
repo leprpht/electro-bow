@@ -319,8 +319,6 @@ target_link_libraries(ElectroBow
         juce::juce_dsp
         ElectroBowWebUIData
         ElectroBowRust
-        aubio_static
-        stk_bowed
 
     PUBLIC
         juce::juce_recommended_config_flags

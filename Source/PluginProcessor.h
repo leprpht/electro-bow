@@ -47,7 +47,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     void setStateInformation(const void* data, int sizeInBytes) override;
 
-    // Legacy UI telemetry stays idle during the transparent filter-bank phase.
+    // Legacy pitch/voice telemetry stays idle; the signal path processes original audio.
     float getPitchFrequencyHz() const noexcept;
 
     float getPitchConfidence() const noexcept;
@@ -60,16 +60,17 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     float getVoiceStrength(int index) const noexcept;
 
-    // State exposed to the existing WebView UI; Attack is active; bow controls remain inactive.
+    // State exposed to the existing WebView UI; Attack is active; Bow Character is active.
     juce::var getUiState() const;
 
     void setUiParameter(const juce::String& parameterId, float value) noexcept;
 
   private:
     FilterBank filterBank;
+    std::atomic<float> requestedBowCharacter{0.0f};
 
     /*
-        Attack controls Rust spectral smoothing. Other controls remain for session compatibility.
+        Attack and Bow Character control Rust DSP. Other values remain for session compatibility.
     */
     float bowPressure = 0.5f;
     float bowSpeed = 0.5f;
