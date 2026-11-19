@@ -34,6 +34,9 @@ class FilterBank {
         channelCount = channels;
     }
 
+    void processAttack(double milliseconds) noexcept {
+        eb_filter_bank_attack(handle.get(), milliseconds);
+    }
     void reset() noexcept {
         eb_filter_bank_reset(handle.get());
     }

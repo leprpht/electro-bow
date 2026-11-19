@@ -18,6 +18,8 @@ typedef struct EbFilterBank EbFilterBank;
 EbFilterBank* eb_filter_bank_create(double rate, int32_t capacity, int32_t channels);
 void eb_filter_bank_destroy(EbFilterBank* bank);
 void eb_filter_bank_reset(EbFilterBank* bank);
+// Continuous spectral attack control, 0..500 ms, on the current split buffers.
+int32_t eb_filter_bank_attack(EbFilterBank* bank, double milliseconds);
 
 // Status: 1 = success, 0 = invalid argument. No allocation or locks.
 // input/output arrays contain the prepared number of channel pointers.

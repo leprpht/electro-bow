@@ -2,6 +2,7 @@
 //! belongs only here. See include/electrobow_dsp.h for the C ownership contract.
 #![deny(unsafe_op_in_unsafe_fn)]
 
+mod attack;
 pub mod filter_bank;
 use filter_bank::FilterBank;
 use std::{ptr, slice};
@@ -165,3 +166,24 @@ pub unsafe extern "C" fn eb_filter_bank_crossovers(
 
 #[cfg(test)]
 mod tests;
+
+/// Apply spectral attack control to the last split, before recombination.
+/// # Safety
+/// Same exclusive live-handle contract as reset; borrowed band pointers must
+/// not be accessed during this call. Finite milliseconds are clamped to 0..500.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn eb_filter_bank_attack(bank: *mut FilterBank, milliseconds: f64) -> i32 {
+    let Some(bank) = (unsafe { bank.as_mut() }) else {
+        return 0;
+    };
+    if !milliseconds.is_finite() {
+        return 0;
+    }
+    bank.attack.process(
+        &mut bank.bands,
+        bank.channels,
+        bank.valid_samples,
+        milliseconds,
+    );
+    1
+}

@@ -9,6 +9,7 @@ pub const MAX_CHANNELS: usize = 2;
 pub const CROSSOVERS_HZ: [f64; 3] = [200.0, 800.0, 3000.0];
 
 pub struct FilterBank {
+    pub(crate) attack: crate::attack::Attack,
     pub(crate) capacity: usize,
     pub(crate) channels: usize,
     pub(crate) valid_samples: usize,
@@ -42,6 +43,7 @@ impl FilterBank {
             }
         }
         Some(Self {
+            attack: crate::attack::Attack::new(rate),
             capacity,
             channels,
             valid_samples: 0,
@@ -53,6 +55,7 @@ impl FilterBank {
     }
 
     pub fn reset(&mut self) {
+        self.attack.reset();
         self.states = [[0.0; 3]; MAX_CHANNELS];
         self.valid_samples = 0;
         for band in &mut self.bands {
