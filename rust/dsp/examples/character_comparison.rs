@@ -61,13 +61,14 @@ fn main() {
             // SAFETY: exclusive live handle, disjoint arrays, valid chunk sizes.
             unsafe {
                 assert_eq!(
-                    eb_filter_bank_split(bank, [source.as_ptr()].as_ptr(), source.len() as i32),
-                    1
-                );
-                assert_eq!(eb_filter_bank_attack(bank, 250.0), 1);
-                assert_eq!(eb_filter_bank_character(bank, amount), 1);
-                assert_eq!(
-                    eb_filter_bank_recombine(bank, [destination.as_mut_ptr()].as_ptr()),
+                    eb_filter_bank_process(
+                        bank,
+                        [source.as_ptr()].as_ptr(),
+                        [destination.as_mut_ptr()].as_ptr(),
+                        source.len() as i32,
+                        250.0,
+                        amount
+                    ),
                     1
                 );
             }
