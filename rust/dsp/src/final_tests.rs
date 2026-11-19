@@ -190,3 +190,78 @@ fn output_guard_links_gain_during_finite_overload() {
         assert!((l * 0.5 - r).abs() < 1e-7);
     }
 }
+
+fn render_complete(
+    input: &[f32],
+    rate: f64,
+    chunk: usize,
+    attack: f64,
+    character: f64,
+) -> Vec<f32> {
+    let bank = eb_filter_bank_create(rate, chunk as i32, 1);
+    assert!(!bank.is_null());
+    let mut output = input.to_vec();
+    for block in output.chunks_mut(chunk) {
+        let input = [block.as_ptr()];
+        let output = [block.as_mut_ptr()];
+        // SAFETY: exclusive handle and one valid in-place channel of block.len() frames.
+        unsafe {
+            assert_eq!(
+                eb_filter_bank_process(
+                    bank,
+                    input.as_ptr(),
+                    output.as_ptr(),
+                    block.len() as i32,
+                    attack,
+                    character,
+                ),
+                1
+            );
+        }
+    }
+    // SAFETY: exclusive live handle, no outstanding band borrows.
+    unsafe { eb_filter_bank_destroy(bank) };
+    output
+}
+
+#[test]
+fn complete_path_preserves_dynamics_and_block_partitioning() {
+    // Isolated-stage scale tests cannot catch interactions with the output
+    // protector or Attack -> Character routing. Exercise the public full path.
+    let mut worst_scaling_error = 0.0_f32;
+    let mut worst_partition_error = 0.0_f32;
+    for rate in [8000.0, 44100.0, 48000.0, 96000.0, 192000.0] {
+        for kind in 0..8 {
+            let input: Vec<_> = (0..(rate * 0.4) as usize)
+                .map(|i| material(i, rate, kind) * 0.5)
+                .collect();
+            let quiet: Vec<_> = input.iter().map(|x| x * 0.1).collect();
+            for (attack, character) in [(0.0, 0.0), (250.0, 0.5), (500.0, 1.0)] {
+                let loud = render_complete(&input, rate, 257, attack, character);
+                let soft = render_complete(&quiet, rate, 257, attack, character);
+                let partitioned = render_complete(&input, rate, 17, attack, character);
+                for (((&x, &y), &z), &original) in
+                    loud.iter().zip(&soft).zip(&partitioned).zip(&input)
+                {
+                    assert!(x.is_finite() && x.abs() < 0.9, "fixture needs headroom");
+                    worst_scaling_error = worst_scaling_error.max((0.1 * x - y).abs());
+                    worst_partition_error = worst_partition_error.max((x - z).abs());
+                    if attack == 0.0 && character == 0.0 {
+                        assert!((x - original).abs() < 2e-7, "neutral reconstruction");
+                    }
+                }
+            }
+        }
+    }
+    assert!(
+        worst_scaling_error < 1e-7,
+        "playing dynamics below limiting"
+    );
+    assert!(
+        worst_partition_error < 1e-7,
+        "host buffer size independence"
+    );
+    println!(
+        "Full-path scaling error={worst_scaling_error:.9e}, partition error={worst_partition_error:.9e}"
+    );
+}

@@ -435,28 +435,82 @@ void testCharacterIntegration() {
     require(difference > 1.0, "Bow Character reaches the audio path");
 }
 
+void testInvalidStateKeepsProcessing() {
+    ElectroBowAudioProcessor processor, reference;
+    for (auto* instance : {&processor, &reference}) {
+        instance->setUiParameter("attackMs", 350.0f);
+        instance->setUiParameter("bowCharacter", 0.65f);
+        instance->prepareToPlay(48000.0, 64);
+    }
+    juce::MemoryBlock original;
+    processor.getStateInformation(original);
+    for (int version : {1, 2}) {
+        for (int field = 0; field < (version == 1 ? 5 : 6); ++field) {
+            for (float invalid :
+                 {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
+                  -std::numeric_limits<float>::infinity()}) {
+                juce::MemoryBlock state;
+                juce::MemoryOutputStream stream(state, false);
+                stream.writeInt(0x45424F57);
+                stream.writeInt(version);
+                for (int i = 0; i < (version == 1 ? 5 : 6); ++i)
+                    stream.writeFloat(i == field ? invalid : 0.0f);
+                processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+                juce::MemoryBlock after;
+                processor.getStateInformation(after);
+                require(after == original, "non-finite state rejected without partial updates");
+            }
+        }
+    }
+    for (std::size_t length = 0; length < original.getSize(); ++length) {
+        processor.setStateInformation(original.getData(), static_cast<int>(length));
+        juce::MemoryBlock after;
+        processor.getStateInformation(after);
+        require(after == original, "truncated state rejected without partial updates");
+    }
+    juce::MidiBuffer midi;
+    const auto signal = makeSignal(257);
+    juce::AudioBuffer<float> actual(2, 257), expected(2, 257);
+    for (int channel = 0; channel < 2; ++channel)
+        actual.copyFrom(channel, 0, signal[static_cast<std::size_t>(channel)].data(), 257);
+    expected.makeCopyOf(actual);
+    processor.processBlock(actual, midi);
+    reference.processBlock(expected, midi);
+    for (int channel = 0; channel < 2; ++channel)
+        for (int i = 0; i < 257; ++i)
+            require(actual.getSample(channel, i) == expected.getSample(channel, i),
+                    "invalid state must not bypass or freeze DSP");
+}
+
 void benchmark() {
     // Median of seven batches, each one second of stereo audio. This measures
     // DSP + processor dispatch, excluding host, GUI and audio-device scheduling.
     volatile double checksum = 0.0;
     for (int blockSize : {16, 64, 256, 1024}) {
         ElectroBowAudioProcessor processor;
-        processor.setUiParameter("attackMs", 0.0f);
         processor.setUiParameter("attackMs", 500.0f);
         processor.setUiParameter("bowCharacter", 1.0f);
         processor.prepareToPlay(48000.0, blockSize);
         juce::AudioBuffer<float> buffer(2, blockSize);
         const auto input = makeSignal(blockSize);
-        for (int channel = 0; channel < 2; ++channel)
-            buffer.copyFrom(channel, 0, input[static_cast<std::size_t>(channel)].data(), blockSize);
+        const auto refill = [&] {
+            for (int channel = 0; channel < 2; ++channel)
+                buffer.copyFrom(channel, 0, input[static_cast<std::size_t>(channel)].data(),
+                                blockSize);
+        };
         juce::MidiBuffer midi;
         const int blocks = (48000 + blockSize - 1) / blockSize;
-        for (int i = 0; i < 100; ++i)
+        for (int i = 0; i < 100; ++i) {
+            refill();
             processor.processBlock(buffer, midi);
+        }
         std::array<double, 7> timings{};
         for (auto& elapsed : timings) {
             const auto start = std::chrono::steady_clock::now();
             for (int i = 0; i < blocks; ++i) {
+                // A host supplies new input, never the previous wet output.
+                // Include this small buffer-copy overhead in reported CPU.
+                refill();
                 processor.processBlock(buffer, midi);
                 checksum += buffer.getSample(0, i % blockSize);
             }
@@ -483,6 +537,7 @@ int main() {
     testProcessor();
     testAttackIntegration();
     testCharacterIntegration();
+    testInvalidStateKeepsProcessing();
     benchmark();
     std::cout << "All FilterBank tests passed.\n";
 }

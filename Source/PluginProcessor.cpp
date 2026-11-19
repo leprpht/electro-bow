@@ -54,6 +54,10 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
         return;
     }
 
+    // Keep one control snapshot for the entire host callback, including chunks.
+    const auto attack = requestedAttackMs.load();
+    const auto character = requestedBowCharacter.load();
+
     // A host may exceed its advertised maximum. Chunk without reallocating or
     // dropping audio; each channel's filter history continues across chunks.
     for (int offset = 0; offset < samples;) {
@@ -65,8 +69,7 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             output[static_cast<std::size_t>(channel)] = buffer.getWritePointer(channel, offset);
         }
 
-        filterBank.process(input.data(), output.data(), count, requestedAttackMs.load(),
-                           requestedBowCharacter.load());
+        filterBank.process(input.data(), output.data(), count, attack, character);
         offset += count;
     }
 }
@@ -167,19 +170,21 @@ void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInB
         return;
     }
 
-    bowPressure = std::clamp(stream.readFloat(), 0.0f, 1.0f);
+    // Validate the complete payload before publishing any controls. std::clamp
+    // does not sanitize NaN; a non-finite Attack makes the Rust ABI reject audio.
+    std::array<float, 6> values{};
+    for (int i = 0; i < (version == 1 ? 5 : 6); ++i)
+        values[static_cast<std::size_t>(i)] = stream.readFloat();
+    if (!std::all_of(values.begin(), values.end(),
+                     [](float value) { return std::isfinite(value); }))
+        return;
 
-    bowSpeed = std::clamp(stream.readFloat(), 0.0f, 1.0f);
-
-    friction = std::clamp(stream.readFloat(), 0.0f, 1.0f);
-
-    attackMs = std::clamp(stream.readFloat(), 0.0f, 500.0f);
-
-    naturalResonanceMs = std::max(0.0f, stream.readFloat());
-
-    const float character = version >= 2 ? stream.readFloat() : 0.0f;
-    requestedBowCharacter.store(std::isfinite(character) ? std::clamp(character, 0.0f, 1.0f)
-                                                         : 0.0f);
+    bowPressure = std::clamp(values[0], 0.0f, 1.0f);
+    bowSpeed = std::clamp(values[1], 0.0f, 1.0f);
+    friction = std::clamp(values[2], 0.0f, 1.0f);
+    attackMs = std::clamp(values[3], 0.0f, 500.0f);
+    naturalResonanceMs = std::max(0.0f, values[4]);
+    requestedBowCharacter.store(std::clamp(values[5], 0.0f, 1.0f));
     requestedBowPressure.store(bowPressure);
     requestedBowSpeed.store(bowSpeed);
     requestedFriction.store(friction);
