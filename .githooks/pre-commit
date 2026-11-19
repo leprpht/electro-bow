@@ -23,6 +23,18 @@ if ! command -v clang-format >/dev/null 2>&1; then
     exit 1
 fi
 
+if ! command -v rustfmt >/dev/null 2>&1 &&
+   [ -x "${HOME:-}/.cargo/bin/rustfmt" ]; then
+    PATH="${HOME}/.cargo/bin:$PATH"
+    export PATH
+fi
+
+if ! command -v rustfmt >/dev/null 2>&1; then
+    echo "pre-commit: rustfmt is required but was not found in PATH." >&2
+    echo "Install it with 'rustup component add rustfmt'." >&2
+    exit 1
+fi
+
 while IFS= read -r -d '' file; do
     case "$file" in
         ThirdParty/*) continue ;;
@@ -36,15 +48,23 @@ done < <(
         '*.h' '*.hh' '*.hpp' '*.hxx'
 )
 
+while IFS= read -r -d '' file; do
+    rustfmt --edition 2024 "$file"
+    git add -- "$file"
+done < <(
+    git diff --cached --name-only -z --diff-filter=ACMR -- '*.rs'
+)
+
 ui_files=()
 
 while IFS= read -r -d '' file; do
     ui_files+=("$file")
 done < <(
     git diff --cached --name-only -z --diff-filter=ACMR -- \
-        'UI/*.css' 'UI/*.html' 'UI/*.json' 'UI/*.ts' 'UI/*.tsx' \
+        'UI/*.css' 'UI/*.html' 'UI/*.js' 'UI/*.jsx' 'UI/*.json' \
+        'UI/*.ts' 'UI/*.tsx' \
         'UI/src/*.css' 'UI/src/*.html' 'UI/src/*.json' \
-        'UI/src/*.ts' 'UI/src/*.tsx'
+        'UI/src/*.js' 'UI/src/*.jsx' 'UI/src/*.ts' 'UI/src/*.tsx'
 )
 
 if [ "${#ui_files[@]}" -gt 0 ]; then
