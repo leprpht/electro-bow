@@ -65,10 +65,8 @@ void ElectroBowAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer,
             output[static_cast<std::size_t>(channel)] = buffer.getWritePointer(channel, offset);
         }
 
-        filterBank.split(input.data(), count);
-        filterBank.processAttack(requestedAttackMs.load());
-        filterBank.processCharacter(requestedBowCharacter.load());
-        filterBank.recombine(output.data());
+        filterBank.process(input.data(), output.data(), count, requestedAttackMs.load(),
+                           requestedBowCharacter.load());
         offset += count;
     }
 }
@@ -102,7 +100,9 @@ bool ElectroBowAudioProcessor::isMidiEffect() const {
 }
 
 double ElectroBowAudioProcessor::getTailLengthSeconds() const {
-    return 0.0; // The complementary sum has no audible tail.
+    // Unequal band gains can expose short IIR decay tails. This is tail
+    // allowance, not processing latency; the neutral sum still has no tail.
+    return requestedAttackMs.load() > 0.0f || requestedBowCharacter.load() > 0.0f ? 0.1 : 0.0;
 }
 
 int ElectroBowAudioProcessor::getNumPrograms() {

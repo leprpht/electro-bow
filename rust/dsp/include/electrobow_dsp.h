@@ -18,6 +18,10 @@ typedef struct EbFilterBank EbFilterBank;
 EbFilterBank* eb_filter_bank_create(double rate, int32_t capacity, int32_t channels);
 void eb_filter_bank_destroy(EbFilterBank* bank);
 void eb_filter_bank_reset(EbFilterBank* bank);
+// Full path plus stereo-linked 0.98 sample-peak ceiling. Same buffer contracts
+// as split/recombine; input/output may alias. Finite controls are required.
+int32_t eb_filter_bank_process(EbFilterBank* bank, const float* const* input, float* const* output,
+                               int32_t samples, double attack, double character);
 // Coordinated spectral/friction character, normalized 0..1.
 int32_t eb_filter_bank_character(EbFilterBank* bank, double amount);
 // Continuous spectral attack control, 0..500 ms, on the current split buffers.

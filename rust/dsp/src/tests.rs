@@ -156,7 +156,8 @@ fn processing_has_no_heap_operations_and_band_addresses_stay_stable() {
         TRACK.with(|track| track.set(true));
         let mut success = true;
         for _ in 0..1000 {
-            success &= eb_filter_bank_split(bank, input.as_ptr(), 256) == 1;
+            success &=
+                eb_filter_bank_process(bank, input.as_ptr(), output.as_ptr(), 256, 500.0, 1.0) == 1;
             success &= eb_filter_bank_attack(bank, 500.0) == 1;
             success &= eb_filter_bank_character(bank, 1.0) == 1;
             success &= eb_filter_bank_recombine(bank, output.as_ptr()) == 1;

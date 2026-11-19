@@ -9,6 +9,7 @@ pub const MAX_CHANNELS: usize = 2;
 pub const CROSSOVERS_HZ: [f64; 3] = [200.0, 800.0, 3000.0];
 
 pub struct FilterBank {
+    pub(crate) output: crate::output::Output,
     pub(crate) character: crate::character::Character,
     pub(crate) attack: crate::attack::Attack,
     pub(crate) capacity: usize,
@@ -44,6 +45,7 @@ impl FilterBank {
             }
         }
         Some(Self {
+            output: crate::output::Output::new(rate),
             character: crate::character::Character::new(rate),
             attack: crate::attack::Attack::new(rate),
             capacity,
@@ -57,6 +59,7 @@ impl FilterBank {
     }
 
     pub fn reset(&mut self) {
+        self.output.reset();
         self.attack.reset();
         self.character.reset();
         self.states = [[0.0; 3]; MAX_CHANNELS];
@@ -78,7 +81,11 @@ impl FilterBank {
             .zip(&mut high_mid_band[channel][..input.len()])
             .zip(&mut high_band[channel][..input.len()]);
         for (&sample, (((b0, b1), b2), b3)) in input.iter().zip(outputs) {
-            let x = f64::from(sample);
+            let x = if sample.is_finite() {
+                f64::from(sample).clamp(-16.0, 16.0)
+            } else {
+                0.0
+            };
             let mut low = [0.0; 3];
             for ((low, state), coefficient) in
                 low.iter_mut().zip(state.iter_mut()).zip(self.coefficients)

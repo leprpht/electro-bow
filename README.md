@@ -242,3 +242,6 @@ Allowed category headings are `Added`, `Changed`, `Deprecated`, `Removed`, `Fixe
 See [attack processing](docs/attack-processing.md) for the algorithm and validation.
 
 See [Bow Character architecture and audio comparisons](docs/bow-character.md).
+
+The [final integration report](docs/final-effect.md) documents output protection,
+final controls, dependency audit, and the pending FL Studio validation.

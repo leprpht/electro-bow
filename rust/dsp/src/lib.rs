@@ -5,6 +5,7 @@
 mod attack;
 mod character;
 pub mod filter_bank;
+mod output;
 use filter_bank::FilterBank;
 use std::{ptr, slice};
 
@@ -166,6 +167,8 @@ pub unsafe extern "C" fn eb_filter_bank_crossovers(
 }
 
 #[cfg(test)]
+mod final_tests;
+#[cfg(test)]
 mod tests;
 
 /// Apply spectral attack control to the last split, before recombination.
@@ -203,5 +206,55 @@ pub unsafe extern "C" fn eb_filter_bank_character(bank: *mut FilterBank, amount:
     }
     bank.character
         .process(&mut bank.bands, bank.channels, bank.valid_samples, amount);
+    1
+}
+
+/// Full signal path with linked output peak protection. Zero samples are a no-op.
+/// # Safety
+/// Same live-handle, buffer lengths and non-overlap contracts as split/recombine.
+/// Input and output may alias each other, but neither may alias bank storage.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn eb_filter_bank_process(
+    bank: *mut FilterBank,
+    input: *const *const f32,
+    output: *const *mut f32,
+    samples: i32,
+    attack: f64,
+    character: f64,
+) -> i32 {
+    if bank.is_null() || !attack.is_finite() || !character.is_finite() || samples < 0 {
+        return 0;
+    }
+    if samples == 0 {
+        return 1;
+    }
+    // SAFETY: handle is exclusively owned by caller; inspect metadata only.
+    let count = unsafe { (*bank).channels };
+    if output.is_null() {
+        return 0;
+    }
+    // SAFETY: caller provides configured number of output pointers.
+    let pointers = unsafe { slice::from_raw_parts(output, count) };
+    if pointers.iter().any(|p| p.is_null()) {
+        return 0;
+    }
+    // SAFETY: forward the same exclusive handle and validated caller buffers.
+    unsafe {
+        if eb_filter_bank_split(bank, input, samples) == 0 {
+            return 0;
+        }
+        eb_filter_bank_attack(bank, attack);
+        eb_filter_bank_character(bank, character);
+        eb_filter_bank_recombine(bank, output);
+    }
+    let mut channels: [&mut [f32]; 2] = [&mut [], &mut []];
+    for (channel, &pointer) in channels.iter_mut().zip(pointers) {
+        // SAFETY: output channels are disjoint and writable for samples frames.
+        *channel = unsafe { slice::from_raw_parts_mut(pointer, samples as usize) };
+    }
+    // SAFETY: output storage cannot alias the exclusive bank handle.
+    unsafe {
+        (*bank).output.process(&mut channels[..count]);
+    }
     1
 }

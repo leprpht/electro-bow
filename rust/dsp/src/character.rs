@@ -71,8 +71,8 @@ impl Character {
                 };
                 let a = self.amount;
                 let spectral = match b {
-                    1 => 1.0 + a * (0.08 + 0.12 * relative + 0.015 * movement),
-                    2 => 1.0 + a * (0.04 + 0.10 * relative - 0.02 * movement),
+                    1 => 1.0 + a * (0.04 + 0.08 * relative + 0.015 * movement),
+                    2 => 1.0 + a * (0.02 + 0.06 * relative - 0.02 * movement),
                     3 => 1.0 - a * (0.10 + 0.15 * relative),
                     _ => 1.0,
                 };

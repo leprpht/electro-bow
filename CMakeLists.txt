@@ -87,6 +87,8 @@ juce_add_binary_data(ElectroBowWebUIData
 # as Visual Studio, otherwise parallel builds can compile the files too soon.
 add_dependencies(ElectroBowWebUIData ElectroBowWebUI)
 
+# Legacy component dependencies are needed only by their regression tests.
+if(BUILD_TESTING)
 # ---------------------------------------------------------------------------
 # aubio 0.4.9 - vendored in ThirdParty/aubio-src.
 #
@@ -237,6 +239,8 @@ target_compile_definitions(stk_bowed
     PRIVATE
         _USE_MATH_DEFINES=1)
 
+endif()
+
 # ---------------------------------------------------------------------------
 # VST3 plugin.
 
@@ -266,14 +270,6 @@ if(APPLE)
 endif()
 
 # ---------------------------------------------------------------------------
-# Third-party include directories.
-
-target_include_directories(ElectroBow
-    PRIVATE
-        "${AUBIO_SRC_DIR}/src"
-        "${STK_SRC_DIR}/include")
-
-# ---------------------------------------------------------------------------
 # ElectroBow source files.
 
 target_sources(ElectroBow
@@ -282,13 +278,7 @@ target_sources(ElectroBow
         Source/PluginEditor.cpp
         Source/PluginProcessor.h
         Source/FilterBank.h
-        Source/PluginEditor.h
-        Source/PitchDetector.h
-        Source/PolyPitchDetector.h
-        Source/PolyphonicAnalyzer.h
-        Source/BowTrigger.h
-        Source/BowEnvelope.h
-        Source/VoiceManager.h)
+        Source/PluginEditor.h)
 
 add_dependencies(ElectroBow ElectroBowWebUIData)
 
@@ -310,7 +300,7 @@ target_compile_definitions(ElectroBow
         JUCE_VST3_CAN_REPLACE_VST2=0)
 
 # ---------------------------------------------------------------------------
-# Link JUCE, aubio and STK.
+# Link JUCE and the Rust DSP.
 
 target_link_libraries(ElectroBow
     PRIVATE

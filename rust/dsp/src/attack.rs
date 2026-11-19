@@ -4,6 +4,8 @@
 
 pub struct Attack {
     rate: f64,
+    last_target: f64,
+    slow_coefficient: f64,
     fast_release: f64,
     control: f64,
     amount: f64,
@@ -15,6 +17,8 @@ impl Attack {
     pub fn new(rate: f64) -> Self {
         Self {
             rate,
+            last_target: 0.0,
+            slow_coefficient: 1.0 - (-1.0 / (0.005 * rate)).exp(),
             fast_release: (-1.0 / (0.003 * rate)).exp(),
             control: 1.0 - (-1.0 / (0.001 * rate)).exp(),
             amount: 0.0,
@@ -38,7 +42,11 @@ impl Attack {
     ) {
         let target = (milliseconds / 500.0).clamp(0.0, 1.0);
         // Coefficients computed once per chunk, never per sample.
-        let slow_coefficient = 1.0 - (-1.0 / ((0.005 + 0.145 * target) * self.rate)).exp();
+        if target != self.last_target {
+            self.slow_coefficient = 1.0 - (-1.0 / ((0.005 + 0.145 * target) * self.rate)).exp();
+            self.last_target = target;
+        }
+        let slow_coefficient = self.slow_coefficient;
         let weights = [0.0, 0.15, 0.65, 1.0];
         for i in 0..samples {
             self.amount += self.control * (target - self.amount);
