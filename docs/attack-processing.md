@@ -1,6 +1,6 @@
 # Continuous attack processing
 
-Implemented on `feature/attack-shaping`. DSP lives in `rust/dsp/src/attack.rs`;
+Implemented on `feature/attack-shaping`. DSP lives in `rust/dsp/src/attack/mod.rs`;
 JUCE invokes it between filter-bank split and recombination. The existing Attack
 slider is active and displays 0–100% smoothing. Saved `attackMs` values retain
 their 0–500 storage range; this is a response control, not a literal onset delay.

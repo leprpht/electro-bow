@@ -14,7 +14,7 @@ implemented in Rust, migrating each existing component with a parity test.
 
 ## Ownership and safety
 
-- `rust/dsp/src/filter_bank.rs` implements DSP in safe Rust and forbids unsafe
+- `rust/dsp/src/filter_bank/mod.rs` implements DSP in safe Rust and forbids unsafe
   code at compile time. Preparation is the only allocation/coefficient stage.
 - `rust/dsp/src/lib.rs` contains the small C ABI boundary. Its unsafe operations
   are explicit, documented pointer conversions; invalid counts/indices/nulls

@@ -1,7 +1,7 @@
 # Bow Character
 
 Branch: `feature/bow-character`. The production algorithm is safe Rust in
-`rust/dsp/src/character.rs`, called after Attack and before band recombination.
+`rust/dsp/src/character/mod.rs`, called after Attack and before band recombination.
 The signal chain is original mono/stereo guitar → complementary filter bank →
 Attack → Bow Character → sum. No MIDI, pitch detection, event classification,
 voice separation, synthesized strings, or STK Bowed runs in this chain. The
