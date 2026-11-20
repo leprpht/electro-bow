@@ -106,6 +106,12 @@ jobs:
           Expand-Archive -Path $package -DestinationPath $packageDir
           "WEBVIEW2_PACKAGE_LOCATION=$($packageRoot.Replace('\', '/'))" >> $env:GITHUB_ENV
 
+      - name: Ensure WebView2 Runtime
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./tools/ci/install_webview2_runtime.ps1
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

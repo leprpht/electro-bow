@@ -39,6 +39,15 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
             if (auto* candidate = dynamic_cast<juce::WebBrowserComponent*>(child))
                 browser = candidate;
 
+        if (browser == nullptr) {
+            for (auto* child : editor->getChildren())
+                if (auto* label = dynamic_cast<juce::Label*>(child);
+                    label != nullptr && label->isVisible())
+                    lastResult = label->getText();
+        }
+        std::cout << "Editor open " << completedLoads + 1 << ": browser component "
+                  << (browser != nullptr ? "created" : "unavailable") << std::endl;
+
         ready = false;
         uiChangeRequested = false;
         evaluationPending = false;
