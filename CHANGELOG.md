@@ -5,6 +5,22 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-11-20
+
+### Added
+
+- Added Rust DSP processing for bow character, attack shaping, and final output
+  protection, with audio comparison examples and validation coverage.
+- Added portable CI and release build support for the Rust DSP integration.
+
+### Changed
+
+- Migrated the filter-bank DSP implementation to Rust and integrated it into the
+  CMake build and plugin processing path.
+- Improved bow-character processing and upper-band attack shaping for more
+  controlled transients and continuous realtime response.
+- Enabled project formatters through the development settings and Git hooks.
+
 ## [1.4.0] - 2026-11-14
 
 ### Added

@@ -208,7 +208,7 @@ Every commit will format staged project C/C++ files and stage the formatting cha
 
 ## Releases
 
-Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.4.0` or `1.4.0` semantic-version tag is pushed.
+Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.5.0` or `1.5.0` semantic-version tag is pushed.
 
 Before tagging, update the version in `CMakeLists.txt`, `UI/package.json`, and
 the root package entries in `UI/package-lock.json`. Add a dated changelog entry
@@ -216,8 +216,8 @@ for the same version and commit these changes. Then create and push an annotated
 tag, for example:
 
 ```sh
-git tag -a v1.4.0 -m "Release v1.4.0"
-git push --atomic origin main v1.4.0
+git tag -a v1.5.0 -m "Release v1.5.0"
+git push --atomic origin main v1.5.0
 ```
 
 The pre-push hook checks that the tagged commit contains a matching changelog
