@@ -447,3 +447,45 @@ fn restored_controls_sound_the_same_with_or_without_silent_preroll() {
         .fold(0.0_f32, f32::max);
     assert!(error < 1e-6, "first stroke depends on preroll: {error}");
 }
+
+#[test]
+fn sustain_respects_a_soft_stroke_after_a_mute_and_a_loud_repick() {
+    for rate in [8000.0, 48000.0, 96000.0] {
+        let signal: Vec<_> = (0..rate as usize)
+            .map(|i| {
+                let t = i as f64 / rate;
+                let level = if t < 0.24 {
+                    0.5
+                } else if t < 0.39 {
+                    0.0003 // pickup noise between strokes
+                } else if t < 0.85 {
+                    0.035 * (-5.0 * (t - 0.39)).exp()
+                } else {
+                    0.4
+                };
+                (level * (std::f64::consts::TAU * 125.0 * t).sin()) as f32
+            })
+            .collect();
+        let wet = render_controls(
+            &signal,
+            rate,
+            113,
+            BowControls {
+                sustain: 1.0,
+                ..BowControls::NEUTRAL
+            },
+        );
+        let peak = |buf: &[f32], from: f64, until: f64| {
+            buf[(from * rate) as usize..(until * rate) as usize]
+                .iter()
+                .map(|v| v.abs())
+                .fold(0.0_f32, f32::max)
+        };
+        assert!(peak(&wet, 0.39, 0.42) < 0.039, "carryover into soft stroke");
+        assert!(
+            peak(&wet, 0.72, 0.75) > 1.4 * peak(&signal, 0.72, 0.75),
+            "wanted decay support"
+        );
+        assert!(peak(&wet, 0.85, 0.87) < 0.41, "carryover into loud repick");
+    }
+}

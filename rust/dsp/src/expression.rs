@@ -6,6 +6,8 @@ use crate::BowControls;
 pub struct Expression {
     smoothing: f64,
     release: f64,
+    recent_release: f64,
+    recent_peak: f64,
     memory_release: f64,
     level: f64,
     memory: f64,
@@ -20,6 +22,8 @@ impl Expression {
         Self {
             smoothing: 1.0 - (-1.0 / (0.012 * rate)).exp(),
             release: (-1.0 / (0.035 * rate)).exp(),
+            recent_release: (-1.0 / (0.012 * rate)).exp(),
+            recent_peak: 0.0,
             memory_release: (-1.0 / (0.95 * rate)).exp(),
             level: 0.0,
             memory: 0.0,
@@ -36,6 +40,7 @@ impl Expression {
 
     pub fn reset(&mut self) {
         self.level = 0.0;
+        self.recent_peak = 0.0;
         self.memory = 0.0;
         self.lift = 0.0;
         self.band_peak = [[0.0; 2]; 2];
@@ -71,14 +76,22 @@ impl Expression {
                 peak = peak.max(input.abs());
             }
             self.level = peak.max(self.level * self.release);
-            self.memory = self.level.max(self.memory * self.memory_release);
+            self.recent_peak = peak.max(self.recent_peak * self.recent_release);
+            // Once the string is muted, forget the preceding stroke. Leave
+            // headroom above the 4:1 makeup range for low-string cycles.
+            self.memory = self
+                .level
+                .max(self.memory * self.memory_release)
+                .min(6.0 * self.recent_peak);
             // A falling string can earn up to 10 dB of makeup. The floor taper
             // withdraws that gain as the pickup settles back into idle noise.
             let activity = ((self.level - 0.0015) / 0.009).clamp(0.0, 1.0);
             let falling = (self.memory / self.level.max(0.0015) - 1.0).clamp(0.0, 3.0);
             self.lift += self.smoothing * (0.72 * falling * activity - self.lift);
             let compression = (1.0 + 0.26 * pressure) / (1.0 + 1.9 * pressure * self.level);
-            let gain = (1.0 + sustain * self.lift) * compression;
+            // A fresh accent can consume all the available makeup in one
+            // cycle. Never carry a decaying string's gain onto that crest.
+            let gain = (1.0 + sustain * self.lift.min(0.72 * falling)) * compression;
             let tilt = 2.0 * speed - 1.0;
             let colour = [
                 1.0 - 0.12 * tilt,
