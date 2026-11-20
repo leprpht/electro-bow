@@ -60,7 +60,10 @@ foreach(UI_FILE IN LISTS ELECTROBOW_UI_FILES)
 endforeach()
 
 file(GLOB_RECURSE ELECTROBOW_UI_SOURCES CONFIGURE_DEPENDS
-    "${ELECTROBOW_UI_DIR}/src/*"
+    "${ELECTROBOW_UI_DIR}/src/*")
+# Keep root files out of the recursive glob: matching index.html/package.json
+# recursively also picks up dist and node_modules, including our own outputs.
+list(APPEND ELECTROBOW_UI_SOURCES
     "${ELECTROBOW_UI_DIR}/index.html"
     "${ELECTROBOW_UI_DIR}/package.json"
     "${ELECTROBOW_UI_DIR}/package-lock.json"

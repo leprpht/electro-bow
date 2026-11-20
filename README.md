@@ -185,6 +185,45 @@ prefer Rust modules in `rust/dsp/`. JUCE hosting and the UI bridge stay in C++.
 Existing aubio/STK and older C++ components remain available for incremental
 migration. See [Rust DSP architecture and migration validation](docs/rust-dsp.md).
 
+## Instrument interface
+
+The 960 × 700 editor uses a vintage metal faceplate, reusable rotary knobs,
+and an analog tuner. Attack Reduction and the smaller Bow Character control
+operate the existing DSP. Drag vertically, hold Shift for finer changes, use
+arrow/Home/End keys, or double-click to restore the default. Values appear on
+hover or focus. Sustain, Resonance, Bow Pressure, Bow Speed, and Bow Friction
+are disabled because they are not implemented in the current audio path.
+The tuner shows **No signal** while pitch telemetry is inactive.
+
+The React components live in `UI/src/components/`; native state synchronization
+lives in `UI/src/hooks/usePluginState.ts`. Tailwind handles layout utilities.
+Typed component styles live in `UI/src/styles/*.css.ts`: panel, knob, tuner,
+screw, and signature modules keep materials, responsive rules, and interaction
+states together. Vanilla Extract compiles these modules into the existing
+`app.css` bundle; no styling runtime or extra native asset route is needed.
+Edit `UI/src/styles/theme.ts` for the shared breakpoint, panel aspect ratio,
+texture, and knob geometry. Screw positions and variants are inferred TypeScript
+types. `UI/src/styles.css` contains only Tailwind setup, fonts, global defaults,
+and reduced-motion behavior.
+Fonts and the SVG texture are bundled into CSS for offline JUCE rendering.
+
+Preview and browser interaction tests:
+
+```sh
+cd UI
+npm ci
+npm run dev
+# In a separate terminal in UI/:
+npx playwright install chromium webkit
+npm test
+npm run format:check
+```
+
+The browser suite builds and serves the production bundle, tests Chromium and
+WebKit, and writes screenshots under the ignored `UI/test-results/` directory.
+The native editor smoke test checks embedded fonts, layout, state loading,
+and a React control edit reaching the processor on both open and reopen.
+
 ## Development tools
 
 The [pre-commit framework](https://pre-commit.com/) manages both Git hook stages
