@@ -38,6 +38,7 @@ require_command git
 require_command node
 require_command npm
 require_command python3
+require_command pre-commit
 require_command cmake
 require_command rustup
 require_command cargo
@@ -79,7 +80,7 @@ echo "Installing UI dependencies..."
 npm ci --prefix "$project_dir/UI"
 
 echo "Enabling repository Git hooks (pre-commit and pre-push)..."
-git -C "$project_dir" config core.hooksPath .githooks
+python3 "$project_dir/tools/install_hooks.py"
 
 echo "Setup complete. JUCE: $juce_dir"
 echo "Run './build.py \"$juce_dir\"' to configure and build the plugin."

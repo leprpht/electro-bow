@@ -12,6 +12,7 @@ reconstruction measurements, CPU results, Release build, and modified files.
 ## Requirements
 
 - CMake 3.22 or newer
+- Python 3.10 or newer (build helper and development hooks)
 - A JUCE source checkout (JUCE is not bundled with this repository)
 - A C++17 compiler
 - Rust via [rustup](https://rustup.rs/); `rust-toolchain.toml` pins the compiler,
@@ -38,7 +39,10 @@ Then run:
 setup.bat                  # Windows Command Prompt
 ```
 
-The scripts verify Git, Node.js/npm, Python, CMake, a C++ compiler, Rust, and
+Install the [pre-commit framework](https://pre-commit.com/) as described under
+[Development tools](#development-tools) before running setup.
+
+The scripts verify Git, Node.js/npm, Python, pre-commit, CMake, a C++ compiler, Rust, and
 `clang-format`; download JUCE 9.0.2 into `JUCE/` when needed; install the UI
 dependencies with `npm ci`; and configure the local Git hooks. They do not pull
 or modify repository history. Install platform-specific compiler packages and
@@ -183,7 +187,12 @@ migration. See [Rust DSP architecture and migration validation](docs/rust-dsp.md
 
 ## Development tools
 
-Project C/C++ files are formatted automatically by the pre-commit hook. Vendored files under `ThirdParty/` are intentionally excluded.
+The [pre-commit framework](https://pre-commit.com/) manages both Git hook stages
+through `.pre-commit-config.yaml`. Before commits it formats staged C/C++ files
+with clang-format, Rust files with the pinned rustfmt, and UI files with the
+Prettier installed from `UI/package-lock.json`. Vendored files under
+`ThirdParty/` are excluded. Install Rust's format component with
+`rustup component add rustfmt` and UI dependencies with `npm ci --prefix UI`.
 
 Install LLVM, which provides `clang-format` and `clang-tidy`:
 
@@ -198,13 +207,52 @@ sudo apt-get install clang-format clang-tidy
 
 On Windows, install LLVM with `winget install LLVM.LLVM`, then make sure its `bin` directory is on `PATH`.
 
-Enable the committed hook once per checkout:
+Install the framework in a local virtual environment and activate it:
 
 ```sh
-git config core.hooksPath .githooks
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r requirements-dev.txt
 ```
 
-Every commit will format staged project C/C++ files and stage the formatting changes. `clang-tidy` configuration is provided in `.clang-tidy`; run it from a configured CMake build directory with `compile_commands.json` when doing lint checks. Release builds do not run linting.
+On Windows Command Prompt, use `python -m venv .venv`, then
+`.venv\Scripts\activate.bat` and the same pip command.
+
+Run the setup script or install both hooks from the repository root:
+
+```sh
+python tools/install_hooks.py
+```
+
+The installer removes the old local `core.hooksPath=.githooks` setting when
+present, then installs the framework hooks. Other custom hook paths are left
+for pre-commit to report. Keep `.venv` available: generated hooks use its Python.
+
+The installer adapts the framework's generated pre-push launcher to forward
+Git's complete ref list through `tools/hooks/pre_push.py`, which runs the
+configured pre-push stage using `pre-commit run`. This preserves multi-tag pushes
+and tag-only pushes to commits already on the remote; the framework's native
+push handler can skip those cases. Use this installer again after changing the
+framework version, rather than running `pre-commit install` directly.
+
+When a formatter changes files, the commit stops for review. Stage the resulting
+changes and commit again. Partially staged files are handled by the framework;
+formatting changes are never automatically staged. To format all tracked files:
+
+```sh
+pre-commit run --all-files
+```
+
+`clang-tidy` configuration is provided in `.clang-tidy`; run it from a configured
+CMake build directory with `compile_commands.json` when doing lint checks.
+Release builds do not run linting.
+
+To test hook installation, staged formatting, and tag pushes against disposable
+local repositories (no project remote is contacted):
+
+```sh
+python -m unittest discover -s tools/hooks/tests -v
+```
 
 ## Releases
 
@@ -220,8 +268,18 @@ git tag -a v1.5.0 -m "Release v1.5.0"
 git push --atomic origin main v1.5.0
 ```
 
-The pre-push hook checks that the tagged commit contains a matching changelog
-entry. The workflow file must also be present in that commit. The workflow can
+The pre-push hook checks every tag being created or updated against the
+changelog in its tagged commit. It supports annotated and lightweight tags,
+multiple tags in a push, and tags pointing to commits already on the remote.
+Branch pushes and tag deletions do not require changelog entries, and unrelated
+local tags are ignored. Check a specific tag locally with:
+
+```sh
+python tools/hooks/check_tag_changelog.py --tag v1.5.0
+```
+
+The check reads the changelog from the tagged commit, not your working copy.
+The workflow file must also be present in that commit. The workflow can
 be started manually from the Actions tab; manual runs build the artifacts but
 do not publish a release.
 
