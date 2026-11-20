@@ -125,7 +125,7 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
                 const pressure = document.querySelector('input[aria-label="Bow Character"]');
                 const ready = !!shell && !!pressure
                     && document.querySelectorAll('input[type="range"]').length === 7
-                    && document.querySelectorAll('input[type="range"]:enabled').length === 2
+                    && document.querySelectorAll('input[type="range"]:enabled').length === 7
                     && !!document.querySelector('.tuner-needle')
                     && document.fonts.status === 'loaded'
                     && document.fonts.check('20px "Lobster"')

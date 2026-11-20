@@ -1,18 +1,18 @@
 import { expect, test } from "@playwright/test";
 import { installNativeBridge } from "./nativeBridge";
 
-test("preview has working accessible controls and honest inactive states", async ({ page }) => {
+test("preview has seven accessible working controls", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await expect(page.getByRole("slider")).toHaveCount(7);
-  await expect(page.locator('input[type="range"]:enabled')).toHaveCount(2);
+  await expect(page.locator('input[type="range"]:enabled')).toHaveCount(7);
   await expect(page.getByRole("status")).toContainText("Preview");
   await expect(page.getByRole("img", { name: /Tuner idle/ })).toBeVisible();
   for (const label of ["Sustain", "Resonance", "Bow Pressure", "Bow Speed", "Bow Friction"]) {
-    await expect(page.getByRole("slider", { name: label, exact: true })).toBeDisabled();
+    await expect(page.getByRole("slider", { name: label, exact: true })).toBeEnabled();
   }
-  const attack = page.getByRole("slider", { name: "Attack Reduction" });
+  const attack = page.getByRole("slider", { name: "Attack" });
   const value = attack.locator("../..").locator("output");
   await expect(value).toHaveCSS("opacity", "0");
   await attack.hover();
@@ -39,6 +39,8 @@ test("preview has working accessible controls and honest inactive states", async
 test("rotary dragging supports fine movement, clamping and cancellation", async ({ page }) => {
   await page.goto("/");
   const knob = page.getByRole("slider", { name: "Bow Character", exact: true });
+  await knob.focus();
+  await page.keyboard.press("Home");
   const box = (await knob.boundingBox())!;
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -54,7 +56,7 @@ test("rotary dragging supports fine movement, clamping and cancellation", async 
   await expect(knob).toHaveValue("1");
   await page.mouse.up();
   await knob.dblclick();
-  await expect(knob).toHaveValue("0");
+  await expect(knob).toHaveValue("0.45");
   await knob.evaluate((element) =>
     element.addEventListener(
       "pointerdown",
@@ -99,7 +101,7 @@ test("native values load, writes reach JUCE, and external updates resume after d
   await page.mouse.up();
   await page.evaluate(() => window.__testBridge.emit(window.__testBridge.state));
   await expect(knob).toHaveValue("0.2");
-  const attack = page.getByRole("slider", { name: "Attack Reduction" });
+  const attack = page.getByRole("slider", { name: "Attack" });
   await attack.focus();
   await page.keyboard.press("End");
   await expect

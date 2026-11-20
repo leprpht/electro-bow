@@ -5,6 +5,7 @@ import { GuitarTuner } from "./components/GuitarTuner";
 import { InstrumentPanel } from "./components/InstrumentPanel";
 import { Knob } from "./components/Knob";
 import { MakerSignature } from "./components/MakerSignature";
+import { defaultState } from "./types";
 import { usePluginState } from "./hooks/usePluginState";
 
 function App() {
@@ -24,9 +25,9 @@ function App() {
         <div className={`character-control ${styles.character}`}>
           <Knob
             label="Bow Character"
-            description="Adds body, texture, and friction to the original signal."
+            description="Emphasize the woody midrange and soften the bright edge of the pickup."
             value={state.parameters.bowCharacter}
-            defaultValue={0}
+            defaultValue={defaultState.parameters.bowCharacter}
             compact
             onChange={(value) => setParameter("bowCharacter", value)}
             onGestureChange={(active) => setGesture("bowCharacter", active)}

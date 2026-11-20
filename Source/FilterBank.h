@@ -40,10 +40,9 @@ class FilterBank {
     void processCharacter(double amount) noexcept {
         eb_filter_bank_character(handle.get(), amount);
     }
-    void process(const float* const* input, float* const* output, int samples, double attack,
-                 double character) noexcept {
-        const auto ok =
-            eb_filter_bank_process(handle.get(), input, output, samples, attack, character);
+    void process(const float* const* input, float* const* output, int samples,
+                 EbBowControls controls) noexcept {
+        const auto ok = eb_bow_process(handle.get(), input, output, samples, controls);
         assert(ok != 0);
         (void)ok;
     }

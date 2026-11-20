@@ -1,5 +1,11 @@
 export type ParameterId =
-  "bowCharacter" | "bowPressure" | "bowSpeed" | "friction" | "attackMs" | "naturalResonanceMs";
+  | "bowCharacter"
+  | "bowPressure"
+  | "bowSpeed"
+  | "friction"
+  | "attackMs"
+  | "naturalResonanceMs"
+  | "sustain";
 
 export type PluginState = {
   parameters: Record<ParameterId, number>;
@@ -16,7 +22,8 @@ export type PluginState = {
 
 export const defaultState: PluginState = {
   parameters: {
-    bowCharacter: 0,
+    bowCharacter: 0.45,
+    sustain: 0.5,
     bowPressure: 0.5,
     bowSpeed: 0.5,
     friction: 0.127,

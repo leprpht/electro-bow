@@ -19,6 +19,9 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
 
+    void processBlockBypassed(juce::AudioBuffer<float>&, juce::MidiBuffer&) override;
+    void reset() override;
+
     juce::AudioProcessorEditor* createEditor() override;
 
     bool hasEditor() const override;
@@ -60,30 +63,24 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
 
     float getVoiceStrength(int index) const noexcept;
 
-    // State exposed to the existing WebView UI; Attack is active; Bow Character is active.
+    // The WebView and the audio callback read the host parameters directly.
     juce::var getUiState() const;
 
     void setUiParameter(const juce::String& parameterId, float value) noexcept;
 
+    void setUiGesture(const juce::String& parameterId, bool active);
+    void endUiGestures();
+
   private:
+    // Order is also the serialized EBOW v3 layout. v1 and v2 are prefixes.
+    enum Control { pressure, speed, friction, attack, resonance, character, sustain, numControls };
+    std::array<juce::AudioParameterFloat*, numControls> controls{};
+    std::array<bool, numControls> uiGestures{};
     FilterBank filterBank;
-    std::atomic<float> requestedBowCharacter{0.0f};
-
-    /*
-        Attack and Bow Character control Rust DSP. Other values remain for session compatibility.
-    */
-    float bowPressure = 0.5f;
-    float bowSpeed = 0.5f;
-    float friction = 0.127f;
-
-    float attackMs = 50.0f;
-    float naturalResonanceMs = 200.0f;
-
-    std::atomic<float> requestedBowPressure{0.5f};
-    std::atomic<float> requestedBowSpeed{0.5f};
-    std::atomic<float> requestedFriction{0.127f};
-    std::atomic<float> requestedAttackMs{50.0f};
-    std::atomic<float> requestedNaturalResonanceMs{200.0f};
+    juce::AudioBuffer<float> wetBuffer;
+    juce::SmoothedValue<float> bypassMix;
+    bool firstBlock = true;
+    void render(juce::AudioBuffer<float>& buffer, bool bypassed);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ElectroBowAudioProcessor)
 };

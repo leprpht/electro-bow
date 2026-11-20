@@ -35,6 +35,13 @@ ElectroBowAudioProcessorEditor::ElectroBowAudioProcessorEditor(ElectroBowAudioPr
                                 [this](const juce::Array<juce::var>&, auto complete) {
                                     complete(processorRef.getUiState());
                                 })
+            .withNativeFunction("setGesture",
+                                [this](const juce::Array<juce::var>& args, auto complete) {
+                                    if (args.size() == 2)
+                                        processorRef.setUiGesture(args[0].toString(),
+                                                                  static_cast<bool>(args[1]));
+                                    complete({});
+                                })
             .withNativeFunction("setParameter",
                                 [this](const juce::Array<juce::var>& args, auto complete) {
                                     if (args.size() >= 2)
@@ -88,6 +95,7 @@ ElectroBowAudioProcessorEditor::ElectroBowAudioProcessorEditor(ElectroBowAudioPr
 ElectroBowAudioProcessorEditor::~ElectroBowAudioProcessorEditor() {
     stopTimer();
     webComponent.reset();
+    processorRef.endUiGestures();
 }
 
 std::optional<juce::WebBrowserComponent::Resource>

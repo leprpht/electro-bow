@@ -35,7 +35,7 @@ export async function installNativeBridge(page: Page) {
       window.__testBridge = bridge;
       nativeWindow.__JUCE__ = {
         initialisationData: {
-          __juce__functions: ["getPluginState", "setParameter"],
+          __juce__functions: ["getPluginState", "setParameter", "setGesture"],
           __juce__platform: [],
           __juce__registeredGlobalEventIds: [],
           __juce__sliders: [],

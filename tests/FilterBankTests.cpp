@@ -314,7 +314,9 @@ void testCppParity() {
 
 void testProcessor() {
     ElectroBowAudioProcessor processor;
-    processor.setUiParameter("attackMs", 0.0f);
+    for (auto id :
+         {"attackMs", "sustain", "naturalResonanceMs", "friction", "bowPressure", "bowCharacter"})
+        processor.setUiParameter(id, 0.0f);
     juce::MidiBuffer midi;
     for (int channels : {1, 2}) {
         auto layout = processor.getBusesLayout();
@@ -323,8 +325,8 @@ void testProcessor() {
         require(processor.setBusesLayout(layout), "mono/stereo bus layout");
         for (double rate : {8000.0, 44100.0, 48000.0, 96000.0, 192000.0}) {
             processor.prepareToPlay(rate, 64);
-            require(processor.getLatencySamples() == 0 && processor.getTailLengthSeconds() == 0.0,
-                    "zero reported latency and tail");
+            require(processor.getLatencySamples() == 0 && processor.getTailLengthSeconds() >= 1.0,
+                    "zero latency and finite body decay allowance");
             for (int size : {0, 1, 17, 64, 127, 512, 4097}) {
                 const auto original = makeSignal(size);
                 juce::AudioBuffer<float> buffer(channels, size);
@@ -363,6 +365,10 @@ void testAttackIntegration() {
         ElectroBowAudioProcessor dry, wet;
         dry.setUiParameter("attackMs", 0.0f);
         wet.setUiParameter("attackMs", 500.0f);
+        for (auto* processor : {&dry, &wet}) {
+            processor->setUiParameter("bowCharacter", 0.0f);
+            processor->setUiParameter("friction", 0.0f);
+        }
         dry.prepareToPlay(rate, 64);
         wet.prepareToPlay(rate, 64);
         juce::MidiBuffer midi;
@@ -444,8 +450,8 @@ void testInvalidStateKeepsProcessing() {
     }
     juce::MemoryBlock original;
     processor.getStateInformation(original);
-    for (int version : {1, 2}) {
-        for (int field = 0; field < (version == 1 ? 5 : 6); ++field) {
+    for (int version : {1, 2, 3}) {
+        for (int field = 0; field < (4 + version); ++field) {
             for (float invalid :
                  {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
                   -std::numeric_limits<float>::infinity()}) {
@@ -453,7 +459,7 @@ void testInvalidStateKeepsProcessing() {
                 juce::MemoryOutputStream stream(state, false);
                 stream.writeInt(0x45424F57);
                 stream.writeInt(version);
-                for (int i = 0; i < (version == 1 ? 5 : 6); ++i)
+                for (int i = 0; i < (4 + version); ++i)
                     stream.writeFloat(i == field ? invalid : 0.0f);
                 processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
                 juce::MemoryBlock after;
@@ -480,6 +486,64 @@ void testInvalidStateKeepsProcessing() {
         for (int i = 0; i < 257; ++i)
             require(actual.getSample(channel, i) == expected.getSample(channel, i),
                     "invalid state must not bypass or freeze DSP");
+}
+
+void testHostControlStateAndBypass() {
+    ElectroBowAudioProcessor source, restored;
+    require(source.getParameters().size() == 7, "seven host parameters");
+    size_t index = 0;
+    for (auto* param : source.getParameters()) {
+        auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(param);
+        require(ranged != nullptr && ranged->isAutomatable(), "host automation");
+        float normalized = 0.13f * static_cast<float>(++index);
+        param->setValueNotifyingHost(normalized);
+        auto physical = ranged->convertFrom0to1(normalized);
+        auto ui = source.getUiState().getProperty("parameters", {});
+        require(std::abs(static_cast<float>(ui.getProperty(ranged->paramID, -1)) - physical) <
+                    1e-5f,
+                "host edits visible in editor");
+    }
+    juce::MemoryBlock saved, reloaded;
+    source.getStateInformation(saved);
+    restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    restored.getStateInformation(reloaded);
+    require(saved == reloaded, "all seven host parameters survive reload");
+
+    juce::MemoryBlock legacy;
+    juce::MemoryOutputStream stream(legacy, false);
+    stream.writeInt(0x45424F57);
+    stream.writeInt(2);
+    for (float value : {0.25f, 0.5f, 0.75f, 125.0f, 500.0f, 0.9f})
+        stream.writeFloat(value);
+    restored.setStateInformation(legacy.getData(), static_cast<int>(legacy.getSize()));
+    auto old = restored.getUiState().getProperty("parameters", {});
+    require(std::abs(static_cast<float>(old.getProperty("bowCharacter", -1)) - 0.9f) < 1e-6f &&
+                static_cast<float>(old.getProperty("sustain", -1)) == 0.0f,
+            "v2 state migration");
+
+    restored.prepareToPlay(48000.0, 17);
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> audio(2, 513);
+    auto input = makeSignal(513);
+    auto fill = [&] {
+        for (int c = 0; c < 2; ++c)
+            audio.copyFrom(c, 0, input[static_cast<size_t>(c)].data(), 513);
+    };
+    fill();
+    restored.processBlockBypassed(audio, midi);
+    for (int c = 0; c < 2; ++c)
+        require(std::equal(input[static_cast<size_t>(c)].begin(),
+                           input[static_cast<size_t>(c)].end(), audio.getReadPointer(c)),
+                "first bypassed block is exactly dry");
+    fill();
+    restored.processBlock(audio, midi);
+    require(std::abs(audio.getSample(0, 0) - input[0][0]) < 0.005f, "smooth bypass exit");
+    fill();
+    restored.processBlockBypassed(audio, midi);
+    for (int c = 0; c < 2; ++c)
+        require(std::equal(input[static_cast<size_t>(c)].begin() + 240,
+                           input[static_cast<size_t>(c)].end(), audio.getReadPointer(c) + 240),
+                "bypass becomes dry after five milliseconds, including oversized callbacks");
 }
 
 void benchmark() {
@@ -538,6 +602,7 @@ int main() {
     testAttackIntegration();
     testCharacterIntegration();
     testInvalidStateKeepsProcessing();
+    testHostControlStateAndBypass();
     benchmark();
     std::cout << "All FilterBank tests passed.\n";
 }
