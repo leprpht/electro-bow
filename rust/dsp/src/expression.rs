@@ -12,6 +12,7 @@ pub struct Expression {
     lift: f64,
     band_peak: [[f64; 2]; 2],
     controls: [f64; 4],
+    initialized: bool,
 }
 
 impl Expression {
@@ -25,6 +26,7 @@ impl Expression {
             lift: 0.0,
             band_peak: [[0.0; 2]; 2],
             controls: [0.0, 0.0, 0.5, 0.0],
+            initialized: false,
         }
     }
 
@@ -37,7 +39,7 @@ impl Expression {
         self.memory = 0.0;
         self.lift = 0.0;
         self.band_peak = [[0.0; 2]; 2];
-        self.controls = [0.0, 0.0, 0.5, 0.0];
+        self.initialized = false;
     }
 
     pub fn process(
@@ -54,6 +56,10 @@ impl Expression {
             params.friction,
         ]
         .map(|x| x.clamp(0.0, 1.0));
+        if !self.initialized && samples > 0 {
+            self.controls = targets;
+            self.initialized = true;
+        }
         for i in 0..samples {
             for (value, target) in self.controls.iter_mut().zip(targets) {
                 *value += self.smoothing * (target - *value);

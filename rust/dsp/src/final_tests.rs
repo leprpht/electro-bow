@@ -423,3 +423,27 @@ fn long_body_decay_keeps_sustained_harmonics_present() {
         );
     }
 }
+
+#[test]
+fn restored_controls_sound_the_same_with_or_without_silent_preroll() {
+    let config = BowControls {
+        attack_ms: 35.0,
+        pressure: 0.9,
+        speed: 0.05,
+        friction: 0.8,
+        character: 0.9,
+        sustain: 0.7,
+        resonance_ms: 500.0,
+    };
+    let input: Vec<_> = (0..12000).map(|i| material(i, 48000.0, 1)).collect();
+    let mut padded = vec![0.0; 48000];
+    padded.extend_from_slice(&input);
+    let from_rest = render_controls(&input, 48000.0, 97, config);
+    let from_preroll = render_controls(&padded, 48000.0, 97, config);
+    let error = from_rest
+        .iter()
+        .zip(&from_preroll[48000..])
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(error < 1e-6, "first stroke depends on preroll: {error}");
+}

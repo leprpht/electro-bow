@@ -18,6 +18,7 @@ pub struct Resonance {
     damping: f64,
     smoothing: f64,
     mix: f64,
+    initialized: bool,
 }
 
 impl Resonance {
@@ -40,6 +41,7 @@ impl Resonance {
             damping: 1.0 - (-std::f64::consts::TAU * 3100.0 / rate).exp(),
             smoothing: 1.0 - (-1.0 / (0.015 * rate)).exp(),
             mix: 0.0,
+            initialized: false,
         })
     }
 
@@ -50,7 +52,7 @@ impl Resonance {
             line.damped = [0.0; 2];
             line.feedback = 0.0;
         }
-        self.mix = 0.0;
+        self.initialized = false;
     }
 
     pub fn process(&mut self, channels: &mut [&mut [f32]], ms: f64) {
@@ -66,6 +68,13 @@ impl Resonance {
                 0.0
             }
         });
+        if !self.initialized && !channels[0].is_empty() {
+            self.mix = target_mix;
+            for (line, target) in self.lines.iter_mut().zip(targets) {
+                line.feedback = target;
+            }
+            self.initialized = true;
+        }
         for i in 0..channels[0].len() {
             self.mix += self.smoothing * (target_mix - self.mix);
             for (line, target) in self.lines.iter_mut().zip(targets) {

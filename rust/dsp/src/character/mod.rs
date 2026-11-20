@@ -4,6 +4,7 @@
 
 pub struct Character {
     amount: f64,
+    initialized: bool,
     smoothing: f64,
     release: f64,
     envelope: f64,
@@ -13,6 +14,7 @@ impl Character {
     pub fn new(rate: f64) -> Self {
         Self {
             amount: 0.0,
+            initialized: false,
             smoothing: 1.0 - (-1.0 / (0.015 * rate)).exp(),
             release: (-1.0 / (0.035 * rate)).exp(),
             envelope: 0.0,
@@ -20,7 +22,7 @@ impl Character {
     }
 
     pub fn reset(&mut self) {
-        self.amount = 0.0;
+        self.initialized = false;
         self.envelope = 0.0;
     }
 
@@ -32,6 +34,10 @@ impl Character {
         target: f64,
     ) {
         let target = target.clamp(0.0, 1.0);
+        if !self.initialized && samples > 0 {
+            self.amount = target;
+            self.initialized = true;
+        }
         let [_, wood, presence, edge] = bands;
         for i in 0..samples {
             self.amount += self.smoothing * (target - self.amount);
