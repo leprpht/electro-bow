@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { CSSProperties } from "react";
-import { getPluginState, subscribeToState, updateParameter } from "./juce";
-import { defaultState, type ParameterId, type PluginState } from "./types";
+import { usePluginState } from "./hooks/usePluginState";
+import type { ParameterId } from "./types";
 
 type SliderProps = {
   id: ParameterId;
@@ -64,41 +64,7 @@ function SignalBars({ confidence }: { confidence: number }) {
 }
 
 function App() {
-  const [state, setState] = useState<PluginState>(defaultState);
-  const [connected, setConnected] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    getPluginState()
-      .then((nextState) => {
-        if (mounted) {
-          setState(nextState);
-          setConnected(true);
-        }
-      })
-      .catch(() => setConnected(false));
-
-    const unsubscribe = subscribeToState((nextState) => {
-      if (mounted) {
-        setState(nextState);
-        setConnected(true);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, []);
-
-  const setParameter = useCallback((id: ParameterId, value: number) => {
-    setState((current) => ({
-      ...current,
-      parameters: { ...current.parameters, [id]: value },
-    }));
-    void updateParameter(id, value);
-  }, []);
+  const { state, connected, setParameter } = usePluginState();
 
   const frequency = state.pitch.frequencyHz;
   const pitchText = state.pitch.note === "—" ? "Waiting" : state.pitch.note;

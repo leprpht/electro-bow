@@ -1,15 +1,19 @@
 import { getNativeFunction } from "@juce-framework/webview";
-import type { PluginState, ParameterId } from "./types";
+import { defaultState, type PluginState, type ParameterId } from "./types";
 
-const getState = getNativeFunction("getPluginState");
-const setParameter = getNativeFunction("setParameter");
+export function hasNativeBridge(): boolean {
+  const functions = window.__JUCE__?.initialisationData?.__juce__functions;
+  return !!functions?.includes("getPluginState") && !!functions.includes("setParameter");
+}
 
 export async function getPluginState(): Promise<PluginState> {
-  return (await getState()) as PluginState;
+  if (!hasNativeBridge()) return defaultState;
+  return (await getNativeFunction("getPluginState")()) as PluginState;
 }
 
 export function updateParameter(id: ParameterId, value: number): Promise<unknown> {
-  return setParameter(id, value);
+  if (!hasNativeBridge()) return Promise.resolve();
+  return getNativeFunction("setParameter")(id, value);
 }
 
 export function subscribeToState(listener: (state: PluginState) => void): () => void {
