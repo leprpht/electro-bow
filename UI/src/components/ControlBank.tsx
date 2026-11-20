@@ -1,3 +1,4 @@
+import * as styles from "../styles/panel.css";
 import { Knob } from "./Knob";
 import type { ParameterId, PluginState } from "../types";
 
@@ -13,7 +14,7 @@ const inactiveDescription = "This control is not active in the current audio eng
 export function ControlBank({ side, parameters, onChange, onGestureChange }: ControlBankProps) {
   return (
     <section
-      className={`control-bank control-bank-${side} flex flex-col justify-between`}
+      className={`${styles.bank} control-bank control-bank-${side} flex flex-col justify-between`}
       aria-label={side === "left" ? "Envelope controls" : "Bow controls"}
     >
       {side === "left" ? (

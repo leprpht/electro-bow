@@ -192,8 +192,15 @@ are disabled because they are not implemented in the current audio path.
 The tuner shows **No signal** while pitch telemetry is inactive.
 
 The React components live in `UI/src/components/`; native state synchronization
-lives in `UI/src/hooks/usePluginState.ts`. Tailwind handles layout utilities and
-`UI/src/styles.css` defines the instrument materials and responsive sizing.
+lives in `UI/src/hooks/usePluginState.ts`. Tailwind handles layout utilities.
+Typed component styles live in `UI/src/styles/*.css.ts`: panel, knob, tuner,
+screw, and signature modules keep materials, responsive rules, and interaction
+states together. Vanilla Extract compiles these modules into the existing
+`app.css` bundle; no styling runtime or extra native asset route is needed.
+Edit `UI/src/styles/theme.ts` for the shared breakpoint, panel aspect ratio,
+texture, and knob geometry. Screw positions and variants are inferred TypeScript
+types. `UI/src/styles.css` contains only Tailwind setup, fonts, global defaults,
+and reduced-motion behavior.
 Fonts and the SVG texture are bundled into CSS for offline JUCE rendering.
 
 Preview and browser interaction tests:

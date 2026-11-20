@@ -1,5 +1,7 @@
 import { useId, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent } from "react";
+import type { PointerEvent } from "react";
+import { knobGeometry } from "../styles/theme";
+import * as styles from "../styles/knob.css";
 
 type KnobProps = {
   label: string;
@@ -17,7 +19,11 @@ type KnobProps = {
 };
 
 const percent = (value: number) => `${Math.round(value * 100)}%`;
-const ticks = Array.from({ length: 11 }, (_, index) => -135 + index * 27);
+const ticks = Array.from(
+  { length: knobGeometry.tickCount },
+  (_, index) =>
+    knobGeometry.startAngle + (index * knobGeometry.sweepAngle) / (knobGeometry.tickCount - 1),
+);
 
 export function Knob({
   label,
@@ -37,7 +43,8 @@ export function Knob({
   const drag = useRef<{ pointerId: number; y: number; value: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const boundedValue = Math.min(max, Math.max(min, value));
-  const angle = -135 + ((boundedValue - min) / (max - min)) * 270;
+  const angle =
+    knobGeometry.startAngle + ((boundedValue - min) / (max - min)) * knobGeometry.sweepAngle;
 
   function change(nextValue: number) {
     const rounded = min + Math.round((nextValue - min) / step) * step;
@@ -78,37 +85,37 @@ export function Knob({
 
   return (
     <div
-      className={`knob-control group relative flex flex-col items-center ${compact ? "knob-compact" : ""}`}
+      className={`knob-control group relative flex flex-col items-center ${styles.control} ${compact ? styles.compact : ""}`}
       data-dragging={dragging || undefined}
       data-disabled={disabled || undefined}
       title={description}
     >
-      <label className="knob-label text-center" htmlFor={id}>
+      <label className={`knob-label text-center ${styles.label}`} htmlFor={id}>
         {compact ? label : label.split(" ").join("\n")}
       </label>
-      <div className="knob-dial relative aspect-square">
+      <div className={`knob-dial relative aspect-square ${styles.dial}`}>
         <div className="knob-ticks absolute inset-0" aria-hidden="true">
           {ticks.map((tick, index) => (
             <span
               key={tick}
-              className={index % 5 === 0 ? "knob-tick knob-tick-major" : "knob-tick"}
-              style={{ "--tick-angle": `${tick}deg` } as CSSProperties}
+              className={`${styles.tick} ${index % 5 === 0 ? styles.majorTick : ""}`}
+              style={{ transform: `rotate(${tick}deg)` }}
             />
           ))}
         </div>
-        <div className="knob-rim absolute rounded-full" aria-hidden="true">
-          <div className="knob-face absolute rounded-full" />
+        <div className={`knob-rim absolute rounded-full ${styles.rim}`} aria-hidden="true">
+          <div className={`knob-face absolute rounded-full ${styles.face}`} />
           <div
             className="knob-pointer absolute inset-0"
             style={{ transform: `rotate(${angle}deg)` }}
           >
-            <span />
+            <span className={styles.pointer} />
           </div>
         </div>
         <input
           id={id}
           type="range"
-          className="knob-input absolute inset-0 h-full w-full opacity-0"
+          className={`knob-input absolute inset-0 h-full w-full opacity-0 ${styles.input}`}
           aria-label={label}
           aria-describedby={`${id}-description`}
           aria-valuetext={
@@ -128,7 +135,11 @@ export function Knob({
           onDoubleClick={() => change(defaultValue)}
         />
       </div>
-      <output className="knob-value absolute text-center" htmlFor={id} aria-hidden="true">
+      <output
+        className={`knob-value absolute text-center ${styles.value}`}
+        htmlFor={id}
+        aria-hidden="true"
+      >
         {disabled ? "Not active" : format(boundedValue)}
       </output>
       <span id={`${id}-description`} className="sr-only">

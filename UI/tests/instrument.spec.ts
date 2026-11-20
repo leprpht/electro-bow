@@ -13,7 +13,15 @@ test("preview has working accessible controls and honest inactive states", async
     await expect(page.getByRole("slider", { name: label, exact: true })).toBeDisabled();
   }
   const attack = page.getByRole("slider", { name: "Attack Reduction" });
+  const value = attack.locator("../..").locator("output");
+  await expect(value).toHaveCSS("opacity", "0");
+  await attack.hover();
+  await expect(value).toHaveCSS("opacity", "1");
+  await page.mouse.move(0, 0);
+  await expect(value).toHaveCSS("opacity", "0");
   await attack.focus();
+  await expect(value).toHaveCSS("opacity", "1");
+  await expect(attack.locator("..")).toHaveCSS("outline-style", "solid");
   await page.keyboard.press("End");
   await expect(attack).toHaveValue("500");
   await page.keyboard.press("Home");
@@ -22,6 +30,9 @@ test("preview has working accessible controls and honest inactive states", async
   await expect(attack).toHaveValue("1");
   await attack.dblclick();
   await expect(attack).toHaveValue("50");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(value).toHaveCSS("transition-duration", "0s");
+  await expect(page.locator(".tuner-needle")).toHaveCSS("transition-duration", "0s");
   expect(errors).toEqual([]);
 });
 

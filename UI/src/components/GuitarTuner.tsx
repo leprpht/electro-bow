@@ -1,4 +1,6 @@
 import { useId } from "react";
+import { engravedRule } from "../styles/shared.css";
+import * as styles from "../styles/tuner.css";
 import type { PluginState } from "../types";
 import { getTuning } from "../lib/pitch";
 import { PanelScrew } from "./PanelScrew";
@@ -25,24 +27,24 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
   const frequency = active ? `${pitch.frequencyHz.toFixed(1)} Hz` : "No signal";
 
   return (
-    <section className="tuner w-full" aria-labelledby={`${id}-title`}>
+    <section className={`tuner w-full ${styles.tuner}`} aria-labelledby={`${id}-title`}>
       <h2
         id={`${id}-title`}
-        className="tuner-heading flex items-center justify-center whitespace-nowrap"
+        className={`tuner-heading flex items-center justify-center whitespace-nowrap ${styles.heading}`}
       >
-        <span className="engraved-rule flex-1" aria-hidden="true" />
+        <span className={`flex-1 ${engravedRule}`} aria-hidden="true" />
         Guitar Tuner
-        <span className="engraved-rule flex-1" aria-hidden="true" />
+        <span className={`flex-1 ${engravedRule}`} aria-hidden="true" />
       </h2>
-      <div className="tuner-bezel relative">
-        <PanelScrew className="screw-top-left" />
-        <PanelScrew className="screw-top-right" />
-        <PanelScrew className="screw-bottom-left" />
-        <PanelScrew className="screw-bottom-right" />
-        <div className="tuner-glass relative overflow-hidden">
+      <div className={`tuner-bezel relative ${styles.bezel}`}>
+        <PanelScrew position="topLeft" variant="tuner" />
+        <PanelScrew position="topRight" variant="tuner" />
+        <PanelScrew position="bottomLeft" variant="tuner" />
+        <PanelScrew position="bottomRight" variant="tuner" />
+        <div className={`tuner-glass relative overflow-hidden ${styles.glass}`}>
           <svg
             viewBox="0 0 360 215"
-            className="tuner-scale block h-full w-full"
+            className={`tuner-scale block h-full w-full ${styles.scale}`}
             role="img"
             aria-label={
               active
@@ -50,7 +52,7 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
                 : "Tuner idle. Pitch tracking is not active in the current audio engine."
             }
           >
-            <text x="180" y="43" className="tuner-note" textAnchor="middle">
+            <text x="180" y="43" className={`tuner-note ${styles.note}`} textAnchor="middle">
               {note}
             </text>
             <defs>
@@ -58,13 +60,16 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
                 <rect width="360" height="187" />
               </clipPath>
             </defs>
-            <path d="M32 140 Q180 10 328 140" className="meter-line" />
+            <path d="M32 140 Q180 10 328 140" className={`meter-line ${styles.line}`} />
             <path
               d="M280 108 Q294 118 311 138 L328 140 Q315 123 299 112Z"
               fill="#ad3d2c"
               opacity=".85"
             />
-            <path d="M50 155 Q180 33 310 155" className="meter-line meter-line-fine" />
+            <path
+              d="M50 155 Q180 33 310 155"
+              className={`meter-line meter-line-fine ${styles.line} ${styles.fineLine}`}
+            />
             {marks.map(({ start, end }, index) => (
               <line
                 key={index}
@@ -72,23 +77,34 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
                 y1={start.y}
                 x2={end.x}
                 y2={end.y}
-                className="meter-line meter-line-fine"
+                className={`meter-line meter-line-fine ${styles.line} ${styles.fineLine}`}
               />
             ))}
-            <text x="43" y="170" textAnchor="middle" className="tuner-limit">
+            <text x="43" y="170" textAnchor="middle" className={`tuner-limit ${styles.limit}`}>
               -50
             </text>
-            <text x="317" y="170" textAnchor="middle" className="tuner-limit">
+            <text x="317" y="170" textAnchor="middle" className={`tuner-limit ${styles.limit}`}>
               +50
             </text>
             <g clipPath={`url(#${id}-needle-clip)`}>
-              <g className="tuner-needle" style={{ transform: `rotate(${cents * 0.96}deg)` }}>
+              <g
+                className={`tuner-needle ${styles.needle}`}
+                style={{ transform: `rotate(${cents * 0.96}deg)` }}
+              >
                 <path d="M175 272 180 74 185 272Z" fill="#27251e" />
                 <path d="M180 272 180 79" stroke="#000" strokeOpacity=".2" strokeWidth="2" />
               </g>
             </g>
-            <path d="M95 192 Q180 151 265 192" className="meter-line meter-line-fine" />
-            <text x="180" y="207" textAnchor="middle" className="tuner-frequency">
+            <path
+              d="M95 192 Q180 151 265 192"
+              className={`meter-line meter-line-fine ${styles.line} ${styles.fineLine}`}
+            />
+            <text
+              x="180"
+              y="207"
+              textAnchor="middle"
+              className={`tuner-frequency ${styles.frequency}`}
+            >
               {frequency}
             </text>
           </svg>

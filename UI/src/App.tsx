@@ -1,3 +1,4 @@
+import * as styles from "./styles/panel.css";
 import { BrandSignature } from "./components/BrandSignature";
 import { ControlBank } from "./components/ControlBank";
 import { GuitarTuner } from "./components/GuitarTuner";
@@ -17,10 +18,10 @@ function App() {
         onChange={setParameter}
         onGestureChange={setGesture}
       />
-      <div className="center-column flex min-w-0 flex-col items-center">
+      <div className={`center-column flex min-w-0 flex-col items-center ${styles.center}`}>
         <GuitarTuner pitch={state.pitch} />
         <BrandSignature />
-        <div className="character-control">
+        <div className={`character-control ${styles.character}`}>
           <Knob
             label="Bow Character"
             description="Adds body, texture, and friction to the original signal."
