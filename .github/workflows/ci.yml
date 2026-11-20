@@ -172,6 +172,11 @@ jobs:
         timeout-minutes: 10
         run: ctest --test-dir build --build-config Release --verbose --timeout 180 --no-tests=error
 
+      - name: Verify repeated Windows editor startup
+        if: runner.os == 'Windows'
+        timeout-minutes: 15
+        run: ctest --test-dir build --build-config Release --verbose -R '^ElectroBowEditorSmokeTests$' --repeat until-fail:5 --no-tests=error
+
       - name: Report compiler cache
         if: always() && runner.os != 'Windows'
         run: ccache --show-stats

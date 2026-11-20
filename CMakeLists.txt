@@ -379,6 +379,7 @@ if(BUILD_TESTING)
             $<TARGET_PROPERTY:ElectroBow,COMPILE_DEFINITIONS>)
         target_link_libraries(ElectroBowEditorSmokeTests PRIVATE ElectroBow)
         add_test(NAME ElectroBowEditorSmokeTests COMMAND ElectroBowEditorSmokeTests)
-        set_tests_properties(ElectroBowEditorSmokeTests PROPERTIES TIMEOUT 60)
+        # Windows allows 60 seconds per cold browser load, including reopen.
+        set_tests_properties(ElectroBowEditorSmokeTests PROPERTIES TIMEOUT 150)
     endif()
 endif()

@@ -51,7 +51,15 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
         ready = false;
         uiChangeRequested = false;
         evaluationPending = false;
-        deadline = juce::Time::getMillisecondCounterHiRes() + 20000.0;
+        // A cold WebView2 profile can take longer than 20 seconds to load on
+        // hosted Windows runners. Keep checking the actual UI and native bridge
+        // throughout this budget; a blank page must still fail the test.
+        openedAt = juce::Time::getMillisecondCounterHiRes();
+#if JUCE_WINDOWS
+        deadline = openedAt + 60000.0;
+#else
+        deadline = openedAt + 20000.0;
+#endif
     }
 
     void finish(bool passed) {
@@ -59,8 +67,9 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
         if (passed)
             std::cout << "Embedded HTML, React, CSS and native state loaded on open and reopen.\n";
         else
-            std::cerr << "Editor failed to load embedded UI and native state: " << lastResult
-                      << '\n';
+            std::cerr << "Editor failed to load embedded UI and native state after "
+                      << (juce::Time::getMillisecondCounterHiRes() - openedAt) / 1000.0
+                      << " seconds: " << lastResult << '\n';
         setApplicationReturnValue(passed ? 0 : 1);
         quit();
     }
@@ -130,6 +139,13 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
                 return {
                     ready,
                     url: location.href,
+                    documentState: document.readyState,
+                    html: document.documentElement.outerHTML.slice(0, 1200),
+                    resources: performance.getEntriesByType('resource').map(entry => ({
+                        name: entry.name,
+                        duration: entry.duration,
+                        size: entry.transferSize
+                    })),
                     text: document.body ? document.body.innerText.slice(0, 200) : '',
                     sliders: document.querySelectorAll('input[type="range"]').length,
                     connected: !!document.querySelector('.status-live'),
@@ -153,6 +169,7 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
     std::unique_ptr<ElectroBowAudioProcessorEditor> editor;
     juce::WebBrowserComponent* browser = nullptr;
     double deadline = 0.0;
+    double openedAt = 0.0;
     int completedLoads = 0;
     bool ready = false;
     bool uiChangeRequested = false;
