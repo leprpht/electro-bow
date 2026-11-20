@@ -30,6 +30,8 @@ and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   installed dependencies.
 - Reduced Linux CI dependency download delays by bypassing the slow Azure
   Ubuntu mirror, bounding downloads, and combining package installation steps.
+- Pinned Windows build and release jobs to Windows Server 2022 to avoid native
+  browser startup failures on the newer Server 2025 runner image.
 
 ## [1.5.0] - 2026-11-20
 

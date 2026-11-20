@@ -25,7 +25,8 @@ jobs:
       matrix:
         include:
           - name: windows
-            os: windows-latest
+            # Keep native WebView2 smoke tests off the regressed Server 2025 image.
+            os: windows-2022
           - name: macos
             os: macos-latest
           - name: linux
