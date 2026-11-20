@@ -19,9 +19,14 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
         auto attributes = juce::AudioParameterFloatAttributes();
         if (maximum > 1.0f)
             attributes = attributes.withLabel("ms");
-        auto p = std::make_unique<juce::AudioParameterFloat>(
-            juce::ParameterID{id, 1}, name, juce::NormalisableRange<float>{0.0f, maximum}, initial,
-            attributes);
+        // Host automation also enters through this range, bypassing the
+        // validation in the WebView and saved-state entry points.
+        juce::NormalisableRange<float> range{
+            0.0f, maximum, {}, {}, [initial](float low, float high, float value) {
+                return std::isfinite(value) ? std::clamp(value, low, high) : initial;
+            }};
+        auto p = std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id, 1}, name, range,
+                                                             initial, attributes);
         controls[index] = p.get();
         addParameter(p.release()); // AudioProcessor owns the parameter.
     };

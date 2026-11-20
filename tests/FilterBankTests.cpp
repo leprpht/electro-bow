@@ -488,6 +488,31 @@ void testInvalidStateKeepsProcessing() {
                     "invalid state must not bypass or freeze DSP");
 }
 
+void testInvalidHostAutomation() {
+    ElectroBowAudioProcessor processor;
+    processor.prepareToPlay(48000, 32);
+    juce::MemoryBlock defaults;
+    processor.getStateInformation(defaults);
+    for (auto* parameter : processor.getParameters()) {
+        parameter->setValueNotifyingHost(1.0f);
+        parameter->setValueNotifyingHost(std::numeric_limits<float>::quiet_NaN());
+        require(parameter->getValue() == parameter->getDefaultValue(),
+                "invalid host automation restores a finite parameter");
+    }
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    require(defaults == saved, "host faults cannot poison saved sessions");
+
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> audio(2, 97);
+    audio.clear();
+    audio.setSample(0, 0, std::numeric_limits<float>::quiet_NaN());
+    audio.setSample(1, 0, 0.5f);
+    processor.processBlock(audio, midi);
+    require(audio.getSample(0, 0) == 0 && std::abs(audio.getSample(1, 0)) < 0.1f,
+            "DSP still sanitizes input and shapes the first pick after a host fault");
+}
+
 void testHostControlStateAndBypass() {
     ElectroBowAudioProcessor source, restored;
     require(source.getParameters().size() == 7, "seven host parameters");
@@ -662,6 +687,7 @@ int main() {
     testInvalidStateKeepsProcessing();
     testHostControlStateAndBypass();
     testAutomationRouting();
+    testInvalidHostAutomation();
     benchmark();
     std::cout << "All FilterBank tests passed.\n";
 }
