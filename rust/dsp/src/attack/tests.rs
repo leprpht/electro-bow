@@ -56,7 +56,11 @@ fn processing_respects_sample_count_and_configured_channels() {
         assert_eq!(processed[1], source[1], "inactive channel");
         assert_eq!(processed[0][1024..], source[0][1024..], "unused tail");
     }
-    assert_eq!(actual[0], original[0], "lowest band must remain unchanged");
+    assert_ne!(
+        actual[0][0][..1024],
+        original[0][0][..1024],
+        "the fundamental must swell too"
+    );
     assert_ne!(actual[3][0][..1024], original[3][0][..1024]);
 }
 

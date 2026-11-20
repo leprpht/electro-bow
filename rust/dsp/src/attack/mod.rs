@@ -1,38 +1,41 @@
-//! Continuous, level-relative spectral transient control. No event detector,
-//! pitch tracker, lookahead, gate, or onset-triggered amplitude ramp.
+//! A linked, level-relative swell on the original audio. Tracking a slower
+//! envelope underneath a fast one softens re-picks without a trigger or gate.
 #![forbid(unsafe_code)]
 
 pub struct Attack {
     rate: f64,
-    last_target: f64,
-    slow_coefficient: f64,
-    fast_release: f64,
-    control: f64,
-    amount: f64,
-    fast: [f64; 4],
-    slow: [f64; 4],
-    gain: [f64; 4],
+    rise: f64,
+    release: f64,
+    smoothing: f64,
+    coefficient: f64,
+    held: f64,
+    fast: f64,
+    bowed: f64,
+    initialized: bool,
 }
+
 impl Attack {
     pub fn new(rate: f64) -> Self {
         Self {
             rate,
-            last_target: 0.0,
-            slow_coefficient: 1.0 - (-1.0 / (0.005 * rate)).exp(),
-            fast_release: (-1.0 / (0.003 * rate)).exp(),
-            control: 1.0 - (-1.0 / (0.001 * rate)).exp(),
-            amount: 0.0,
-            fast: [0.0; 4],
-            slow: [0.0; 4],
-            gain: [1.0; 4],
+            rise: 1.0 - (-1.0 / (0.002 * rate)).exp(),
+            release: (-1.0 / (0.025 * rate)).exp(),
+            smoothing: 1.0 - (-1.0 / (0.008 * rate)).exp(),
+            coefficient: 1.0,
+            held: 0.0,
+            fast: 0.0,
+            bowed: 0.0,
+            initialized: false,
         }
     }
+
     pub fn reset(&mut self) {
-        self.fast = [0.0; 4];
-        self.slow = [0.0; 4];
-        self.gain = [1.0; 4];
-        self.amount = 0.0;
+        self.held = 0.0;
+        self.fast = 0.0;
+        self.bowed = 0.0;
+        self.initialized = false;
     }
+
     pub fn process(
         &mut self,
         bands: &mut [[Vec<f32>; 2]; 4],
@@ -40,37 +43,45 @@ impl Attack {
         samples: usize,
         milliseconds: f64,
     ) {
-        let target = (milliseconds / 500.0).clamp(0.0, 1.0);
-        // Coefficients computed once per chunk, never per sample.
-        if target != self.last_target {
-            self.slow_coefficient = 1.0 - (-1.0 / ((0.005 + 0.145 * target) * self.rate)).exp();
-            self.last_target = target;
+        if samples == 0 {
+            return;
         }
-        let slow_coefficient = self.slow_coefficient;
-        let weights = [0.0, 0.15, 0.65, 1.0];
+        // Time to reach 90% of a steady amplitude.
+        let time = milliseconds.clamp(0.0, 500.0) * 0.001;
+        let target = if time == 0.0 {
+            1.0
+        } else {
+            1.0 - (-std::f64::consts::LN_10 / (time * self.rate)).exp()
+        };
+        if !self.initialized {
+            self.coefficient = target;
+            self.initialized = true;
+        }
         for i in 0..samples {
-            self.amount += self.control * (target - self.amount);
-            for (b, band) in bands.iter_mut().enumerate() {
-                let peak = band
-                    .iter()
-                    .take(channels)
-                    .map(|c| f64::from(c[i]).abs())
-                    .fold(0.0, f64::max);
-                self.fast[b] = peak.max(self.fast[b] * self.fast_release);
-                self.slow[b] += slow_coefficient * (self.fast[b] - self.slow[b]);
-                let novelty = if self.fast[b] > 1e-30 {
-                    (1.0 - self.slow[b] / self.fast[b]).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let desired = 1.0 - 0.75 * weights[b] * self.amount * novelty;
-                self.gain[b] += self.control * (desired - self.gain[b]);
+            self.coefficient += self.smoothing * (target - self.coefficient);
+            let mut peak = 0.0_f64;
+            for ch in 0..channels {
+                let input: f64 = bands.iter().map(|b| f64::from(b[ch][i])).sum();
+                peak = peak.max(input.abs());
+            }
+            self.held = peak.max(self.held * self.release);
+            self.fast += self.rise * (self.held - self.fast);
+            // Discharge between strokes, but retain enough envelope across
+            // individual low-string cycles to avoid low-frequency ripple.
+            let follow = if self.fast < self.bowed {
+                self.coefficient.max(1.0 - self.release)
+            } else {
+                self.coefficient
+            };
+            self.bowed += follow * (self.fast - self.bowed);
+            let gain = if self.fast > 1e-30 {
+                (1.10 * self.bowed / self.fast).min(1.0)
+            } else {
+                1.0
+            };
+            for band in bands.iter_mut() {
                 for channel in band.iter_mut().take(channels) {
-                    channel[i] *= if target == 0.0 && self.amount < 1e-12 {
-                        1.0
-                    } else {
-                        self.gain[b] as f32
-                    };
+                    channel[i] *= gain as f32;
                 }
             }
         }
