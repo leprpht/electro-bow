@@ -352,10 +352,20 @@ void testProcessor() {
     layout.inputBuses.set(0, juce::AudioChannelSet::create5point1());
     layout.outputBuses.set(0, juce::AudioChannelSet::create5point1());
     require(!processor.isBusesLayoutSupported(layout), "reject unsupported surround layout");
-    processor.prepareToPlay(48000.0, 0);
-    juce::AudioBuffer<float> buffer(2, 7);
-    buffer.clear();
-    processor.processBlock(buffer, midi);
+    juce::AudioBuffer<float> buffer(2, 9001);
+    for (int hint : {0, std::numeric_limits<int>::max()}) {
+        processor.prepareToPlay(48000.0, hint);
+        buffer.clear();
+        buffer.setSample(1, 9000, 0.25f);
+        processor.processBlock(buffer, midi);
+        require(std::abs(buffer.getSample(1, 9000) - 0.25f) < 2e-7f,
+                "unknown and offline block hints preserve the final chunk");
+        processor.prepareToPlay(std::numeric_limits<double>::quiet_NaN(), 64);
+        buffer.setSample(1, 0, 0.5f);
+        processor.processBlock(buffer, midi);
+        require(buffer.getMagnitude(0, buffer.getNumSamples()) == 0.0f,
+                "invalid preparation cannot reuse the previous audio configuration");
+    }
     std::cout
         << "PASS: processor mono/stereo, variable/oversized/empty blocks, latency and lifecycle\n";
 }

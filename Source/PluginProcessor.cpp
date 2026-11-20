@@ -40,8 +40,18 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
 }
 
 void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
-    filterBank.prepare(sampleRate, std::max(1, samplesPerBlock), getTotalNumInputChannels());
-    wetBuffer.setSize(getTotalNumInputChannels(), filterBank.getCapacity());
+    const int channels = getTotalNumInputChannels();
+    if (!std::isfinite(sampleRate) || sampleRate <= 0.0 || channels < 1 ||
+        channels > FilterBank::maxChannels) {
+        releaseResources();
+        return;
+    }
+
+    // Host block size is a hint. Bound scratch space for offline hosts and
+    // use a normal chunk size when the host has no estimate yet.
+    const int capacity = samplesPerBlock > 0 ? std::min(samplesPerBlock, 8192) : 256;
+    filterBank.prepare(sampleRate, capacity, channels);
+    wetBuffer.setSize(channels, capacity);
     bypassMix.reset(sampleRate, 0.005);
     inputLevel.store(0.0f, std::memory_order_relaxed);
     firstBlock = true;
@@ -49,7 +59,10 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
 }
 
 void ElectroBowAudioProcessor::releaseResources() {
-    reset();
+    filterBank.release();
+    wetBuffer.setSize(0, 0);
+    inputLevel.store(0.0f, std::memory_order_relaxed);
+    firstBlock = true;
 }
 
 void ElectroBowAudioProcessor::reset() {

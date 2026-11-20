@@ -78,11 +78,12 @@ impl Attack {
             self.coefficient = target;
             self.initialized = true;
         }
+        let (pairs, _) = bands.as_chunks_mut::<2>();
         for i in 0..samples {
             self.coefficient += self.smoothing * (target - self.coefficient);
             // The complementary pairs meet at 800 Hz. A ringing bass
             // string must not hold open the treble envelope on the next pick.
-            for (pair, envelope) in bands.chunks_exact_mut(2).zip(&mut self.envelopes) {
+            for (pair, envelope) in pairs.iter_mut().zip(&mut self.envelopes) {
                 let mut peak = 0.0_f64;
                 for ch in 0..channels {
                     let input = f64::from(pair[0][ch][i]) + f64::from(pair[1][ch][i]);

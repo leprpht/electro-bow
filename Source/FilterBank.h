@@ -46,6 +46,11 @@ class FilterBank {
         assert(ok != 0);
         (void)ok;
     }
+    void release() noexcept {
+        handle.reset();
+        capacity = 0;
+        channelCount = 0;
+    }
     void reset() noexcept {
         eb_filter_bank_reset(handle.get());
     }
