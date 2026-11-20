@@ -3,11 +3,11 @@
 #![forbid(unsafe_code)]
 
 pub struct Attack {
-    rate: f64,
+    samples_per_ms: f64,
     rise: f64,
     release: f64,
     smoothing: f64,
-    coefficient: f64,
+    time_constant: f64,
     envelopes: [Swell; 2],
     initialized: bool,
 }
@@ -42,11 +42,11 @@ impl Swell {
 impl Attack {
     pub fn new(rate: f64) -> Self {
         Self {
-            rate,
+            samples_per_ms: rate * 0.001 / std::f64::consts::LN_10,
             rise: 1.0 - (-1.0 / (0.002 * rate)).exp(),
             release: (-1.0 / (0.025 * rate)).exp(),
             smoothing: 1.0 - (-1.0 / (0.008 * rate)).exp(),
-            coefficient: 1.0,
+            time_constant: 0.0,
             envelopes: Default::default(),
             initialized: false,
         }
@@ -67,20 +67,18 @@ impl Attack {
         if samples == 0 {
             return;
         }
-        // Time to reach 90% of a steady amplitude.
-        let time = milliseconds.clamp(0.0, 500.0) * 0.001;
-        let target = if time == 0.0 {
-            1.0
-        } else {
-            1.0 - (-std::f64::consts::LN_10 / (time * self.rate)).exp()
-        };
+        // Convert the displayed 90% rise time to a one-pole time constant
+        // in samples. Smooth in the time domain: interpolating coefficients
+        // from unity keeps a newly automated long swell near bypass.
+        let target = milliseconds.clamp(0.0, 500.0) * self.samples_per_ms;
         if !self.initialized {
-            self.coefficient = target;
+            self.time_constant = target;
             self.initialized = true;
         }
         let (pairs, _) = bands.as_chunks_mut::<2>();
         for i in 0..samples {
-            self.coefficient += self.smoothing * (target - self.coefficient);
+            self.time_constant += self.smoothing * (target - self.time_constant);
+            let coefficient = 1.0 / (1.0 + self.time_constant);
             // The complementary pairs meet at 800 Hz. A ringing bass
             // string must not hold open the treble envelope on the next pick.
             for (pair, envelope) in pairs.iter_mut().zip(&mut self.envelopes) {
@@ -89,7 +87,7 @@ impl Attack {
                     let input = f64::from(pair[0][ch][i]) + f64::from(pair[1][ch][i]);
                     peak = peak.max(input.abs());
                 }
-                let gain = envelope.gain(peak, self.rise, self.release, self.coefficient);
+                let gain = envelope.gain(peak, self.rise, self.release, coefficient);
                 for band in pair {
                     for channel in band.iter_mut().take(channels) {
                         channel[i] *= gain;
