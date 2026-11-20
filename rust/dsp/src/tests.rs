@@ -352,3 +352,39 @@ fn character_two_tone_artifact_budget() {
     );
     assert!(residual < 0.05, "excessive non-fundamental energy");
 }
+
+#[test]
+fn attack_softens_a_new_pick_above_a_ringing_string() {
+    let rate = 48000.0;
+    let partial = |hz: f64, i: usize| (std::f64::consts::TAU * hz * i as f64 / rate).sin();
+    let input: Vec<_> = (0..48000)
+        .map(|i| {
+            let pick = if i >= 24000 {
+                0.14 * partial(6000.0, i)
+            } else {
+                0.0
+            };
+            (0.35 * partial(100.0, i) + pick) as f32
+        })
+        .collect();
+    let audio = shaped(&input, 120.0, 1.0, 97);
+    // Use complete cycles to isolate the two components in the same 10 ms.
+    let amplitude = |start: usize, hz: f64| {
+        let (mut re, mut im) = (0.0, 0.0);
+        for (i, &sample) in audio[start..start + 480].iter().enumerate() {
+            let phase = std::f64::consts::TAU * hz * i as f64 / rate;
+            re += f64::from(sample) * phase.cos();
+            im += f64::from(sample) * phase.sin();
+        }
+        re.hypot(im) / 240.0
+    };
+    assert!(
+        amplitude(24000, 6000.0) < 0.08,
+        "treble pick breaks through"
+    );
+    assert!(amplitude(24000, 100.0) > 0.32, "ringing bass ducks");
+    assert!(
+        amplitude(43200, 6000.0) > 0.135,
+        "sustained brightness is lost"
+    );
+}

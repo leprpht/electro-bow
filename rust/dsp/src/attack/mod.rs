@@ -8,10 +8,35 @@ pub struct Attack {
     release: f64,
     smoothing: f64,
     coefficient: f64,
+    envelopes: [Swell; 2],
+    initialized: bool,
+}
+
+#[derive(Default)]
+struct Swell {
     held: f64,
     fast: f64,
     bowed: f64,
-    initialized: bool,
+}
+
+impl Swell {
+    fn gain(&mut self, peak: f64, rise: f64, release: f64, coefficient: f64) -> f32 {
+        self.held = peak.max(self.held * release);
+        self.fast += rise * (self.held - self.fast);
+        // Discharge between strokes while retaining the envelope across
+        // individual low-string cycles.
+        let follow = if self.fast < self.bowed {
+            coefficient.max(1.0 - release)
+        } else {
+            coefficient
+        };
+        self.bowed += follow * (self.fast - self.bowed);
+        if self.fast > 1e-30 {
+            (1.10 * self.bowed / self.fast).min(1.0) as f32
+        } else {
+            1.0
+        }
+    }
 }
 
 impl Attack {
@@ -22,17 +47,13 @@ impl Attack {
             release: (-1.0 / (0.025 * rate)).exp(),
             smoothing: 1.0 - (-1.0 / (0.008 * rate)).exp(),
             coefficient: 1.0,
-            held: 0.0,
-            fast: 0.0,
-            bowed: 0.0,
+            envelopes: Default::default(),
             initialized: false,
         }
     }
 
     pub fn reset(&mut self) {
-        self.held = 0.0;
-        self.fast = 0.0;
-        self.bowed = 0.0;
+        self.envelopes = Default::default();
         self.initialized = false;
     }
 
@@ -59,29 +80,19 @@ impl Attack {
         }
         for i in 0..samples {
             self.coefficient += self.smoothing * (target - self.coefficient);
-            let mut peak = 0.0_f64;
-            for ch in 0..channels {
-                let input: f64 = bands.iter().map(|b| f64::from(b[ch][i])).sum();
-                peak = peak.max(input.abs());
-            }
-            self.held = peak.max(self.held * self.release);
-            self.fast += self.rise * (self.held - self.fast);
-            // Discharge between strokes, but retain enough envelope across
-            // individual low-string cycles to avoid low-frequency ripple.
-            let follow = if self.fast < self.bowed {
-                self.coefficient.max(1.0 - self.release)
-            } else {
-                self.coefficient
-            };
-            self.bowed += follow * (self.fast - self.bowed);
-            let gain = if self.fast > 1e-30 {
-                (1.10 * self.bowed / self.fast).min(1.0)
-            } else {
-                1.0
-            };
-            for band in bands.iter_mut() {
-                for channel in band.iter_mut().take(channels) {
-                    channel[i] *= gain as f32;
+            // The complementary pairs meet at 800 Hz. A ringing bass
+            // string must not hold open the treble envelope on the next pick.
+            for (pair, envelope) in bands.chunks_exact_mut(2).zip(&mut self.envelopes) {
+                let mut peak = 0.0_f64;
+                for ch in 0..channels {
+                    let input = f64::from(pair[0][ch][i]) + f64::from(pair[1][ch][i]);
+                    peak = peak.max(input.abs());
+                }
+                let gain = envelope.gain(peak, self.rise, self.release, self.coefficient);
+                for band in pair {
+                    for channel in band.iter_mut().take(channels) {
+                        channel[i] *= gain;
+                    }
                 }
             }
         }
