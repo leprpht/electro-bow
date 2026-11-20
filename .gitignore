@@ -3,6 +3,8 @@ build/
 JUCE/
 UI/node_modules/
 UI/dist/
+UI/test-results/
+UI/playwright-report/
 cmake-build-*/
 CMakeCache.txt
 CMakeFiles/
@@ -45,6 +47,7 @@ build.log
 .DS_Store
 Thumbs.db
 __pycache__/
+.venv/
 *.py[cod]
 *.swp
 *.swo

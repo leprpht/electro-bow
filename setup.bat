@@ -9,7 +9,7 @@ if not defined JUCE_PATH set "JUCE_PATH=%PROJECT_DIR%JUCE"
 
 echo Checking required commands...
 
-for %%C in (git node npm python cmake clang-format rustup cargo rustc) do (
+for %%C in (git node npm python pre-commit cmake clang-format rustup cargo rustc) do (
     where %%C >nul 2>&1
     if errorlevel 1 (
         echo setup: required command '%%C' was not found in PATH.
@@ -67,7 +67,7 @@ call npm ci --prefix "%UI_DIR%"
 if errorlevel 1 exit /b 1
 
 echo Enabling repository Git hooks (pre-commit and pre-push)...
-git -C "%PROJECT_DIR%" config core.hooksPath .githooks
+python "%PROJECT_DIR%tools\install_hooks.py"
 if errorlevel 1 exit /b 1
 
 echo Setup complete. JUCE: %JUCE_PATH%

@@ -40,6 +40,7 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
                 browser = candidate;
 
         ready = false;
+        uiChangeRequested = false;
         evaluationPending = false;
         deadline = juce::Time::getMillisecondCounterHiRes() + 20000.0;
     }
@@ -57,6 +58,30 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
 
     void timerCallback() override {
         if (ready) {
+            if (!uiChangeRequested) {
+                uiChangeRequested = true;
+                browser->evaluateJavascript(R"JS(
+                    (() => {
+                        const input = document.querySelector('input[aria-label="Bow Character"]');
+                        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+                        setter.call(input, '0.61');
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                    })()
+                )JS");
+                return;
+            }
+
+            const auto state = processor->getUiState();
+            const auto character = static_cast<double>(
+                state.getProperty("parameters", {}).getProperty("bowCharacter", -1.0));
+            if (std::abs(character - 0.61) > 0.001) {
+                if (juce::Time::getMillisecondCounterHiRes() > deadline) {
+                    lastResult = "React knob edit did not reach the native processor";
+                    finish(false);
+                }
+                return;
+            }
+
             if (++completedLoads == 2) {
                 finish(true);
             } else {
@@ -81,7 +106,14 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
                 const shell = document.querySelector('.app-shell');
                 const pressure = document.querySelector('input[aria-label="Bow Character"]');
                 const ready = !!shell && !!pressure
-                    && document.querySelectorAll('input[type="range"]').length === 2
+                    && document.querySelectorAll('input[type="range"]').length === 7
+                    && document.querySelectorAll('input[type="range"]:enabled').length === 2
+                    && !!document.querySelector('.tuner-needle')
+                    && document.fonts.status === 'loaded'
+                    && document.fonts.check('20px "Lobster"')
+                    && document.fonts.check('20px "Barlow Condensed"')
+                    && document.documentElement.scrollWidth <= window.innerWidth
+                    && document.documentElement.scrollHeight <= window.innerHeight
                     && !!document.querySelector('.status-live')
                     && parseFloat(getComputedStyle(shell).paddingTop) > 0
                     && Math.abs(Number(pressure.value) - )JS") +
@@ -114,6 +146,7 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
     double deadline = 0.0;
     int completedLoads = 0;
     bool ready = false;
+    bool uiChangeRequested = false;
     bool evaluationPending = false;
     juce::String lastResult = "browser unavailable or JavaScript did not respond";
 };

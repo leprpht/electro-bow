@@ -76,3 +76,6 @@ impl Attack {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

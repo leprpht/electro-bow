@@ -61,9 +61,25 @@ jobs:
 
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes \
+          # Azure's Ubuntu mirror has delivered packages at ~57 KB/s in CI.
+          # Replace it in both mirror-list and direct-source runner layouts.
+          for apt_source in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if [ -f "$apt_source" ]; then
+              sudo sed -i -E 's|https?://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$apt_source"
+            fi
+          done
+          # Bound stalled mirror connections and retry transient download errors.
+          apt_options=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o APT::Update::Error-Mode=any
+          )
+          sudo apt-get "${apt_options[@]}" update
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get "${apt_options[@]}" install --yes --no-install-recommends \
+            ccache \
             libasound2-dev \
             libcurl4-openssl-dev \
             libfontconfig1-dev \
@@ -107,10 +123,7 @@ jobs:
         shell: bash
         run: |
           echo "CCACHE_DIR=$HOME/.cache/ccache" >> "$GITHUB_ENV"
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            sudo apt-get update
-            sudo apt-get install --yes ccache
-          elif [ "${{ runner.os }}" = "macOS" ]; then
+          if [ "${{ runner.os }}" = "macOS" ]; then
             brew install ccache
           fi
 

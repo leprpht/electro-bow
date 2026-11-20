@@ -119,3 +119,6 @@ impl FilterBank {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

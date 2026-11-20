@@ -105,3 +105,6 @@ impl Character {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -5,6 +5,7 @@ pub struct Output {
     gain: f64,
     release: f64,
 }
+
 impl Output {
     pub fn new(rate: f64) -> Self {
         Self {
@@ -39,3 +40,6 @@ impl Output {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
