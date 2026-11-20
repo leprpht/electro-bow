@@ -1,18 +1,18 @@
 import { expect, test } from "@playwright/test";
 import { installNativeBridge } from "./nativeBridge";
 
-test("preview has working accessible controls and honest inactive states", async ({ page }) => {
+test("preview has seven accessible working controls", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await expect(page.getByRole("slider")).toHaveCount(7);
-  await expect(page.locator('input[type="range"]:enabled')).toHaveCount(2);
+  await expect(page.locator('input[type="range"]:enabled')).toHaveCount(7);
   await expect(page.getByRole("status")).toContainText("Preview");
-  await expect(page.getByRole("img", { name: /Tuner idle/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Input level −∞/ })).toBeVisible();
   for (const label of ["Sustain", "Resonance", "Bow Pressure", "Bow Speed", "Bow Friction"]) {
-    await expect(page.getByRole("slider", { name: label, exact: true })).toBeDisabled();
+    await expect(page.getByRole("slider", { name: label, exact: true })).toBeEnabled();
   }
-  const attack = page.getByRole("slider", { name: "Attack Reduction" });
+  const attack = page.getByRole("slider", { name: "Attack" });
   const value = attack.locator("../..").locator("output");
   await expect(value).toHaveCSS("opacity", "0");
   await attack.hover();
@@ -39,6 +39,8 @@ test("preview has working accessible controls and honest inactive states", async
 test("rotary dragging supports fine movement, clamping and cancellation", async ({ page }) => {
   await page.goto("/");
   const knob = page.getByRole("slider", { name: "Bow Character", exact: true });
+  await knob.focus();
+  await page.keyboard.press("Home");
   const box = (await knob.boundingBox())!;
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
@@ -54,7 +56,7 @@ test("rotary dragging supports fine movement, clamping and cancellation", async 
   await expect(knob).toHaveValue("1");
   await page.mouse.up();
   await knob.dblclick();
-  await expect(knob).toHaveValue("0");
+  await expect(knob).toHaveValue("0.45");
   await knob.evaluate((element) =>
     element.addEventListener(
       "pointerdown",
@@ -99,7 +101,7 @@ test("native values load, writes reach JUCE, and external updates resume after d
   await page.mouse.up();
   await page.evaluate(() => window.__testBridge.emit(window.__testBridge.state));
   await expect(knob).toHaveValue("0.2");
-  const attack = page.getByRole("slider", { name: "Attack Reduction" });
+  const attack = page.getByRole("slider", { name: "Attack" });
   await attack.focus();
   await page.keyboard.press("End");
   await expect
@@ -107,30 +109,19 @@ test("native values load, writes reach JUCE, and external updates resume after d
     .toEqual({ id: "attackMs", value: 500 });
 });
 
-test("tuner responds to measured pitch and returns to idle without stale telemetry", async ({
-  page,
-}) => {
+test("input meter follows recorded levels and returns to silence", async ({ page }) => {
   await installNativeBridge(page);
   await page.goto("/");
   await expect(page.getByRole("status")).toContainText("Connected");
-  for (const cents of [-25, 0, 25]) {
-    await page.evaluate((cents) => {
+  for (const level of [0.1, 1, 0]) {
+    await page.evaluate((level) => {
       const state = structuredClone(window.__testBridge.state);
-      state.pitch = { note: "A4", frequencyHz: 440 * 2 ** (cents / 1200), confidence: 0.95 };
+      state.inputLevel = level;
       window.__testBridge.emit(state);
-    }, cents);
-    await expect(page.getByRole("img")).toHaveAttribute("aria-label", new RegExp(`${cents} cents`));
-    await expect
-      .poll(() => page.locator(".tuner-needle").evaluate((el) => el.getAttribute("style")))
-      .toContain(`rotate(${cents * 0.96}`);
+    }, level);
+    const display = level > 0 ? (20 * Math.log10(level)).toFixed(1) : "−∞";
+    await expect(page.getByRole("img")).toHaveAccessibleName(`Input level ${display} dBFS`);
   }
-  await page.evaluate(() => {
-    const state = structuredClone(window.__testBridge.state);
-    state.pitch = { note: "—", frequencyHz: 0, confidence: 0 };
-    window.__testBridge.emit(state);
-  });
-  await expect(page.getByRole("img", { name: /Tuner idle/ })).toBeVisible();
-  await expect(page.locator(".tuner-frequency")).toHaveText("No signal");
 });
 
 for (const size of [

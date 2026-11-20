@@ -1,8 +1,6 @@
 import { useId } from "react";
 import { engravedRule } from "../styles/shared.css";
 import * as styles from "../styles/tuner.css";
-import type { PluginState } from "../types";
-import { getTuning } from "../lib/pitch";
 import { PanelScrew } from "./PanelScrew";
 
 function point(angle: number, radius: number) {
@@ -18,13 +16,11 @@ const marks = Array.from({ length: 21 }, (_, index) => {
   };
 });
 
-export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
+export function InputMeter({ level }: { level: number }) {
   const id = useId();
-  const tuning = getTuning(pitch.frequencyHz);
-  const active = tuning !== null && pitch.note !== "—" && pitch.confidence > 0;
-  const cents = active ? tuning.cents : 0;
-  const note = active ? pitch.note.replace(/-?\d+$/, "") : "—";
-  const frequency = active ? `${pitch.frequencyHz.toFixed(1)} Hz` : "No signal";
+  const db = level > 0 ? 20 * Math.log10(level) : -Infinity;
+  const display = db > -60 ? db.toFixed(1) : "−∞";
+  const angle = -48 + 96 * Math.min(1, Math.max(0, (db + 60) / 60));
 
   return (
     <section className={`tuner w-full ${styles.tuner}`} aria-labelledby={`${id}-title`}>
@@ -33,7 +29,7 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
         className={`tuner-heading flex items-center justify-center whitespace-nowrap ${styles.heading}`}
       >
         <span className={`flex-1 ${engravedRule}`} aria-hidden="true" />
-        Guitar Tuner
+        Input Level
         <span className={`flex-1 ${engravedRule}`} aria-hidden="true" />
       </h2>
       <div className={`tuner-bezel relative ${styles.bezel}`}>
@@ -46,14 +42,10 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
             viewBox="0 0 360 215"
             className={`tuner-scale block h-full w-full ${styles.scale}`}
             role="img"
-            aria-label={
-              active
-                ? `${pitch.note}, ${frequency}, ${Math.round(cents)} cents`
-                : "Tuner idle. Pitch tracking is not active in the current audio engine."
-            }
+            aria-label={`Input level ${display} dBFS`}
           >
             <text x="180" y="43" className={`tuner-note ${styles.note}`} textAnchor="middle">
-              {note}
+              {display}
             </text>
             <defs>
               <clipPath id={`${id}-needle-clip`}>
@@ -81,15 +73,15 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
               />
             ))}
             <text x="43" y="170" textAnchor="middle" className={`tuner-limit ${styles.limit}`}>
-              -50
+              -60
             </text>
             <text x="317" y="170" textAnchor="middle" className={`tuner-limit ${styles.limit}`}>
-              +50
+              0
             </text>
             <g clipPath={`url(#${id}-needle-clip)`}>
               <g
                 className={`tuner-needle ${styles.needle}`}
-                style={{ transform: `rotate(${cents * 0.96}deg)` }}
+                style={{ transform: `rotate(${angle}deg)` }}
               >
                 <path d="M175 272 180 74 185 272Z" fill="#27251e" />
                 <path d="M180 272 180 79" stroke="#000" strokeOpacity=".2" strokeWidth="2" />
@@ -105,7 +97,7 @@ export function GuitarTuner({ pitch }: { pitch: PluginState["pitch"] }) {
               textAnchor="middle"
               className={`tuner-frequency ${styles.frequency}`}
             >
-              {frequency}
+              dBFS
             </text>
           </svg>
         </div>

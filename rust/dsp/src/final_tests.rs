@@ -198,6 +198,19 @@ fn render_complete(
     attack: f64,
     character: f64,
 ) -> Vec<f32> {
+    render_controls(
+        input,
+        rate,
+        chunk,
+        BowControls {
+            attack_ms: attack,
+            character,
+            ..BowControls::NEUTRAL
+        },
+    )
+}
+
+fn render_controls(input: &[f32], rate: f64, chunk: usize, controls: BowControls) -> Vec<f32> {
     let bank = eb_filter_bank_create(rate, chunk as i32, 1);
     assert!(!bank.is_null());
     let mut output = input.to_vec();
@@ -207,13 +220,12 @@ fn render_complete(
         // SAFETY: exclusive handle and one valid in-place channel of block.len() frames.
         unsafe {
             assert_eq!(
-                eb_filter_bank_process(
+                eb_bow_process(
                     bank,
                     input.as_ptr(),
                     output.as_ptr(),
                     block.len() as i32,
-                    attack,
-                    character,
+                    controls,
                 ),
                 1
             );
@@ -263,5 +275,247 @@ fn complete_path_preserves_dynamics_and_block_partitioning() {
     );
     println!(
         "Full-path scaling error={worst_scaling_error:.9e}, partition error={worst_partition_error:.9e}"
+    );
+}
+
+#[test]
+fn sustain_lifts_falling_notes_and_returns_to_unity_at_the_noise_floor() {
+    let mut source: Vec<_> = (0..96000)
+        .map(|i| {
+            let t = i as f64 / 48000.0;
+            let amplitude = if t < 1.0 {
+                0.4 * (-4.0 * t).exp()
+            } else {
+                0.0005
+            };
+            (amplitude * (t * std::f64::consts::TAU * 110.0).sin()) as f32
+        })
+        .collect();
+    let wet = render_controls(
+        &source,
+        48000.0,
+        97,
+        BowControls {
+            sustain: 1.0,
+            ..BowControls::NEUTRAL
+        },
+    );
+    let energy = |x: &[f32]| x.iter().map(|v| f64::from(*v).powi(2)).sum::<f64>();
+    let ratio = |r: std::ops::Range<usize>| energy(&wet[r.clone()]) / energy(&source[r]);
+    assert!(ratio(0..1000) < 1.15);
+    assert!(ratio(24000..36000) > 3.0);
+    assert!((ratio(90000..96000) - 1.0).abs() < 0.01);
+    source.fill(0.0);
+    let controls = BowControls {
+        sustain: 1.0,
+        pressure: 1.0,
+        speed: 1.0,
+        friction: 1.0,
+        character: 1.0,
+        resonance_ms: 1000.0,
+        attack_ms: 500.0,
+    };
+    assert!(
+        render_controls(&source, 48000.0, 61, controls)
+            .iter()
+            .all(|x| *x == 0.0)
+    );
+}
+
+#[test]
+fn resonance_decay_tracks_time_and_all_controls_are_partition_independent() {
+    for rate in [8000.0, 48000.0, 192000.0] {
+        let mut signal = vec![0.0; (rate * 1.7) as usize];
+        let stop = (rate * 0.23) as usize;
+        for (i, x) in signal[..stop].iter_mut().enumerate() {
+            *x = material(i, rate, 1);
+        }
+        let config = |ms| BowControls {
+            resonance_ms: ms,
+            sustain: 0.8,
+            pressure: 0.6,
+            speed: 0.25,
+            friction: 0.9,
+            character: 0.75,
+            attack_ms: 70.0,
+        };
+        let short = render_controls(&signal, rate, 127, config(120.0));
+        let long = render_controls(&signal, rate, 127, config(900.0));
+        let split = render_controls(&signal, rate, 17, config(900.0));
+        assert_eq!(long, split);
+        let peak = |buf: &[f32]| buf.iter().map(|x| x.abs()).fold(0.0_f32, f32::max);
+        let tail = (stop + (rate * 0.2) as usize)..(stop + (rate * 0.3) as usize);
+        assert!(peak(&long[tail.clone()]) > 8.0 * peak(&short[tail]));
+        assert!(peak(&long[(rate * 1.6) as usize..]) < 2e-5);
+    }
+}
+
+#[test]
+fn contact_controls_change_compression_tilt_and_third_harmonic() {
+    let sine = |frequency: f64, level: f64| {
+        (0..24000)
+            .map(|i| {
+                (level * (std::f64::consts::TAU * frequency * i as f64 / 48000.0).sin()) as f32
+            })
+            .collect::<Vec<_>>()
+    };
+    let amplitude = |input: &[f32], hz: f64, config| {
+        let out = render_controls(input, 48000.0, 59, config);
+        let (mut re, mut im) = (0.0, 0.0);
+        for (i, x) in out[12000..].iter().enumerate() {
+            let phase = std::f64::consts::TAU * hz * i as f64 / 48000.0;
+            re += f64::from(*x) * phase.cos();
+            im += f64::from(*x) * phase.sin();
+        }
+        2.0 * re.hypot(im) / 12000.0
+    };
+    let config = BowControls::NEUTRAL;
+    let pressed = BowControls {
+        pressure: 1.0,
+        ..config
+    };
+    let soft = amplitude(&sine(100.0, 0.05), 100.0, pressed);
+    let hard = amplitude(&sine(100.0, 0.5), 100.0, pressed);
+    assert!(hard > soft * 4.0 && hard < soft * 7.0);
+    let bright = sine(5000.0, 0.1);
+    let at_speed = |speed| amplitude(&bright, 5000.0, BowControls { speed, ..config });
+    assert!(at_speed(1.0) > 2.0 * at_speed(0.0));
+    let low = sine(100.0, 0.2);
+    assert!(amplitude(&low, 300.0, config) < 1e-6);
+    let harmonic = amplitude(
+        &low,
+        300.0,
+        BowControls {
+            friction: 1.0,
+            ..config
+        },
+    );
+    assert!((0.01..0.06).contains(&harmonic));
+}
+
+#[test]
+fn long_body_decay_keeps_sustained_harmonics_present() {
+    // The strongest cancellation in the untrimmed body return was near
+    // 807 Hz. Exercise that mode and adjacent guitar harmonics at steady state.
+    for frequency in [287.0, 540.0, 806.75, 1008.0] {
+        let signal: Vec<_> = (0..72000)
+            .map(|i| (0.1 * (std::f64::consts::TAU * frequency * i as f64 / 48000.0).sin()) as f32)
+            .collect();
+        let wet = render_controls(
+            &signal,
+            48000.0,
+            113,
+            BowControls {
+                resonance_ms: 1000.0,
+                ..BowControls::NEUTRAL
+            },
+        );
+        let energy = |buf: &[f32]| {
+            buf[48000..]
+                .iter()
+                .map(|&x| f64::from(x).powi(2))
+                .sum::<f64>()
+        };
+        let ratio = energy(&wet) / energy(&signal);
+        assert!(
+            (0.25..1.6).contains(&ratio),
+            "{frequency} Hz power ratio {ratio}"
+        );
+    }
+}
+
+#[test]
+fn restored_controls_sound_the_same_with_or_without_silent_preroll() {
+    let config = BowControls {
+        attack_ms: 35.0,
+        pressure: 0.9,
+        speed: 0.05,
+        friction: 0.8,
+        character: 0.9,
+        sustain: 0.7,
+        resonance_ms: 500.0,
+    };
+    let input: Vec<_> = (0..12000).map(|i| material(i, 48000.0, 1)).collect();
+    let mut padded = vec![0.0; 48000];
+    padded.extend_from_slice(&input);
+    let from_rest = render_controls(&input, 48000.0, 97, config);
+    let from_preroll = render_controls(&padded, 48000.0, 97, config);
+    let error = from_rest
+        .iter()
+        .zip(&from_preroll[48000..])
+        .map(|(a, b)| (a - b).abs())
+        .fold(0.0_f32, f32::max);
+    assert!(error < 1e-6, "first stroke depends on preroll: {error}");
+}
+
+#[test]
+fn sustain_respects_a_soft_stroke_after_a_mute_and_a_loud_repick() {
+    for rate in [8000.0, 48000.0, 96000.0] {
+        let signal: Vec<_> = (0..rate as usize)
+            .map(|i| {
+                let t = i as f64 / rate;
+                let level = if t < 0.24 {
+                    0.5
+                } else if t < 0.39 {
+                    0.0003 // pickup noise between strokes
+                } else if t < 0.85 {
+                    0.035 * (-5.0 * (t - 0.39)).exp()
+                } else {
+                    0.4
+                };
+                (level * (std::f64::consts::TAU * 125.0 * t).sin()) as f32
+            })
+            .collect();
+        let wet = render_controls(
+            &signal,
+            rate,
+            113,
+            BowControls {
+                sustain: 1.0,
+                ..BowControls::NEUTRAL
+            },
+        );
+        let peak = |buf: &[f32], from: f64, until: f64| {
+            buf[(from * rate) as usize..(until * rate) as usize]
+                .iter()
+                .map(|v| v.abs())
+                .fold(0.0_f32, f32::max)
+        };
+        assert!(peak(&wet, 0.39, 0.42) < 0.039, "carryover into soft stroke");
+        assert!(
+            peak(&wet, 0.72, 0.75) > 1.4 * peak(&signal, 0.72, 0.75),
+            "wanted decay support"
+        );
+        assert!(peak(&wet, 0.85, 0.87) < 0.41, "carryover into loud repick");
+    }
+}
+
+#[test]
+fn friction_keeps_the_difference_product_below_the_played_fifth() {
+    let rate = 48000.0;
+    let phase = |hz: f64, i: usize| std::f64::consts::TAU * hz * i as f64 / rate;
+    let input: Vec<_> = (0..48000)
+        .map(|i| (0.12 * (phase(100.0, i).sin() + phase(150.0, i).sin())) as f32)
+        .collect();
+    let wet = render_controls(
+        &input,
+        rate,
+        97,
+        BowControls {
+            friction: 1.0,
+            ..BowControls::NEUTRAL
+        },
+    );
+    let amplitude = |hz| {
+        let (mut re, mut im) = (0.0, 0.0);
+        for (i, &x) in wet[24000..].iter().enumerate() {
+            re += f64::from(x) * phase(hz, i).cos();
+            im += f64::from(x) * phase(hz, i).sin();
+        }
+        re.hypot(im)
+    };
+    assert!(
+        amplitude(50.0) < 0.065 * amplitude(100.0),
+        "spurious bass below the chord"
     );
 }

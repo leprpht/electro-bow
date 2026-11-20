@@ -16,6 +16,11 @@ export function updateParameter(id: ParameterId, value: number): Promise<unknown
   return getNativeFunction("setParameter")(id, value);
 }
 
+export function updateGesture(id: ParameterId, active: boolean): Promise<unknown> {
+  if (!hasNativeBridge()) return Promise.resolve();
+  return getNativeFunction("setGesture")(id, active);
+}
+
 export function subscribeToState(listener: (state: PluginState) => void): () => void {
   const backend = window.__JUCE__?.backend;
 

@@ -61,15 +61,15 @@ fn processing_respects_sample_count_and_configured_channels() {
 }
 
 #[test]
-fn stereo_link_preserves_equal_level_opposite_polarity() {
+fn character_preserves_off_centre_stereo_balance() {
     let mut actual = fixture();
     for band in &mut actual {
-        band[1] = band[0].iter().map(|x| -x).collect();
+        band[1] = band[0].iter().map(|x| -0.25 * x).collect();
     }
     Character::new(48000.0).process(&mut actual, 2, 2048, 1.0);
     for band in actual {
         for (left, right) in band[0].iter().zip(&band[1]) {
-            assert!((left + right).abs() < 1e-7);
+            assert!((0.25 * left + right).abs() < 1e-7);
         }
     }
 }

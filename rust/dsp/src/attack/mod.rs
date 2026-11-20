@@ -1,38 +1,62 @@
-//! Continuous, level-relative spectral transient control. No event detector,
-//! pitch tracker, lookahead, gate, or onset-triggered amplitude ramp.
+//! A linked, level-relative swell on the original audio. Tracking a slower
+//! envelope underneath a fast one softens re-picks without a trigger or gate.
 #![forbid(unsafe_code)]
 
 pub struct Attack {
-    rate: f64,
-    last_target: f64,
-    slow_coefficient: f64,
-    fast_release: f64,
-    control: f64,
-    amount: f64,
-    fast: [f64; 4],
-    slow: [f64; 4],
-    gain: [f64; 4],
+    samples_per_ms: f64,
+    rise: f64,
+    release: f64,
+    smoothing: f64,
+    time_constant: f64,
+    envelopes: [Swell; 2],
+    initialized: bool,
 }
+
+#[derive(Default)]
+struct Swell {
+    held: f64,
+    fast: f64,
+    bowed: f64,
+}
+
+impl Swell {
+    fn gain(&mut self, peak: f64, rise: f64, release: f64, coefficient: f64) -> f32 {
+        self.held = peak.max(self.held * release);
+        self.fast += rise * (self.held - self.fast);
+        // Discharge between strokes while retaining the envelope across
+        // individual low-string cycles.
+        let follow = if self.fast < self.bowed {
+            coefficient.max(1.0 - release)
+        } else {
+            coefficient
+        };
+        self.bowed += follow * (self.fast - self.bowed);
+        if self.fast > 1e-30 {
+            (1.10 * self.bowed / self.fast).min(1.0) as f32
+        } else {
+            1.0
+        }
+    }
+}
+
 impl Attack {
     pub fn new(rate: f64) -> Self {
         Self {
-            rate,
-            last_target: 0.0,
-            slow_coefficient: 1.0 - (-1.0 / (0.005 * rate)).exp(),
-            fast_release: (-1.0 / (0.003 * rate)).exp(),
-            control: 1.0 - (-1.0 / (0.001 * rate)).exp(),
-            amount: 0.0,
-            fast: [0.0; 4],
-            slow: [0.0; 4],
-            gain: [1.0; 4],
+            samples_per_ms: rate * 0.001 / std::f64::consts::LN_10,
+            rise: 1.0 - (-1.0 / (0.002 * rate)).exp(),
+            release: (-1.0 / (0.025 * rate)).exp(),
+            smoothing: 1.0 - (-1.0 / (0.008 * rate)).exp(),
+            time_constant: 0.0,
+            envelopes: Default::default(),
+            initialized: false,
         }
     }
+
     pub fn reset(&mut self) {
-        self.fast = [0.0; 4];
-        self.slow = [0.0; 4];
-        self.gain = [1.0; 4];
-        self.amount = 0.0;
+        self.envelopes = Default::default();
+        self.initialized = false;
     }
+
     pub fn process(
         &mut self,
         bands: &mut [[Vec<f32>; 2]; 4],
@@ -40,37 +64,34 @@ impl Attack {
         samples: usize,
         milliseconds: f64,
     ) {
-        let target = (milliseconds / 500.0).clamp(0.0, 1.0);
-        // Coefficients computed once per chunk, never per sample.
-        if target != self.last_target {
-            self.slow_coefficient = 1.0 - (-1.0 / ((0.005 + 0.145 * target) * self.rate)).exp();
-            self.last_target = target;
+        if samples == 0 {
+            return;
         }
-        let slow_coefficient = self.slow_coefficient;
-        let weights = [0.0, 0.15, 0.65, 1.0];
+        // Convert the displayed 90% rise time to a one-pole time constant
+        // in samples. Smooth in the time domain: interpolating coefficients
+        // from unity keeps a newly automated long swell near bypass.
+        let target = milliseconds.clamp(0.0, 500.0) * self.samples_per_ms;
+        if !self.initialized {
+            self.time_constant = target;
+            self.initialized = true;
+        }
+        let (pairs, _) = bands.as_chunks_mut::<2>();
         for i in 0..samples {
-            self.amount += self.control * (target - self.amount);
-            for (b, band) in bands.iter_mut().enumerate() {
-                let peak = band
-                    .iter()
-                    .take(channels)
-                    .map(|c| f64::from(c[i]).abs())
-                    .fold(0.0, f64::max);
-                self.fast[b] = peak.max(self.fast[b] * self.fast_release);
-                self.slow[b] += slow_coefficient * (self.fast[b] - self.slow[b]);
-                let novelty = if self.fast[b] > 1e-30 {
-                    (1.0 - self.slow[b] / self.fast[b]).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let desired = 1.0 - 0.75 * weights[b] * self.amount * novelty;
-                self.gain[b] += self.control * (desired - self.gain[b]);
-                for channel in band.iter_mut().take(channels) {
-                    channel[i] *= if target == 0.0 && self.amount < 1e-12 {
-                        1.0
-                    } else {
-                        self.gain[b] as f32
-                    };
+            self.time_constant += self.smoothing * (target - self.time_constant);
+            let coefficient = 1.0 / (1.0 + self.time_constant);
+            // The complementary pairs meet at 800 Hz. A ringing bass
+            // string must not hold open the treble envelope on the next pick.
+            for (pair, envelope) in pairs.iter_mut().zip(&mut self.envelopes) {
+                let mut peak = 0.0_f64;
+                for ch in 0..channels {
+                    let input = f64::from(pair[0][ch][i]) + f64::from(pair[1][ch][i]);
+                    peak = peak.max(input.abs());
+                }
+                let gain = envelope.gain(peak, self.rise, self.release, coefficient);
+                for band in pair {
+                    for channel in band.iter_mut().take(channels) {
+                        channel[i] *= gain;
+                    }
                 }
             }
         }

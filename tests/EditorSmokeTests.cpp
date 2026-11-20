@@ -74,30 +74,55 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
         quit();
     }
 
+    struct KnobEdit {
+        const char* label;
+        const char* parameter;
+        double value;
+    };
+
+    static constexpr KnobEdit edits[] = {{"Attack", "attackMs", 172},
+                                         {"Sustain", "sustain", 0.78},
+                                         {"Resonance", "naturalResonanceMs", 456},
+                                         {"Bow Pressure", "bowPressure", 0.26},
+                                         {"Bow Speed", "bowSpeed", 0.38},
+                                         {"Bow Friction", "friction", 0.52},
+                                         {"Bow Character", "bowCharacter", 0.64}};
+
+    double editValue(const KnobEdit& edit) const {
+        return completedLoads == 0 ? edit.value : edit.value * 0.5;
+    }
+
     void timerCallback() override {
         if (ready) {
             if (!uiChangeRequested) {
                 uiChangeRequested = true;
-                browser->evaluateJavascript(R"JS(
-                    (() => {
-                        const input = document.querySelector('input[aria-label="Bow Character"]');
+                juce::Array<juce::var> values;
+                for (const auto& edit : edits)
+                    values.add(juce::var(
+                        juce::Array<juce::var>{juce::var(edit.label), juce::var(editValue(edit))}));
+                browser->evaluateJavascript(juce::String(R"JS(
+                    (edits => {
                         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
-                        setter.call(input, '0.61');
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                    })()
-                )JS");
+                        for (const [label, value] of edits) {
+                            const input = document.querySelector(`input[aria-label="${label}"]`);
+                            setter.call(input, String(value));
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    })()JS") + juce::JSON::toString(values) +
+                                            ")");
                 return;
             }
 
-            const auto state = processor->getUiState();
-            const auto character = static_cast<double>(
-                state.getProperty("parameters", {}).getProperty("bowCharacter", -1.0));
-            if (std::abs(character - 0.61) > 0.001) {
-                if (juce::Time::getMillisecondCounterHiRes() > deadline) {
-                    lastResult = "React knob edit did not reach the native processor";
-                    finish(false);
+            const auto parameters = processor->getUiState().getProperty("parameters", {});
+            for (const auto& edit : edits) {
+                const auto value = static_cast<double>(parameters.getProperty(edit.parameter, -1));
+                if (std::abs(value - editValue(edit)) > 0.0001) {
+                    if (juce::Time::getMillisecondCounterHiRes() > deadline) {
+                        lastResult = juce::String("Editor write did not reach ") + edit.parameter;
+                        finish(false);
+                    }
+                    return;
                 }
-                return;
             }
 
             if (++completedLoads == 2) {
@@ -125,7 +150,7 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
                 const pressure = document.querySelector('input[aria-label="Bow Character"]');
                 const ready = !!shell && !!pressure
                     && document.querySelectorAll('input[type="range"]').length === 7
-                    && document.querySelectorAll('input[type="range"]:enabled').length === 2
+                    && document.querySelectorAll('input[type="range"]:enabled').length === 7
                     && !!document.querySelector('.tuner-needle')
                     && document.fonts.status === 'loaded'
                     && document.fonts.check('20px "Lobster"')

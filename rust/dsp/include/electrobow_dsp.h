@@ -131,6 +131,25 @@ void eb_filter_bank_reset(EbFilterBank* bank);
 int32_t eb_filter_bank_process(EbFilterBank* bank, const float* const* input, float* const* output,
                                int32_t samples, double attack, double character);
 
+/** Linear pre-effect peak envelope. Query on the processing thread only. */
+float eb_bow_input_level(const EbFilterBank* bank);
+
+/** Full effect settings in physical units. Speed is neutral at 0.5. */
+typedef struct EbBowControls {
+    double attack_ms;    /**< 0..500 ms */
+    double character;    /**< 0..1 */
+    double sustain;      /**< 0..1 */
+    double resonance_ms; /**< 0..1000 ms */
+    double pressure;     /**< 0..1 */
+    double speed;        /**< 0..1 */
+    double friction;     /**< 0..1 */
+} EbBowControls;
+
+/** Process the seven-control effect. Same buffers, aliasing and return
+ * contract as eb_filter_bank_process. Non-finite controls are rejected. */
+int32_t eb_bow_process(EbFilterBank* bank, const float* const* input, float* const* output,
+                       int32_t samples, EbBowControls controls);
+
 /**
  * @brief Apply the coordinated spectral/friction character control.
  *

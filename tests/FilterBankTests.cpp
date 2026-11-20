@@ -314,7 +314,9 @@ void testCppParity() {
 
 void testProcessor() {
     ElectroBowAudioProcessor processor;
-    processor.setUiParameter("attackMs", 0.0f);
+    for (auto id :
+         {"attackMs", "sustain", "naturalResonanceMs", "friction", "bowPressure", "bowCharacter"})
+        processor.setUiParameter(id, 0.0f);
     juce::MidiBuffer midi;
     for (int channels : {1, 2}) {
         auto layout = processor.getBusesLayout();
@@ -323,8 +325,8 @@ void testProcessor() {
         require(processor.setBusesLayout(layout), "mono/stereo bus layout");
         for (double rate : {8000.0, 44100.0, 48000.0, 96000.0, 192000.0}) {
             processor.prepareToPlay(rate, 64);
-            require(processor.getLatencySamples() == 0 && processor.getTailLengthSeconds() == 0.0,
-                    "zero reported latency and tail");
+            require(processor.getLatencySamples() == 0 && processor.getTailLengthSeconds() >= 1.0,
+                    "zero latency and finite body decay allowance");
             for (int size : {0, 1, 17, 64, 127, 512, 4097}) {
                 const auto original = makeSignal(size);
                 juce::AudioBuffer<float> buffer(channels, size);
@@ -350,10 +352,20 @@ void testProcessor() {
     layout.inputBuses.set(0, juce::AudioChannelSet::create5point1());
     layout.outputBuses.set(0, juce::AudioChannelSet::create5point1());
     require(!processor.isBusesLayoutSupported(layout), "reject unsupported surround layout");
-    processor.prepareToPlay(48000.0, 0);
-    juce::AudioBuffer<float> buffer(2, 7);
-    buffer.clear();
-    processor.processBlock(buffer, midi);
+    juce::AudioBuffer<float> buffer(2, 9001);
+    for (int hint : {0, std::numeric_limits<int>::max()}) {
+        processor.prepareToPlay(48000.0, hint);
+        buffer.clear();
+        buffer.setSample(1, 9000, 0.25f);
+        processor.processBlock(buffer, midi);
+        require(std::abs(buffer.getSample(1, 9000) - 0.25f) < 2e-7f,
+                "unknown and offline block hints preserve the final chunk");
+        processor.prepareToPlay(std::numeric_limits<double>::quiet_NaN(), 64);
+        buffer.setSample(1, 0, 0.5f);
+        processor.processBlock(buffer, midi);
+        require(buffer.getMagnitude(0, buffer.getNumSamples()) == 0.0f,
+                "invalid preparation cannot reuse the previous audio configuration");
+    }
     std::cout
         << "PASS: processor mono/stereo, variable/oversized/empty blocks, latency and lifecycle\n";
 }
@@ -363,6 +375,10 @@ void testAttackIntegration() {
         ElectroBowAudioProcessor dry, wet;
         dry.setUiParameter("attackMs", 0.0f);
         wet.setUiParameter("attackMs", 500.0f);
+        for (auto* processor : {&dry, &wet}) {
+            processor->setUiParameter("bowCharacter", 0.0f);
+            processor->setUiParameter("friction", 0.0f);
+        }
         dry.prepareToPlay(rate, 64);
         wet.prepareToPlay(rate, 64);
         juce::MidiBuffer midi;
@@ -444,8 +460,8 @@ void testInvalidStateKeepsProcessing() {
     }
     juce::MemoryBlock original;
     processor.getStateInformation(original);
-    for (int version : {1, 2}) {
-        for (int field = 0; field < (version == 1 ? 5 : 6); ++field) {
+    for (int version : {1, 2, 3}) {
+        for (int field = 0; field < (4 + version); ++field) {
             for (float invalid :
                  {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
                   -std::numeric_limits<float>::infinity()}) {
@@ -453,7 +469,7 @@ void testInvalidStateKeepsProcessing() {
                 juce::MemoryOutputStream stream(state, false);
                 stream.writeInt(0x45424F57);
                 stream.writeInt(version);
-                for (int i = 0; i < (version == 1 ? 5 : 6); ++i)
+                for (int i = 0; i < (4 + version); ++i)
                     stream.writeFloat(i == field ? invalid : 0.0f);
                 processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
                 juce::MemoryBlock after;
@@ -480,6 +496,147 @@ void testInvalidStateKeepsProcessing() {
         for (int i = 0; i < 257; ++i)
             require(actual.getSample(channel, i) == expected.getSample(channel, i),
                     "invalid state must not bypass or freeze DSP");
+}
+
+void testInvalidHostAutomation() {
+    ElectroBowAudioProcessor processor;
+    processor.prepareToPlay(48000, 32);
+    juce::MemoryBlock defaults;
+    processor.getStateInformation(defaults);
+    for (auto* parameter : processor.getParameters()) {
+        parameter->setValueNotifyingHost(1.0f);
+        parameter->setValueNotifyingHost(std::numeric_limits<float>::quiet_NaN());
+        require(parameter->getValue() == parameter->getDefaultValue(),
+                "invalid host automation restores a finite parameter");
+    }
+    juce::MemoryBlock saved;
+    processor.getStateInformation(saved);
+    require(defaults == saved, "host faults cannot poison saved sessions");
+
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> audio(2, 97);
+    audio.clear();
+    audio.setSample(0, 0, std::numeric_limits<float>::quiet_NaN());
+    audio.setSample(1, 0, 0.5f);
+    processor.processBlock(audio, midi);
+    require(audio.getSample(0, 0) == 0 && std::abs(audio.getSample(1, 0)) < 0.1f,
+            "DSP still sanitizes input and shapes the first pick after a host fault");
+}
+
+void testHostControlStateAndBypass() {
+    ElectroBowAudioProcessor source, restored;
+    require(source.getParameters().size() == 7, "seven host parameters");
+    size_t index = 0;
+    for (auto* param : source.getParameters()) {
+        auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(param);
+        require(ranged != nullptr && ranged->isAutomatable(), "host automation");
+        float normalized = 0.13f * static_cast<float>(++index);
+        param->setValueNotifyingHost(normalized);
+        auto physical = ranged->convertFrom0to1(normalized);
+        auto ui = source.getUiState().getProperty("parameters", {});
+        require(std::abs(static_cast<float>(ui.getProperty(ranged->paramID, -1)) - physical) <
+                    1e-5f,
+                "host edits visible in editor");
+    }
+    juce::MemoryBlock saved, reloaded;
+    source.getStateInformation(saved);
+    restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+    restored.getStateInformation(reloaded);
+    require(saved == reloaded, "all seven host parameters survive reload");
+
+    juce::MemoryBlock legacy;
+    juce::MemoryOutputStream stream(legacy, false);
+    stream.writeInt(0x45424F57);
+    stream.writeInt(2);
+    for (float value : {0.25f, 0.5f, 0.75f, 125.0f, 500.0f, 0.9f})
+        stream.writeFloat(value);
+    restored.setStateInformation(legacy.getData(), static_cast<int>(legacy.getSize()));
+    auto old = restored.getUiState().getProperty("parameters", {});
+    require(std::abs(static_cast<float>(old.getProperty("bowCharacter", -1)) - 0.9f) < 1e-6f &&
+                static_cast<float>(old.getProperty("sustain", -1)) == 0.0f,
+            "v2 state migration");
+
+    restored.prepareToPlay(48000.0, 17);
+    juce::MidiBuffer midi;
+    juce::AudioBuffer<float> audio(2, 513);
+    auto input = makeSignal(513);
+    auto fill = [&] {
+        for (int c = 0; c < 2; ++c)
+            audio.copyFrom(c, 0, input[static_cast<size_t>(c)].data(), 513);
+    };
+    fill();
+    restored.processBlockBypassed(audio, midi);
+    for (int c = 0; c < 2; ++c)
+        require(std::equal(input[static_cast<size_t>(c)].begin(),
+                           input[static_cast<size_t>(c)].end(), audio.getReadPointer(c)),
+                "first bypassed block is exactly dry");
+    fill();
+    restored.processBlock(audio, midi);
+    require(std::abs(audio.getSample(0, 0) - input[0][0]) < 0.005f, "smooth bypass exit");
+    fill();
+    restored.processBlockBypassed(audio, midi);
+    for (int c = 0; c < 2; ++c)
+        require(std::equal(input[static_cast<size_t>(c)].begin() + 240,
+                           input[static_cast<size_t>(c)].end(), audio.getReadPointer(c) + 240),
+                "bypass becomes dry after five milliseconds, including oversized callbacks");
+    audio.setSample(0, 0, std::numeric_limits<float>::quiet_NaN());
+    audio.setSample(1, 1, std::numeric_limits<float>::infinity());
+    restored.processBlockBypassed(audio, midi);
+    require(audio.getSample(0, 0) == 0.0f && audio.getSample(1, 1) == 0.0f,
+            "non-finite samples are silenced during steady bypass");
+    const auto level = static_cast<float>(restored.getUiState().getProperty("inputLevel", 0));
+    require(level > 0.5f && level <= 1.0f, "meter reads input while bypassed");
+    restored.reset();
+    require(static_cast<float>(restored.getUiState().getProperty("inputLevel", -1)) == 0.0f,
+            "transport reset clears meter");
+}
+
+void testAutomationRouting() {
+    struct Route {
+        const char* id;
+        double EbBowControls::* field;
+        float max;
+    };
+    const Route routes[] = {{"attackMs", &EbBowControls::attack_ms, 500},
+                            {"bowCharacter", &EbBowControls::character, 1},
+                            {"sustain", &EbBowControls::sustain, 1},
+                            {"naturalResonanceMs", &EbBowControls::resonance_ms, 1000},
+                            {"bowPressure", &EbBowControls::pressure, 1},
+                            {"bowSpeed", &EbBowControls::speed, 1},
+                            {"friction", &EbBowControls::friction, 1}};
+    ElectroBowAudioProcessor processor;
+    processor.prepareToPlay(48000, 64);
+    FilterBank reference;
+    reference.prepare(48000, 64, 2);
+    EbBowControls settings{50, 0.45f, 0.5, 200, 0.5, 0.5, 0.127f};
+    auto source = makeSignal(64);
+    juce::MidiBuffer midi;
+    for (const auto& route : routes) {
+        auto match = std::find_if(
+            processor.getParameters().begin(), processor.getParameters().end(), [&](auto* p) {
+                return dynamic_cast<juce::AudioParameterFloat*>(p)->paramID == route.id;
+            });
+        require(match != processor.getParameters().end(), "host control ID is registered");
+        auto* parameter = *match;
+        // Alternate endpoints *while* processing. Each decoded host control
+        // must follow exactly the same trajectory as its named Rust field.
+        for (int block = 0; block < 90; ++block) {
+            const float normalized = static_cast<float>((block / 15) % 2);
+            parameter->setValueNotifyingHost(normalized);
+            settings.*(route.field) = normalized * route.max;
+            juce::AudioBuffer<float> wet(2, 64), expected(2, 64);
+            const float envelope = static_cast<float>(std::exp(-0.08 * (block % 45)));
+            for (int ch = 0; ch < 2; ++ch)
+                wet.copyFrom(ch, 0, source[static_cast<size_t>(ch)].data(), 64, envelope);
+            reference.process(wet.getArrayOfReadPointers(), expected.getArrayOfWritePointers(), 64,
+                              settings);
+            processor.processBlock(wet, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 64; ++i)
+                    require(std::abs(wet.getSample(ch, i) - expected.getSample(ch, i)) < 2e-6f,
+                            "host control drives its declared Rust field");
+        }
+    }
 }
 
 void benchmark() {
@@ -538,6 +695,9 @@ int main() {
     testAttackIntegration();
     testCharacterIntegration();
     testInvalidStateKeepsProcessing();
+    testHostControlStateAndBypass();
+    testAutomationRouting();
+    testInvalidHostAutomation();
     benchmark();
     std::cout << "All FilterBank tests passed.\n";
 }

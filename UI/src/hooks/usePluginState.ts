@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getPluginState, hasNativeBridge, subscribeToState, updateParameter } from "../juce";
+import {
+  getPluginState,
+  hasNativeBridge,
+  subscribeToState,
+  updateGesture,
+  updateParameter,
+} from "../juce";
 import { defaultState, type ParameterId, type PluginState } from "../types";
 
 export function usePluginState() {
@@ -48,6 +54,7 @@ export function usePluginState() {
   const setGesture = useCallback((id: ParameterId, active: boolean) => {
     if (active) gestures.current.add(id);
     else gestures.current.delete(id);
+    void updateGesture(id, active).catch(() => setConnected(false));
   }, []);
 
   return { state, connected, setParameter, setGesture };

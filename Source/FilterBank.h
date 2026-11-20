@@ -40,15 +40,22 @@ class FilterBank {
     void processCharacter(double amount) noexcept {
         eb_filter_bank_character(handle.get(), amount);
     }
-    void process(const float* const* input, float* const* output, int samples, double attack,
-                 double character) noexcept {
-        const auto ok =
-            eb_filter_bank_process(handle.get(), input, output, samples, attack, character);
+    void process(const float* const* input, float* const* output, int samples,
+                 EbBowControls controls) noexcept {
+        const auto ok = eb_bow_process(handle.get(), input, output, samples, controls);
         assert(ok != 0);
         (void)ok;
     }
+    void release() noexcept {
+        handle.reset();
+        capacity = 0;
+        channelCount = 0;
+    }
     void reset() noexcept {
         eb_filter_bank_reset(handle.get());
+    }
+    float getInputLevel() const noexcept {
+        return eb_bow_input_level(handle.get());
     }
     int getCapacity() const noexcept {
         return capacity;

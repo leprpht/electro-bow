@@ -56,7 +56,11 @@ fn processing_respects_sample_count_and_configured_channels() {
         assert_eq!(processed[1], source[1], "inactive channel");
         assert_eq!(processed[0][1024..], source[0][1024..], "unused tail");
     }
-    assert_eq!(actual[0], original[0], "lowest band must remain unchanged");
+    assert_ne!(
+        actual[0][0][..1024],
+        original[0][0][..1024],
+        "the fundamental must swell too"
+    );
     assert_ne!(actual[3][0][..1024], original[3][0][..1024]);
 }
 
@@ -78,4 +82,29 @@ fn silence_stays_silent_after_signal_history() {
     let mut silence = std::array::from_fn(|_| std::array::from_fn(|_| vec![0.0; 2048]));
     processor.process(&mut silence, 2, 2048, 500.0);
     assert!(silence.iter().flatten().flatten().all(|&x| x == 0.0));
+}
+
+#[test]
+fn automating_attack_in_silence_engages_the_next_swell_and_releases_smoothly() {
+    let mut attack = Attack::new(48000.0);
+    let mut bands: [[Vec<f32>; 2]; 4] = Default::default();
+    for band in &mut bands {
+        band[0].resize(4096, 0.0);
+    }
+    attack.process(&mut bands, 1, 480, 0.0);
+    attack.process(&mut bands, 1, 480, 500.0);
+    bands[0][0].fill(0.5);
+    attack.process(&mut bands, 1, 480, 500.0);
+    let mut previous = bands[0][0][479];
+    assert!(previous < 0.05, "long swell was still bypassed");
+    bands[0][0].fill(0.5);
+    attack.process(&mut bands, 1, 4096, 0.0);
+    for &current in &bands[0][0] {
+        assert!((current - previous).abs() < 0.002, "abrupt gain change");
+        previous = current;
+    }
+    assert!(
+        (previous - 0.5).abs() < 1e-6,
+        "zero attack must recover unity"
+    );
 }
