@@ -1,0 +1,97 @@
+//! Dynamics and contact colour, measured before the onset swell so its gain
+//! reduction can never drive the sustain circuit into boosting the pick.
+#![forbid(unsafe_code)]
+use crate::BowControls;
+
+pub struct Expression {
+    smoothing: f64,
+    release: f64,
+    memory_release: f64,
+    level: f64,
+    memory: f64,
+    lift: f64,
+    band_peak: [[f64; 2]; 2],
+    controls: [f64; 4],
+}
+
+impl Expression {
+    pub fn new(rate: f64) -> Self {
+        Self {
+            smoothing: 1.0 - (-1.0 / (0.012 * rate)).exp(),
+            release: (-1.0 / (0.035 * rate)).exp(),
+            memory_release: (-1.0 / (0.95 * rate)).exp(),
+            level: 0.0,
+            memory: 0.0,
+            lift: 0.0,
+            band_peak: [[0.0; 2]; 2],
+            controls: [0.0, 0.0, 0.5, 0.0],
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.level = 0.0;
+        self.memory = 0.0;
+        self.lift = 0.0;
+        self.band_peak = [[0.0; 2]; 2];
+        self.controls = [0.0, 0.0, 0.5, 0.0];
+    }
+
+    pub fn process(
+        &mut self,
+        bands: &mut [[Vec<f32>; 2]; 4],
+        channels: usize,
+        samples: usize,
+        params: &BowControls,
+    ) {
+        let targets = [
+            params.sustain,
+            params.pressure,
+            params.speed,
+            params.friction,
+        ]
+        .map(|x| x.clamp(0.0, 1.0));
+        for i in 0..samples {
+            for (value, target) in self.controls.iter_mut().zip(targets) {
+                *value += self.smoothing * (target - *value);
+            }
+            let [sustain, pressure, speed, friction] = self.controls;
+            let mut peak = 0.0_f64;
+            for ch in 0..channels {
+                let input: f64 = bands.iter().map(|band| f64::from(band[ch][i])).sum();
+                peak = peak.max(input.abs());
+            }
+            self.level = peak.max(self.level * self.release);
+            self.memory = self.level.max(self.memory * self.memory_release);
+            // A falling string can earn up to 10 dB of makeup. The floor taper
+            // withdraws that gain as the pickup settles back into idle noise.
+            let activity = ((self.level - 0.0015) / 0.009).clamp(0.0, 1.0);
+            let falling = (self.memory / self.level.max(0.0015) - 1.0).clamp(0.0, 3.0);
+            self.lift += self.smoothing * (0.72 * falling * activity - self.lift);
+            let compression = (1.0 + 0.26 * pressure) / (1.0 + 1.9 * pressure * self.level);
+            let gain = (1.0 + sustain * self.lift) * compression;
+            let tilt = 2.0 * speed - 1.0;
+            let colour = [
+                1.0 - 0.12 * tilt,
+                1.0 + 0.33 * pressure,
+                1.0 + 0.64 * tilt,
+                1.0 + 0.82 * tilt,
+            ];
+            for (b, band) in bands.iter_mut().enumerate() {
+                for (ch, data) in band.iter_mut().take(channels).enumerate() {
+                    let x = f64::from(data[i]);
+                    let contact = if b < 2 {
+                        let env = &mut self.band_peak[b][ch];
+                        *env = x.abs().max(*env * self.release);
+                        let u = x / env.max(1e-30);
+                        // Round the low-band crests, adding a small third
+                        // harmonic without distorting the entire chord.
+                        friction * (0.80 - 0.90 * u * u)
+                    } else {
+                        0.0
+                    };
+                    data[i] = (x * gain * (colour[b] + contact)) as f32;
+                }
+            }
+        }
+    }
+}

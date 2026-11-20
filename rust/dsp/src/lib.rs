@@ -4,8 +4,10 @@
 
 mod attack;
 mod character;
+mod expression;
 pub mod filter_bank;
 mod output;
+mod resonance;
 use filter_bank::FilterBank;
 use std::{ptr, slice};
 
@@ -209,6 +211,32 @@ pub unsafe extern "C" fn eb_filter_bank_character(bank: *mut FilterBank, amount:
     1
 }
 
+/// Physical control values at the C boundary. Unitless controls range from
+/// zero to one. Bow speed has a neutral midpoint.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct BowControls {
+    pub attack_ms: f64,
+    pub character: f64,
+    pub sustain: f64,
+    pub resonance_ms: f64,
+    pub pressure: f64,
+    pub speed: f64,
+    pub friction: f64,
+}
+
+impl BowControls {
+    pub const NEUTRAL: Self = Self {
+        attack_ms: 0.0,
+        character: 0.0,
+        sustain: 0.0,
+        resonance_ms: 0.0,
+        pressure: 0.0,
+        speed: 0.5,
+        friction: 0.0,
+    };
+}
+
 /// Full signal path with linked output peak protection. Zero samples are a no-op.
 /// # Safety
 /// Same live-handle, buffer lengths and non-overlap contracts as split/recombine.
@@ -222,7 +250,45 @@ pub unsafe extern "C" fn eb_filter_bank_process(
     attack: f64,
     character: f64,
 ) -> i32 {
-    if bank.is_null() || !attack.is_finite() || !character.is_finite() || samples < 0 {
+    // SAFETY: identical buffer and ownership contract.
+    unsafe {
+        eb_bow_process(
+            bank,
+            input,
+            output,
+            samples,
+            BowControls {
+                attack_ms: attack,
+                character,
+                ..BowControls::NEUTRAL
+            },
+        )
+    }
+}
+
+/// Complete seven-control signal path.
+/// # Safety
+/// Identical ownership, buffer and aliasing requirements to eb_filter_bank_process.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn eb_bow_process(
+    bank: *mut FilterBank,
+    input: *const *const f32,
+    output: *const *mut f32,
+    samples: i32,
+    controls: BowControls,
+) -> i32 {
+    let finite = [
+        controls.attack_ms,
+        controls.character,
+        controls.sustain,
+        controls.resonance_ms,
+        controls.pressure,
+        controls.speed,
+        controls.friction,
+    ]
+    .into_iter()
+    .all(f64::is_finite);
+    if bank.is_null() || !finite || samples < 0 {
         return 0;
     }
     if samples == 0 {
@@ -243,8 +309,12 @@ pub unsafe extern "C" fn eb_filter_bank_process(
         if eb_filter_bank_split(bank, input, samples) == 0 {
             return 0;
         }
-        eb_filter_bank_attack(bank, attack);
-        eb_filter_bank_character(bank, character);
+        let processor = &mut *bank;
+        processor
+            .expression
+            .process(&mut processor.bands, count, samples as usize, &controls);
+        eb_filter_bank_attack(bank, controls.attack_ms);
+        eb_filter_bank_character(bank, controls.character);
         eb_filter_bank_recombine(bank, output);
     }
     let mut channels: [&mut [f32]; 2] = [&mut [], &mut []];
@@ -254,6 +324,9 @@ pub unsafe extern "C" fn eb_filter_bank_process(
     }
     // SAFETY: output storage cannot alias the exclusive bank handle.
     unsafe {
+        (*bank)
+            .resonance
+            .process(&mut channels[..count], controls.resonance_ms);
         (*bank).output.process(&mut channels[..count]);
     }
     1
