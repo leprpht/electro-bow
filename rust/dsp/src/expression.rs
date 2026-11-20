@@ -28,6 +28,10 @@ impl Expression {
         }
     }
 
+    pub fn input_level(&self) -> f32 {
+        self.level as f32
+    }
+
     pub fn reset(&mut self) {
         self.level = 0.0;
         self.memory = 0.0;

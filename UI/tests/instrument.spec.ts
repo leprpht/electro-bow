@@ -8,7 +8,7 @@ test("preview has seven accessible working controls", async ({ page }) => {
   await expect(page.getByRole("slider")).toHaveCount(7);
   await expect(page.locator('input[type="range"]:enabled')).toHaveCount(7);
   await expect(page.getByRole("status")).toContainText("Preview");
-  await expect(page.getByRole("img", { name: /Tuner idle/ })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Input level −∞/ })).toBeVisible();
   for (const label of ["Sustain", "Resonance", "Bow Pressure", "Bow Speed", "Bow Friction"]) {
     await expect(page.getByRole("slider", { name: label, exact: true })).toBeEnabled();
   }
@@ -109,30 +109,19 @@ test("native values load, writes reach JUCE, and external updates resume after d
     .toEqual({ id: "attackMs", value: 500 });
 });
 
-test("tuner responds to measured pitch and returns to idle without stale telemetry", async ({
-  page,
-}) => {
+test("input meter follows recorded levels and returns to silence", async ({ page }) => {
   await installNativeBridge(page);
   await page.goto("/");
   await expect(page.getByRole("status")).toContainText("Connected");
-  for (const cents of [-25, 0, 25]) {
-    await page.evaluate((cents) => {
+  for (const level of [0.1, 1, 0]) {
+    await page.evaluate((level) => {
       const state = structuredClone(window.__testBridge.state);
-      state.pitch = { note: "A4", frequencyHz: 440 * 2 ** (cents / 1200), confidence: 0.95 };
+      state.inputLevel = level;
       window.__testBridge.emit(state);
-    }, cents);
-    await expect(page.getByRole("img")).toHaveAttribute("aria-label", new RegExp(`${cents} cents`));
-    await expect
-      .poll(() => page.locator(".tuner-needle").evaluate((el) => el.getAttribute("style")))
-      .toContain(`rotate(${cents * 0.96}`);
+    }, level);
+    const display = level > 0 ? (20 * Math.log10(level)).toFixed(1) : "−∞";
+    await expect(page.getByRole("img")).toHaveAccessibleName(`Input level ${display} dBFS`);
   }
-  await page.evaluate(() => {
-    const state = structuredClone(window.__testBridge.state);
-    state.pitch = { note: "—", frequencyHz: 0, confidence: 0 };
-    window.__testBridge.emit(state);
-  });
-  await expect(page.getByRole("img", { name: /Tuner idle/ })).toBeVisible();
-  await expect(page.locator(".tuner-frequency")).toHaveText("No signal");
 });
 
 for (const size of [

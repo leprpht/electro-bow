@@ -1,13 +1,9 @@
 # ElectroBow
 
-ElectroBow is a JUCE-based VST3 audio plugin. Audio path is a transparent
-four-band parallel IIR filter bank at 200, 800, and 3000 Hz, supporting mono and
-stereo with zero added algorithmic latency. A continuous Rust attack shaper now softens upper-band transients before
-recombination; Attack at minimum restores unity reconstruction. No bow processing runs. Existing bow controls/session data are
-retained, Attack and Bow Character now affect audio; pitch/voice displays stay idle.
-
-See [the Phase 1 report](docs/phase1-filter-bank.md) for the filter design,
-reconstruction measurements, CPU results, Release build, and modified files.
+ElectroBow is a zero-latency mono/stereo VST3 effect for electric guitar.
+Its Rust DSP swells the original pick attack, supports the falling string
+level, shapes its harmonics across four complementary bands, and adds a short
+damped body response. Chords, bends, and slides pass through the same audio path.
 
 ## Requirements
 
@@ -180,20 +176,22 @@ Visual Studio is only used as the compiler/generator on Windows; no solution fil
 
 The vendored dependencies retain their upstream licenses in `ThirdParty/aubio-src/COPYING` and `ThirdParty/stk/LICENSE`.
 
-New DSP work (filters, tracking, bow excitation, and string resonance) should
-prefer Rust modules in `rust/dsp/`. JUCE hosting and the UI bridge stay in C++.
-Existing aubio/STK and older C++ components remain available for incremental
-migration. See [Rust DSP architecture and migration validation](docs/rust-dsp.md).
+The production DSP lives in `rust/dsp/`. The older C++ pitch and voice
+components are built only for their regression tests.
 
 ## Instrument interface
 
-The 960 × 700 editor uses a vintage metal faceplate, reusable rotary knobs,
-and an analog tuner. Attack Reduction and the smaller Bow Character control
-operate the existing DSP. Drag vertically, hold Shift for finer changes, use
-arrow/Home/End keys, or double-click to restore the default. Values appear on
-hover or focus. Sustain, Resonance, Bow Pressure, Bow Speed, and Bow Friction
-are disabled because they are not implemented in the current audio path.
-The tuner shows **No signal** while pitch telemetry is inactive.
+All seven controls support host automation. **Attack** sets the swell time
+in milliseconds. **Sustain** lifts a decaying string while it remains above
+the pickup noise floor. **Resonance** sets body decay in milliseconds.
+**Bow Pressure** adds midrange weight and compresses stronger strokes.
+**Bow Speed** adjusts brightness. **Bow Friction** adds low-band harmonics.
+**Bow Character** emphasizes the woody middle register and softens the treble.
+The meter shows the incoming guitar level in dBFS.
+
+Drag vertically, hold Shift for finer changes, use arrow/Home/End keys, or
+double-click to restore the default. The host bypass crossfades over 5 ms.
+Version 1 and 2 sessions retain their stored controls, with Sustain initialized to zero.
 
 The React components live in `UI/src/components/`; native state synchronization
 lives in `UI/src/hooks/usePluginState.ts`. Tailwind handles layout utilities.
@@ -336,9 +334,7 @@ Keep the changelog in this strict structure:
 
 Allowed category headings are `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, and `Security`. The release workflow requires the exact version heading and date before publishing.
 
-See [attack processing](docs/attack-processing.md) for the algorithm and validation.
-
-See [Bow Character architecture and audio comparisons](docs/bow-character.md).
-
-The [final integration report](docs/final-effect.md) documents output protection,
-final controls, dependency audit, and the pending FL Studio validation.
+The reports in `docs/` describe earlier stages of development. To render
+current dry/wet comparisons from the recorded guitar fixtures, install the
+optional Python packages listed in `tools/render_guitar_comparisons.py` and run
+`python tools/render_guitar_comparisons.py /path/to/ElectroBow.vst3 build/guitar-comparisons`.

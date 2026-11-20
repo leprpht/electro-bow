@@ -77,6 +77,7 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     std::array<juce::AudioParameterFloat*, numControls> controls{};
     std::array<bool, numControls> uiGestures{};
     FilterBank filterBank;
+    std::atomic<float> inputLevel{0.0f};
     juce::AudioBuffer<float> wetBuffer;
     juce::SmoothedValue<float> bypassMix;
     bool firstBlock = true;

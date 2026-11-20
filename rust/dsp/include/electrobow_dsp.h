@@ -131,6 +131,9 @@ void eb_filter_bank_reset(EbFilterBank* bank);
 int32_t eb_filter_bank_process(EbFilterBank* bank, const float* const* input, float* const* output,
                                int32_t samples, double attack, double character);
 
+/** Linear pre-effect peak envelope. Query on the processing thread only. */
+float eb_bow_input_level(const EbFilterBank* bank);
+
 /** Full effect settings in physical units. Speed is neutral at 0.5. */
 typedef struct EbBowControls {
     double attack_ms;    /**< 0..500 ms */

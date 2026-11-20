@@ -38,6 +38,7 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
     filterBank.prepare(sampleRate, std::max(1, samplesPerBlock), getTotalNumInputChannels());
     wetBuffer.setSize(getTotalNumInputChannels(), filterBank.getCapacity());
     bypassMix.reset(sampleRate, 0.005);
+    inputLevel.store(0.0f, std::memory_order_relaxed);
     firstBlock = true;
     setLatencySamples(0);
 }
@@ -47,6 +48,7 @@ void ElectroBowAudioProcessor::releaseResources() {
 }
 
 void ElectroBowAudioProcessor::reset() {
+    inputLevel.store(0.0f, std::memory_order_relaxed);
     firstBlock = true;
     filterBank.reset();
 }
@@ -130,6 +132,7 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
         }
         offset += count;
     }
+    inputLevel.store(filterBank.getInputLevel(), std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* ElectroBowAudioProcessor::createEditor() {
@@ -250,6 +253,7 @@ juce::var ElectroBowAudioProcessor::getUiState() const {
     for (const auto* parameter : controls)
         parameters->setProperty(parameter->paramID, parameter->get());
     state->setProperty("parameters", juce::var(parameters));
+    state->setProperty("inputLevel", inputLevel.load(std::memory_order_relaxed));
 
     auto* pitch = new juce::DynamicObject();
     pitch->setProperty("note", juce::String("—"));

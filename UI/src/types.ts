@@ -8,6 +8,7 @@ export type ParameterId =
   | "sustain";
 
 export type PluginState = {
+  inputLevel: number;
   parameters: Record<ParameterId, number>;
   pitch: {
     note: string;
@@ -21,6 +22,7 @@ export type PluginState = {
 };
 
 export const defaultState: PluginState = {
+  inputLevel: 0,
   parameters: {
     bowCharacter: 0.45,
     sustain: 0.5,

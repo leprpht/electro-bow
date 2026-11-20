@@ -49,6 +49,9 @@ class FilterBank {
     void reset() noexcept {
         eb_filter_bank_reset(handle.get());
     }
+    float getInputLevel() const noexcept {
+        return eb_bow_input_level(handle.get());
+    }
     int getCapacity() const noexcept {
         return capacity;
     }

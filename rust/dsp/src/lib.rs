@@ -173,6 +173,16 @@ mod final_tests;
 #[cfg(test)]
 mod tests;
 
+/// Linked pre-effect peak envelope for metering.
+///
+/// # Safety
+/// Same serialized handle contract as eb_filter_bank_samples.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn eb_bow_input_level(bank: *const FilterBank) -> f32 {
+    // SAFETY: caller supplies a live handle or null, with exclusive access.
+    unsafe { bank.as_ref() }.map_or(0.0, |bank| bank.expression.input_level())
+}
+
 /// Apply spectral attack control to the last split, before recombination.
 /// # Safety
 /// Same exclusive live-handle contract as reset; borrowed band pointers must

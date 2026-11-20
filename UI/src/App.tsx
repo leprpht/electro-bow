@@ -1,7 +1,7 @@
 import * as styles from "./styles/panel.css";
 import { BrandSignature } from "./components/BrandSignature";
 import { ControlBank } from "./components/ControlBank";
-import { GuitarTuner } from "./components/GuitarTuner";
+import { InputMeter } from "./components/InputMeter";
 import { InstrumentPanel } from "./components/InstrumentPanel";
 import { Knob } from "./components/Knob";
 import { MakerSignature } from "./components/MakerSignature";
@@ -20,7 +20,7 @@ function App() {
         onGestureChange={setGesture}
       />
       <div className={`center-column flex min-w-0 flex-col items-center ${styles.center}`}>
-        <GuitarTuner pitch={state.pitch} />
+        <InputMeter level={state.inputLevel} />
         <BrandSignature />
         <div className={`character-control ${styles.character}`}>
           <Knob
