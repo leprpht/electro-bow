@@ -54,6 +54,9 @@ input {
 .app-shell {
   container-type: inline-size;
   width: min(100%, calc((100svh - 2.4vmin) * 1.38));
+  /* An explicit border-box height avoids WebKit resolving a 100%-height child
+     against the aspect ratio before accounting for the faceplate padding. */
+  height: min(calc((100vw - 2.4vmin) / 1.38), calc(100svh - 2.4vmin));
   aspect-ratio: 1.38;
   padding: 3.4% 6.3% 3.1%;
   border: 3px solid #57544a;

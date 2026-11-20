@@ -181,6 +181,38 @@ prefer Rust modules in `rust/dsp/`. JUCE hosting and the UI bridge stay in C++.
 Existing aubio/STK and older C++ components remain available for incremental
 migration. See [Rust DSP architecture and migration validation](docs/rust-dsp.md).
 
+## Instrument interface
+
+The 960 × 700 editor uses a vintage metal faceplate, reusable rotary knobs,
+and an analog tuner. Attack Reduction and the smaller Bow Character control
+operate the existing DSP. Drag vertically, hold Shift for finer changes, use
+arrow/Home/End keys, or double-click to restore the default. Values appear on
+hover or focus. Sustain, Resonance, Bow Pressure, Bow Speed, and Bow Friction
+are disabled because they are not implemented in the current audio path.
+The tuner shows **No signal** while pitch telemetry is inactive.
+
+The React components live in `UI/src/components/`; native state synchronization
+lives in `UI/src/hooks/usePluginState.ts`. Tailwind handles layout utilities and
+`UI/src/styles.css` defines the instrument materials and responsive sizing.
+Fonts and the SVG texture are bundled into CSS for offline JUCE rendering.
+
+Preview and browser interaction tests:
+
+```sh
+cd UI
+npm ci
+npm run dev
+# In a separate terminal in UI/:
+npx playwright install chromium webkit
+npm test
+npm run format:check
+```
+
+The browser suite builds and serves the production bundle, tests Chromium and
+WebKit, and writes screenshots under the ignored `UI/test-results/` directory.
+The native editor smoke test checks embedded fonts, layout, state loading,
+and a React control edit reaching the processor on both open and reopen.
+
 ## Development tools
 
 Project C/C++ files are formatted automatically by the pre-commit hook. Vendored files under `ThirdParty/` are intentionally excluded.

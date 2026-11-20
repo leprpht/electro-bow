@@ -3,6 +3,8 @@ build/
 JUCE/
 UI/node_modules/
 UI/dist/
+UI/test-results/
+UI/playwright-report/
 cmake-build-*/
 CMakeCache.txt
 CMakeFiles/
