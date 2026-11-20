@@ -5,6 +5,32 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-11-20
+
+### Added
+
+- Added focused Rust unit tests for the output protector, Attack, Bow Character,
+  and filter bank, with each component's tests beside its implementation.
+- Added browser tests for rotary controls, native parameter updates, tuner
+  telemetry, and the embedded vintage editor.
+- Documented the Rust DSP C API and its ownership and buffer contracts.
+
+### Changed
+
+- Redesigned the editor as a vintage instrument faceplate with rotary controls,
+  a guitar tuner, bundled typography, and a larger native editor window.
+- Moved instrument styles into typed TypeScript modules and made inactive
+  controls explicit while preserving Attack Reduction and Bow Character control.
+- Replaced repository shell hooks with the pre-commit framework for formatting
+  and release-tag changelog validation, including multi-tag pushes.
+
+### Fixed
+
+- Prevented CMake's frontend source glob from including generated assets and
+  installed dependencies.
+- Reduced Linux CI dependency download delays by bypassing the slow Azure
+  Ubuntu mirror, bounding downloads, and combining package installation steps.
+
 ## [1.5.0] - 2026-11-20
 
 ### Added

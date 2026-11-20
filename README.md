@@ -295,7 +295,7 @@ python -m unittest discover -s tools/hooks/tests -v
 
 ## Releases
 
-Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.5.0` or `1.5.0` semantic-version tag is pushed.
+Releases are built automatically by GitHub Actions for Windows, macOS, and Linux. The workflow runs when either a `v1.5.1` or `1.5.1` semantic-version tag is pushed.
 
 Before tagging, update the version in `CMakeLists.txt`, `UI/package.json`, and
 the root package entries in `UI/package-lock.json`. Add a dated changelog entry
@@ -303,8 +303,8 @@ for the same version and commit these changes. Then create and push an annotated
 tag, for example:
 
 ```sh
-git tag -a v1.5.0 -m "Release v1.5.0"
-git push --atomic origin main v1.5.0
+git tag -a v1.5.1 -m "Release v1.5.1"
+git push --atomic origin main v1.5.1
 ```
 
 The pre-push hook checks every tag being created or updated against the
@@ -314,7 +314,7 @@ Branch pushes and tag deletions do not require changelog entries, and unrelated
 local tags are ignored. Check a specific tag locally with:
 
 ```sh
-python tools/hooks/check_tag_changelog.py --tag v1.5.0
+python tools/hooks/check_tag_changelog.py --tag v1.5.1
 ```
 
 The check reads the changelog from the tagged commit, not your working copy.
