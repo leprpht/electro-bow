@@ -106,9 +106,10 @@ impl Expression {
                         let env = &mut self.band_peak[b][ch];
                         *env = x.abs().max(*env * self.release);
                         let u = x / env.max(1e-30);
-                        // Round the low-band crests, adding a small third
-                        // harmonic without distorting the entire chord.
-                        friction * (0.80 - 0.90 * u * u)
+                        // Keep the cubic monotonic even at maximum friction
+                        // and the lowest band gain (0.88). Folding the crests
+                        // back introduces a false bass tone on low fifths.
+                        friction * (0.48 - 0.40 * u * u)
                     } else {
                         0.0
                     };

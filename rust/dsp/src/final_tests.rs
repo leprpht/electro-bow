@@ -489,3 +489,33 @@ fn sustain_respects_a_soft_stroke_after_a_mute_and_a_loud_repick() {
         assert!(peak(&wet, 0.85, 0.87) < 0.41, "carryover into loud repick");
     }
 }
+
+#[test]
+fn friction_keeps_the_difference_product_below_the_played_fifth() {
+    let rate = 48000.0;
+    let phase = |hz: f64, i: usize| std::f64::consts::TAU * hz * i as f64 / rate;
+    let input: Vec<_> = (0..48000)
+        .map(|i| (0.12 * (phase(100.0, i).sin() + phase(150.0, i).sin())) as f32)
+        .collect();
+    let wet = render_controls(
+        &input,
+        rate,
+        97,
+        BowControls {
+            friction: 1.0,
+            ..BowControls::NEUTRAL
+        },
+    );
+    let amplitude = |hz| {
+        let (mut re, mut im) = (0.0, 0.0);
+        for (i, &x) in wet[24000..].iter().enumerate() {
+            re += f64::from(x) * phase(hz, i).cos();
+            im += f64::from(x) * phase(hz, i).sin();
+        }
+        re.hypot(im)
+    };
+    assert!(
+        amplitude(50.0) < 0.065 * amplitude(100.0),
+        "spurious bass below the chord"
+    );
+}

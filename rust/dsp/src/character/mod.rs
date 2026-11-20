@@ -7,7 +7,7 @@ pub struct Character {
     initialized: bool,
     smoothing: f64,
     release: f64,
-    envelope: f64,
+    envelope: [f64; 2],
 }
 
 impl Character {
@@ -17,13 +17,13 @@ impl Character {
             initialized: false,
             smoothing: 1.0 - (-1.0 / (0.015 * rate)).exp(),
             release: (-1.0 / (0.035 * rate)).exp(),
-            envelope: 0.0,
+            envelope: [0.0; 2],
         }
     }
 
     pub fn reset(&mut self) {
         self.initialized = false;
-        self.envelope = 0.0;
+        self.envelope = [0.0; 2];
     }
 
     pub fn process(
@@ -41,15 +41,13 @@ impl Character {
         let [_, wood, presence, edge] = bands;
         for i in 0..samples {
             self.amount += self.smoothing * (target - self.amount);
-            let peak = wood
-                .iter()
-                .take(channels)
-                .map(|c| f64::from(c[i]).abs())
-                .fold(0.0, f64::max);
-            self.envelope = peak.max(self.envelope * self.release);
             for ch in 0..channels {
                 let x = f64::from(wood[ch][i]);
-                let u = x / self.envelope.max(1e-30);
+                // Normalize the shape locally so panning a string changes
+                // its level equally for the fundamental and its harmonics.
+                let envelope = &mut self.envelope[ch];
+                *envelope = x.abs().max(*envelope * self.release);
+                let u = x / envelope.max(1e-30);
                 // A bounded cubic blend in the 200-800 Hz band. Odd symmetry
                 // avoids a DC component. Treble never enters the nonlinearity.
                 wood[ch][i] = (x * (1.0 + self.amount * (0.74 - 0.32 * u * u))) as f32;
