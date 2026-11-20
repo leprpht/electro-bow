@@ -544,6 +544,64 @@ void testHostControlStateAndBypass() {
         require(std::equal(input[static_cast<size_t>(c)].begin() + 240,
                            input[static_cast<size_t>(c)].end(), audio.getReadPointer(c) + 240),
                 "bypass becomes dry after five milliseconds, including oversized callbacks");
+    audio.setSample(0, 0, std::numeric_limits<float>::quiet_NaN());
+    audio.setSample(1, 1, std::numeric_limits<float>::infinity());
+    restored.processBlockBypassed(audio, midi);
+    require(audio.getSample(0, 0) == 0.0f && audio.getSample(1, 1) == 0.0f,
+            "non-finite samples are silenced during steady bypass");
+    const auto level = static_cast<float>(restored.getUiState().getProperty("inputLevel", 0));
+    require(level > 0.5f && level <= 1.0f, "meter reads input while bypassed");
+    restored.reset();
+    require(static_cast<float>(restored.getUiState().getProperty("inputLevel", -1)) == 0.0f,
+            "transport reset clears meter");
+}
+
+void testAutomationRouting() {
+    struct Route {
+        const char* id;
+        double EbBowControls::* field;
+        float max;
+    };
+    const Route routes[] = {{"attackMs", &EbBowControls::attack_ms, 500},
+                            {"bowCharacter", &EbBowControls::character, 1},
+                            {"sustain", &EbBowControls::sustain, 1},
+                            {"naturalResonanceMs", &EbBowControls::resonance_ms, 1000},
+                            {"bowPressure", &EbBowControls::pressure, 1},
+                            {"bowSpeed", &EbBowControls::speed, 1},
+                            {"friction", &EbBowControls::friction, 1}};
+    ElectroBowAudioProcessor processor;
+    processor.prepareToPlay(48000, 64);
+    FilterBank reference;
+    reference.prepare(48000, 64, 2);
+    EbBowControls settings{50, 0.45f, 0.5, 200, 0.5, 0.5, 0.127f};
+    auto source = makeSignal(64);
+    juce::MidiBuffer midi;
+    for (const auto& route : routes) {
+        auto match = std::find_if(
+            processor.getParameters().begin(), processor.getParameters().end(), [&](auto* p) {
+                return dynamic_cast<juce::AudioParameterFloat*>(p)->paramID == route.id;
+            });
+        require(match != processor.getParameters().end(), "host control ID is registered");
+        auto* parameter = *match;
+        // Alternate endpoints *while* processing. Each decoded host control
+        // must follow exactly the same trajectory as its named Rust field.
+        for (int block = 0; block < 90; ++block) {
+            const float normalized = static_cast<float>((block / 15) % 2);
+            parameter->setValueNotifyingHost(normalized);
+            settings.*(route.field) = normalized * route.max;
+            juce::AudioBuffer<float> wet(2, 64), expected(2, 64);
+            const float envelope = static_cast<float>(std::exp(-0.08 * (block % 45)));
+            for (int ch = 0; ch < 2; ++ch)
+                wet.copyFrom(ch, 0, source[static_cast<size_t>(ch)].data(), 64, envelope);
+            reference.process(wet.getArrayOfReadPointers(), expected.getArrayOfWritePointers(), 64,
+                              settings);
+            processor.processBlock(wet, midi);
+            for (int ch = 0; ch < 2; ++ch)
+                for (int i = 0; i < 64; ++i)
+                    require(std::abs(wet.getSample(ch, i) - expected.getSample(ch, i)) < 2e-6f,
+                            "host control drives its declared Rust field");
+        }
+    }
 }
 
 void benchmark() {
@@ -603,6 +661,7 @@ int main() {
     testCharacterIntegration();
     testInvalidStateKeepsProcessing();
     testHostControlStateAndBypass();
+    testAutomationRouting();
     benchmark();
     std::cout << "All FilterBank tests passed.\n";
 }

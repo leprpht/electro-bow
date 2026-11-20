@@ -119,7 +119,7 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
         }
 
         filterBank.process(input.data(), output.data(), count, settings);
-        if (mixDry && bypassMix.isSmoothing()) {
+        if (mixDry) {
             for (int i = 0; i < count; ++i) {
                 const float dryGain = bypassMix.getNextValue();
                 for (int ch = 0; ch < channels; ++ch) {
