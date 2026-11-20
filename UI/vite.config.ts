@@ -9,6 +9,9 @@ export default defineConfig({
   base: "./",
   plugins: [react(), tailwindcss()],
   build: {
+    // The native resource provider serves only HTML, JS and CSS. Keep fonts
+    // and faceplate textures inside those resources for fully offline loading.
+    assetsInlineLimit: 512 * 1024,
     outDir: "dist",
     emptyOutDir: true,
     target: "es2020",

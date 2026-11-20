@@ -84,7 +84,7 @@ export function Knob({
       title={description}
     >
       <label className="knob-label text-center" htmlFor={id}>
-        {label}
+        {compact ? label : label.split(" ").join("\n")}
       </label>
       <div className="knob-dial relative aspect-square">
         <div className="knob-ticks absolute inset-0" aria-hidden="true">
