@@ -55,7 +55,10 @@ impl Resonance {
 
     pub fn process(&mut self, channels: &mut [&mut [f32]], ms: f64) {
         let time = ms.clamp(0.0, 1000.0) * 0.001;
-        let target_mix = 0.30 * time / (time + 0.14);
+        // Longer feedback stores more energy at individual body modes.
+        // Trim the return as decay rises to keep those modes from cancelling
+        // sustained harmonics in the parallel dry path.
+        let target_mix = 0.30 * time / ((time + 0.14) * (1.0 + 2.4 * time));
         let targets = self.lines.each_ref().map(|line| {
             if time > 0.0 {
                 (line.log_decay / time).exp()

@@ -392,3 +392,34 @@ fn contact_controls_change_compression_tilt_and_third_harmonic() {
     );
     assert!((0.01..0.06).contains(&harmonic));
 }
+
+#[test]
+fn long_body_decay_keeps_sustained_harmonics_present() {
+    // The strongest cancellation in the untrimmed body return was near
+    // 807 Hz. Exercise that mode and adjacent guitar harmonics at steady state.
+    for frequency in [287.0, 540.0, 806.75, 1008.0] {
+        let signal: Vec<_> = (0..72000)
+            .map(|i| (0.1 * (std::f64::consts::TAU * frequency * i as f64 / 48000.0).sin()) as f32)
+            .collect();
+        let wet = render_controls(
+            &signal,
+            48000.0,
+            113,
+            BowControls {
+                resonance_ms: 1000.0,
+                ..BowControls::NEUTRAL
+            },
+        );
+        let energy = |buf: &[f32]| {
+            buf[48000..]
+                .iter()
+                .map(|&x| f64::from(x).powi(2))
+                .sum::<f64>()
+        };
+        let ratio = energy(&wet) / energy(&signal);
+        assert!(
+            (0.25..1.6).contains(&ratio),
+            "{frequency} Hz power ratio {ratio}"
+        );
+    }
+}
