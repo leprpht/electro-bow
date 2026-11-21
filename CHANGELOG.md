@@ -5,6 +5,15 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.2] - 2026-11-21
+
+### Fixed
+
+- Bow character knob now better represents the characteristics of using
+  the bow on the guitar.
+- Lowered noise presence.
+- Fixed the behavior of Sustain, Resonance and Bow Friction knobs
+
 ## [1.5.1] - 2026-11-20
 
 ### Added
