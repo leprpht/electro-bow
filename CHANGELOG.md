@@ -5,6 +5,17 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-11-21
+
+### Changed
+
+- Changed Rust codebase layout.
+- Moved C entry points into ffi module. 
+
+### Added
+
+- Added signal path tests.
+
 ## [1.5.3] - 2026-11-21
 
 ### Changed
