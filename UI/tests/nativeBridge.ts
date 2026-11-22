@@ -3,6 +3,7 @@ import { defaultState, type ParameterId, type PluginState } from "../src/types";
 
 type TestBridge = {
   state: PluginState;
+  gestures: Array<{ id: ParameterId; active: boolean }>;
   writes: Array<{ id: ParameterId; value: number }>;
   emit: (state: PluginState) => void;
 };
@@ -27,6 +28,7 @@ export async function installNativeBridge(page: Page) {
       const bridge: TestBridge = {
         state: initialState,
         writes: [],
+        gestures: [],
         emit(state) {
           this.state = state;
           nativeWindow.__JUCE__.backend.emitByBackend("pluginState", JSON.stringify(state));
@@ -45,6 +47,10 @@ export async function installNativeBridge(page: Page) {
         postMessage(message) {
           const { eventId, payload } = JSON.parse(message);
           if (eventId !== "__juce__invoke") return;
+          if (payload.name === "setGesture") {
+            const [id, active] = payload.params as [ParameterId, boolean];
+            bridge.gestures.push({ id, active });
+          }
           if (payload.name === "setParameter") {
             const [id, value] = payload.params as [ParameterId, number];
             bridge.writes.push({ id, value });

@@ -1,22 +1,21 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
+import faceplate from "../assets/electro-bow-faceplate.jpg";
 import * as styles from "../styles/panel.css";
-import { PanelScrew } from "./PanelScrew";
 
 export function InstrumentPanel({ children }: { children: ReactNode }) {
   return (
     <main
-      className={`app-shell relative isolate ${styles.shell}`}
+      className={`app-shell ${styles.shell}`}
       aria-label="Electro-Bow instrument"
+      style={{ "--faceplate": `url("${faceplate}")` } as CSSProperties}
     >
-      <div
-        className={`panel-surface absolute inset-0 pointer-events-none ${styles.surface}`}
-        aria-hidden="true"
+      <img
+        className={styles.artwork}
+        src={faceplate}
+        alt="Electro-Bow by Unholy People"
+        draggable={false}
       />
-      <PanelScrew position="topLeft" />
-      <PanelScrew position="topRight" />
-      <PanelScrew position="bottomLeft" />
-      <PanelScrew position="bottomRight" />
-      <div className={`instrument-layout relative grid h-full ${styles.layout}`}>{children}</div>
+      {children}
     </main>
   );
 }
