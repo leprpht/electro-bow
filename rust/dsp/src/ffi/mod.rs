@@ -1,6 +1,9 @@
 //! C entry points shared with the JUCE adapter via `include/electrobow_dsp.h`.
 //! Each handle owns one stream. The caller serializes access to its state and buffers.
 
+mod instrument;
+pub use instrument::*;
+
 use crate::filter_bank::{self, FilterBank};
 use crate::{BowControls, PanelControls};
 use std::{ptr, slice};
