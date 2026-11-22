@@ -163,7 +163,7 @@ Visual Studio is only used as the compiler/generator on Windows; no solution fil
 
 ## Project layout
 
-- `Source/PluginProcessor.*` contains the audio/business logic and the small native UI bridge.
+- `Source/PluginProcessor.*` registers host parameters, restores sessions, and bridges the editor and the Rust audio path.
 - `Source/PluginEditor.*` hosts JUCE's WebView and serves the embedded frontend assets.
 - `UI/` contains the TypeScript/React/Tailwind frontend. Its production bundle is generated in
   `UI/dist/` and embedded into the VST3 during the CMake build.
@@ -181,29 +181,31 @@ components are built only for their regression tests.
 
 ## Instrument interface
 
-All seven controls support host automation. **Attack** sets the swell time
-in milliseconds. **Sustain** lifts a decaying string while it remains above
-the pickup noise floor. **Resonance** sets body decay in milliseconds.
-**Bow Pressure** adds midrange weight and compresses stronger strokes.
-**Bow Speed** adjusts brightness. **Bow Friction** adds low-band harmonics.
-**Bow Character** emphasizes the woody middle register and softens the treble.
-The meter shows the incoming guitar level in dBFS.
+The six faceplate dials support host automation. New instances open with all pointers at noon.
 
-Drag vertically, hold Shift for finer changes, use arrow/Home/End keys, or
-double-click to restore the default. The host bypass crossfades over 5 ms.
-Version 1 and 2 sessions retain their stored controls, with Sustain initialized to zero.
+| Dial | Audio response |
+| --- | --- |
+| Attack | Sets the pick-to-bow swell from 0 to 500 ms. Noon is 50 ms. The lower half of the dial gives short swells finer adjustment. |
+| Bow Character | Emphasizes the woody low mids, softens the treble, and scales the depth of the three dials beneath it. At zero, those three textures drop out. |
+| Out | Sets gain after body resonance and before the stereo peak protector. Full left mutes, noon is unity, and full right adds 6.02 dB. |
+| Noise | Blends in filtered bow-contact noise driven by the low and low-mid string signal. Silent input produces no new noise. |
+| Saturation | Softens peaks in the 200–800 Hz wood band and adds harmonics as the string gets louder. |
+| Spectral Movement | Sets the depth of a slow, 0.8 Hz shift between the low mids and upper bands. The sweep follows the same phase in both channels. |
 
-The React components live in `UI/src/components/`; native state synchronization
-lives in `UI/src/hooks/usePluginState.ts`. Tailwind handles layout utilities.
-Typed component styles live in `UI/src/styles/*.css.ts`: panel, knob, tuner,
-screw, and signature modules keep materials, responsive rules, and interaction
-states together. Vanilla Extract compiles these modules into the existing
-`app.css` bundle; no styling runtime or extra native asset route is needed.
-Edit `UI/src/styles/theme.ts` for the shared breakpoint, panel aspect ratio,
-texture, and knob geometry. Screw positions and variants are inferred TypeScript
-types. `UI/src/styles.css` contains only Tailwind setup, fonts, global defaults,
-and reduced-motion behavior.
-Fonts and the SVG texture are bundled into CSS for offline JUCE rendering.
+Drag vertically to turn a dial, hold Shift for finer changes, or use the arrow,
+Home, and End keys. Hover or focus a dial to read its value in milliseconds,
+percent, or dB. Double-click restores its factory setting.
+
+Saved sessions keep their original host parameter IDs and automation. Sustain,
+Resonance, Bow Pressure, Bow Speed, and Bow Friction remain available in the
+host parameter list. Loading a v1–v3 state sets the new texture depths to zero
+and Out to unity. The existing 5 ms host-bypass crossfade also applies to the
+new controls.
+
+The reference photograph is bundled with the editor for offline use. Each live
+dial rotates the corresponding face from the artwork. Dial positions and
+display scales live in `UI/src/App.tsx`, and native state synchronization lives
+in `UI/src/hooks/usePluginState.ts`.
 
 Preview and browser interaction tests:
 
@@ -219,8 +221,9 @@ npm run format:check
 
 The browser suite builds and serves the production bundle, tests Chromium and
 WebKit, and writes screenshots under the ignored `UI/test-results/` directory.
-The native editor smoke test checks embedded fonts, layout, state loading,
-and a React control edit reaching the processor on both open and reopen.
+The browser tests compare dial alignment and pointer positions to the artwork.
+The native smoke test checks the embedded faceplate and exercises all six controls
+through the processor on both open and reopen.
 
 ## Development tools
 
