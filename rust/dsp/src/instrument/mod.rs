@@ -113,3 +113,6 @@ impl Instrument {
         self.output.process(channels, controls.out);
     }
 }
+
+#[cfg(test)]
+mod tests;

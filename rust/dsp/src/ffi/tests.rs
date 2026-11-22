@@ -170,3 +170,37 @@ fn processing_has_no_heap_operations_and_band_addresses_stay_stable() {
         eb_filter_bank_destroy(bank);
     }
 }
+
+#[test]
+fn instrument_callback_and_reset_have_no_heap_activity() {
+    let handle = eb_instrument_create(48000., 256, 2);
+    assert!(!handle.is_null());
+    let settings = crate::InstrumentControls {
+        attack_ms: 75.,
+        character: 0.8,
+        noise: 1.,
+        saturation: 0.75,
+        spectral_movement: 1.,
+        out: 0.5,
+    };
+    let source = [0.2; 256];
+    let inputs = [source.as_ptr(); 2];
+    let mut outputs = [[0.; 256]; 2];
+    let pointers = outputs.each_mut().map(|ch| ch.as_mut_ptr());
+    // SAFETY: both disjoint outputs and input arrays remain live across all calls.
+    unsafe {
+        HEAP_OPERATIONS.with(|n| n.set(0));
+        TRACK.with(|track| track.set(true));
+        let mut success = true;
+        for _ in 0..1000 {
+            success &=
+                eb_instrument_process(handle, inputs.as_ptr(), pointers.as_ptr(), 256, settings)
+                    == 1;
+        }
+        eb_instrument_reset(handle);
+        TRACK.with(|track| track.set(false));
+        assert!(success);
+        assert_eq!(HEAP_OPERATIONS.with(Cell::get), 0);
+        eb_instrument_destroy(handle);
+    }
+}

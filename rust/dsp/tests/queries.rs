@@ -55,3 +55,101 @@ fn input_meter_tracks_the_louder_channel_before_output_trim_and_clears_on_reset(
         eb_filter_bank_destroy(bank);
     }
 }
+
+#[test]
+fn instrument_rejects_invalid_calls_before_advancing_either_channel() {
+    assert!(eb_instrument_create(0., 1, 1).is_null());
+    let engine = eb_instrument_create(48000., 2, 2);
+    assert!(!engine.is_null());
+    let settings = InstrumentControls {
+        attack_ms: 0.,
+        character: 1.,
+        noise: 1.,
+        saturation: 1.,
+        spectral_movement: 1.,
+        out: 0.5,
+    };
+    let input = [0.2_f32, -0.75];
+    let inputs = input.each_ref().map(|v| v as *const f32);
+    let mut output = [3.0_f32; 2];
+    let outputs = output.each_mut().map(|v| v as *mut f32);
+    // SAFETY: valid calls process a single frame per channel. Deliberately
+    // invalid dimensions and null pointers must be rejected before buffer access.
+    unsafe {
+        assert_eq!(
+            eb_instrument_process(engine, ptr::null(), ptr::null(), 0, settings),
+            1
+        );
+        for invalid in [
+            InstrumentControls {
+                attack_ms: f64::NAN,
+                ..settings
+            },
+            InstrumentControls {
+                character: f64::INFINITY,
+                ..settings
+            },
+            InstrumentControls {
+                noise: f64::NAN,
+                ..settings
+            },
+            InstrumentControls {
+                saturation: f64::INFINITY,
+                ..settings
+            },
+            InstrumentControls {
+                spectral_movement: f64::NAN,
+                ..settings
+            },
+            InstrumentControls {
+                out: f64::NEG_INFINITY,
+                ..settings
+            },
+        ] {
+            assert_eq!(
+                eb_instrument_process(engine, inputs.as_ptr(), outputs.as_ptr(), 1, invalid),
+                0
+            );
+        }
+        assert_eq!(
+            eb_instrument_process(engine, inputs.as_ptr(), outputs.as_ptr(), 3, settings),
+            0
+        );
+        assert_eq!(
+            eb_instrument_process(
+                engine,
+                [inputs[0], ptr::null()].as_ptr(),
+                outputs.as_ptr(),
+                1,
+                settings
+            ),
+            0
+        );
+        assert_eq!(
+            eb_instrument_process(
+                engine,
+                inputs.as_ptr(),
+                [outputs[0], ptr::null_mut()].as_ptr(),
+                1,
+                settings
+            ),
+            0
+        );
+        assert_eq!(eb_instrument_input_level(engine), 0.);
+        assert_eq!(output, [3.; 2]);
+        assert_eq!(
+            eb_instrument_process(engine, inputs.as_ptr(), outputs.as_ptr(), 1, settings),
+            1
+        );
+        let first = output;
+        assert_eq!(eb_instrument_input_level(engine), 0.75);
+        eb_instrument_reset(engine);
+        assert_eq!(eb_instrument_input_level(engine), 0.);
+        assert_eq!(
+            eb_instrument_process(engine, inputs.as_ptr(), outputs.as_ptr(), 1, settings),
+            1
+        );
+        assert_eq!(output, first);
+        eb_instrument_destroy(engine);
+    }
+}
