@@ -1,8 +1,8 @@
 //! Two short-lived formants per crossover band, with a shared moving pickup.
 #![forbid(unsafe_code)]
 
-const CENTERS: [[f64; 2]; 4] = [[102., 167.], [390., 650.], [1060., 1780.], [2820., 4100.]];
-const QUALITY: [f64; 4] = [1.6, 3., 4.5, 5.5];
+const CENTERS: [[f64; 2]; 4] = [[102., 193.], [315., 650.], [1060., 1780.], [2820., 4100.]];
+const QUALITY: [f64; 4] = [1.6, 2.6, 4.5, 5.5];
 const PICKUP_GAIN: [f64; 4] = [1.60, 2.0, 2.25, 1.75];
 
 struct Mode {

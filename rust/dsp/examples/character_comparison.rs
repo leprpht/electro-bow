@@ -54,20 +54,26 @@ fn main() {
         ("02-textured.wav", 0.5),
         ("03-rough.wav", 1.0),
     ] {
-        let bank = eb_filter_bank_create(48000.0, 256, 1);
+        let bank = eb_instrument_create(48000.0, 256, 1);
         assert!(!bank.is_null());
         let mut output = vec![0.0; input.len()];
         for (source, destination) in input.chunks(256).zip(output.chunks_mut(256)) {
             // SAFETY: exclusive live handle, disjoint arrays, valid chunk sizes.
             unsafe {
                 assert_eq!(
-                    eb_filter_bank_process(
+                    eb_instrument_process(
                         bank,
                         [source.as_ptr()].as_ptr(),
                         [destination.as_mut_ptr()].as_ptr(),
                         source.len() as i32,
-                        250.0,
-                        amount
+                        InstrumentControls {
+                            attack_ms: 250.0,
+                            character: amount,
+                            noise: 0.5,
+                            saturation: 0.5,
+                            spectral_movement: 0.5,
+                            out: 0.5,
+                        }
                     ),
                     1
                 );
@@ -75,7 +81,7 @@ fn main() {
         }
         // SAFETY: unique ownership; all borrowed buffers are no longer used.
         unsafe {
-            eb_filter_bank_destroy(bank);
+            eb_instrument_destroy(bank);
         }
         let rms = (output.iter().map(|&x| f64::from(x).powi(2)).sum::<f64>() / output.len() as f64)
             .sqrt();
