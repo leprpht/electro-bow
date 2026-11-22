@@ -360,11 +360,16 @@ void testProcessor() {
         processor.processBlock(buffer, midi);
         require(std::abs(buffer.getSample(1, 9000) - 0.25f) < 2e-7f,
                 "unknown and offline block hints preserve the final chunk");
-        processor.prepareToPlay(std::numeric_limits<double>::quiet_NaN(), 64);
-        buffer.setSample(1, 0, 0.5f);
-        processor.processBlock(buffer, midi);
-        require(buffer.getMagnitude(0, buffer.getNumSamples()) == 0.0f,
-                "invalid preparation cannot reuse the previous audio configuration");
+        for (double invalidRate :
+             {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::max()}) {
+            processor.setRateAndBufferSizeDetails(invalidRate, 64);
+            processor.prepareToPlay(invalidRate, 64);
+            buffer.setSample(1, 0, 0.5f);
+            processor.processBlock(buffer, midi);
+            require(buffer.getMagnitude(0, buffer.getNumSamples()) == 0.0f &&
+                        processor.getTailLengthSeconds() == 0.0,
+                    "invalid preparation clears audio and reports no tail");
+        }
     }
     std::cout
         << "PASS: processor mono/stereo, variable/oversized/empty blocks, latency and lifecycle\n";

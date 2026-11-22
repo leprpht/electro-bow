@@ -5,10 +5,14 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace {
 constexpr int stateMagic = 0x45424F57; // EBOW
-}
+constexpr double tailSeconds = 0.30;
+// JUCE converts the reported tail and the shorter bypass ramp to int frame counts.
+constexpr double maxHostRate = std::numeric_limits<int>::max() / tailSeconds;
+} // namespace
 
 ElectroBowAudioProcessor::ElectroBowAudioProcessor()
     : AudioProcessor(BusesProperties()
@@ -40,7 +44,8 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
 
 void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     const int channels = getTotalNumInputChannels();
-    if (!std::isfinite(sampleRate) || sampleRate <= 0.0 || channels < 1 || channels > maxChannels) {
+    if (!std::isfinite(sampleRate) || sampleRate <= 0.0 || sampleRate > maxHostRate ||
+        channels < 1 || channels > maxChannels) {
         releaseResources();
         return;
     }
@@ -190,7 +195,9 @@ double ElectroBowAudioProcessor::getTailLengthSeconds() const {
     // At low rates the modes scale with Nyquist, so their decay takes a
     // fixed number of frames. Preserve the 4 kHz decay allowance in frames.
     const double rate = getSampleRate();
-    return rate > 0.0 ? std::max(0.30, 1200.0 / rate) : 0.30;
+    if (!std::isfinite(rate) || rate > maxHostRate)
+        return 0.0;
+    return rate > 0.0 ? std::max(tailSeconds, 1200.0 / rate) : tailSeconds;
 }
 
 int ElectroBowAudioProcessor::getNumPrograms() {
