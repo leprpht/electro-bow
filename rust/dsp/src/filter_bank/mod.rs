@@ -4,10 +4,14 @@
 
 #![forbid(unsafe_code)]
 
+/// Number of bands, ordered from lowest to highest frequency.
 pub const NUM_BANDS: usize = 4;
+/// Maximum number of channels processed by one bank.
 pub const MAX_CHANNELS: usize = 2;
+/// Nominal crossover frequencies in Hz, scaled together at low sample rates.
 pub const CROSSOVERS_HZ: [f64; 3] = [200.0, 800.0, 3000.0];
 
+/// Filter history, effect stages and preallocated band buffers for one audio stream.
 pub struct FilterBank {
     pub(crate) texture: crate::texture::Texture,
     pub(crate) expression: crate::expression::Expression,
@@ -25,7 +29,8 @@ pub struct FilterBank {
 }
 
 impl FilterBank {
-    // Allocation and coefficient calculation occur only during preparation.
+    /// Prepares buffers for up to `capacity` frames at `rate` Hz. Returns `None`
+    /// for invalid dimensions, an invalid rate, or a failed buffer reservation.
     pub fn new(rate: f64, capacity: usize, channels: usize) -> Option<Self> {
         if !rate.is_finite()
             || rate <= 0.0
@@ -64,6 +69,7 @@ impl FilterBank {
         })
     }
 
+    /// Clears all stage histories and buffered audio for the next stream.
     pub fn reset(&mut self) {
         self.texture.reset();
         self.expression.reset();
@@ -80,7 +86,7 @@ impl FilterBank {
         }
     }
 
-    // FFI validates the whole block before calling this safe, slice-based DSP.
+    /// Splits a validated input block and advances this channel’s crossover history.
     pub(crate) fn split_channel(&mut self, channel: usize, input: &[f32]) {
         let state = &mut self.states[channel];
         let [low_band, low_mid_band, high_mid_band, high_band] = &mut self.bands;
@@ -116,6 +122,7 @@ impl FilterBank {
         }
     }
 
+    /// Sums the four bands for one channel into the supplied frame range.
     pub(crate) fn recombine_channel(&self, channel: usize, output: &mut [f32]) {
         let [b0, b1, b2, b3] = &self.bands;
         let inputs = b0[channel]

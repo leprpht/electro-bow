@@ -1,7 +1,12 @@
+//! C entry points shared with the JUCE adapter via `include/electrobow_dsp.h`.
+//! Each handle owns one stream. The caller serializes access to its state and buffers.
+
 use crate::filter_bank::{self, FilterBank};
 use crate::{BowControls, PanelControls};
 use std::{ptr, slice};
 
+/// Prepares a mono or stereo bank for blocks of up to `capacity` frames at `rate` Hz.
+/// Returns null if preparation fails.
 #[unsafe(no_mangle)]
 pub extern "C" fn eb_filter_bank_create(
     rate: f64,
@@ -15,6 +20,8 @@ pub extern "C" fn eb_filter_bank_create(
         .map_or(ptr::null_mut(), |bank| Box::into_raw(Box::new(bank)))
 }
 
+/// Releases the handle and its band buffers.
+///
 /// # Safety
 /// `bank` must be null or a live handle from create, owned exclusively by this
 /// call. Destroy exactly once; no borrowed band pointers may be used afterward.
@@ -26,6 +33,8 @@ pub unsafe extern "C" fn eb_filter_bank_destroy(bank: *mut FilterBank) {
     }
 }
 
+/// Clears stream history and the valid frame count while retaining allocated buffers.
+///
 /// # Safety
 /// Non-null handles must be live and exclusively accessed for the duration of
 /// every API call. External band pointers must not be accessed during a call.
@@ -37,6 +46,8 @@ pub unsafe extern "C" fn eb_filter_bank_reset(bank: *mut FilterBank) {
     }
 }
 
+/// Splits each input channel into four bands. Returns 1 on success and 0 on failure.
+///
 /// # Safety
 /// Same handle contract as reset. For positive `samples`, `input` must point to
 /// `channels` readable pointers, each to `samples` readable floats. Input must
@@ -75,6 +86,8 @@ pub unsafe extern "C" fn eb_filter_bank_split(
     1
 }
 
+/// Sums the current bands into each output channel. An empty split succeeds.
+///
 /// # Safety
 /// Same handle contract as reset. `output` must contain `channels` writable
 /// pointers with room for the most recent split's valid samples. Outputs must
@@ -107,6 +120,8 @@ pub unsafe extern "C" fn eb_filter_bank_recombine(
     1
 }
 
+/// Borrows the start of one band buffer, or returns null for invalid indices or a null bank.
+///
 /// # Safety
 /// Same handle contract as reset. The returned pointer is owned by Rust and
 /// remains allocated until destroy. Reacquire after split/reset; access only
@@ -131,6 +146,8 @@ pub unsafe extern "C" fn eb_filter_bank_band(
     bank.bands[band as usize][channel as usize].as_mut_ptr()
 }
 
+/// Returns the valid frame count from the most recent split, or zero for a null bank.
+///
 /// # Safety
 /// Same live-handle and serialized-access contract as reset.
 #[unsafe(no_mangle)]
@@ -139,6 +156,8 @@ pub unsafe extern "C" fn eb_filter_bank_samples(bank: *const FilterBank) -> i32 
     unsafe { bank.as_ref() }.map_or(0, |bank| bank.valid_samples as i32)
 }
 
+/// Writes the three effective crossover frequencies in ascending order, in Hz.
+///
 /// # Safety
 /// Same handle contract as reset. `output` must point to three writable doubles,
 /// disjoint from bank storage. No pointer is retained after this call.
