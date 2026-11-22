@@ -30,13 +30,8 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
         controls[index] = p.get();
         addParameter(p.release()); // AudioProcessor owns the parameter.
     };
-    add(pressure, "bowPressure", "Bow Pressure", 1.0f, 0.5f);
-    add(speed, "bowSpeed", "Bow Speed", 1.0f, 0.5f);
-    add(friction, "friction", "Bow Friction", 1.0f, 0.127f);
     add(attack, "attackMs", "Attack", 500.0f, 50.0f);
-    add(resonance, "naturalResonanceMs", "Resonance", 1000.0f, 200.0f);
     add(character, "bowCharacter", "Bow Character", 1.0f, 0.5f);
-    add(sustain, "sustain", "Sustain", 1.0f, 0.5f);
     add(noise, "noise", "Noise", 1.0f, 0.5f);
     add(saturation, "saturation", "Saturation", 1.0f, 0.5f);
     add(movement, "spectralMovement", "Spectral Movement", 1.0f, 0.5f);
@@ -45,8 +40,7 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
 
 void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     const int channels = getTotalNumInputChannels();
-    if (!std::isfinite(sampleRate) || sampleRate <= 0.0 || channels < 1 ||
-        channels > FilterBank::maxChannels) {
+    if (!std::isfinite(sampleRate) || sampleRate <= 0.0 || channels < 1 || channels > maxChannels) {
         releaseResources();
         return;
     }
@@ -54,7 +48,11 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
     // Host block size is a hint. Bound scratch space for offline hosts and
     // use a normal chunk size when the host has no estimate yet.
     const int capacity = samplesPerBlock > 0 ? std::min(samplesPerBlock, 8192) : 256;
-    filterBank.prepare(sampleRate, capacity, channels);
+    instrument.reset(eb_instrument_create(sampleRate, capacity, channels));
+    if (!instrument) {
+        releaseResources();
+        return;
+    }
     wetBuffer.setSize(channels, capacity);
     bypassMix.reset(sampleRate, 0.005);
     inputLevel.store(0.0f, std::memory_order_relaxed);
@@ -63,7 +61,7 @@ void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBl
 }
 
 void ElectroBowAudioProcessor::releaseResources() {
-    filterBank.release();
+    instrument.reset();
     wetBuffer.setSize(0, 0);
     inputLevel.store(0.0f, std::memory_order_relaxed);
     firstBlock = true;
@@ -72,7 +70,7 @@ void ElectroBowAudioProcessor::releaseResources() {
 void ElectroBowAudioProcessor::reset() {
     inputLevel.store(0.0f, std::memory_order_relaxed);
     firstBlock = true;
-    filterBank.reset();
+    eb_instrument_reset(instrument.get());
 }
 
 bool ElectroBowAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const {
@@ -106,7 +104,7 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
     for (int channel = channels; channel < buffer.getNumChannels(); ++channel)
         buffer.clear(channel, 0, samples);
 
-    if (filterBank.getCapacity() == 0 || filterBank.getNumChannels() != channels ||
+    if (!instrument || wetBuffer.getNumChannels() != channels ||
         buffer.getNumChannels() < channels) {
         buffer.clear();
         return;
@@ -115,12 +113,9 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
     // Keep one control snapshot for the entire host callback, including chunks.
     if (samples == 0)
         return;
-    const EbBowControls settings{controls[attack]->get(),   controls[character]->get(),
-                                 controls[sustain]->get(),  controls[resonance]->get(),
-                                 controls[pressure]->get(), controls[speed]->get(),
-                                 controls[friction]->get()};
-    const EbPanelControls panel{controls[noise]->get(), controls[saturation]->get(),
-                                controls[movement]->get(), controls[out]->get()};
+    const EbInstrumentControls settings{controls[attack]->get(),   controls[character]->get(),
+                                        controls[noise]->get(),    controls[saturation]->get(),
+                                        controls[movement]->get(), controls[out]->get()};
     const float dryTarget = bypassed ? 1.0f : 0.0f;
     if (firstBlock) {
         bypassMix.setCurrentAndTargetValue(dryTarget);
@@ -131,9 +126,9 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
     // A host may exceed its advertised maximum. Chunk without reallocating or
     // dropping audio; each channel's filter history continues across chunks.
     for (int offset = 0; offset < samples;) {
-        const int count = std::min(filterBank.getCapacity(), samples - offset);
-        std::array<const float*, FilterBank::maxChannels> input{};
-        std::array<float*, FilterBank::maxChannels> output{};
+        const int count = std::min(wetBuffer.getNumSamples(), samples - offset);
+        std::array<const float*, maxChannels> input{};
+        std::array<float*, maxChannels> output{};
         const bool mixDry = bypassed || bypassMix.isSmoothing();
         for (int channel = 0; channel < channels; ++channel) {
             input[static_cast<std::size_t>(channel)] = buffer.getReadPointer(channel, offset);
@@ -142,7 +137,11 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
                        : buffer.getWritePointer(channel, offset);
         }
 
-        filterBank.process(input.data(), output.data(), count, settings, panel);
+        if (!eb_instrument_process(instrument.get(), input.data(), output.data(), count,
+                                   settings)) {
+            buffer.clear();
+            return;
+        }
         if (mixDry) {
             for (int i = 0; i < count; ++i) {
                 const float dryGain = bypassMix.getNextValue();
@@ -156,7 +155,7 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
         }
         offset += count;
     }
-    inputLevel.store(filterBank.getInputLevel(), std::memory_order_relaxed);
+    inputLevel.store(eb_instrument_input_level(instrument.get()), std::memory_order_relaxed);
 }
 
 juce::AudioProcessorEditor* ElectroBowAudioProcessor::createEditor() {
@@ -188,8 +187,8 @@ bool ElectroBowAudioProcessor::isMidiEffect() const {
 }
 
 double ElectroBowAudioProcessor::getTailLengthSeconds() const {
-    // Allow 90 dB of decay at the longest body setting, including damping.
-    return 1.6;
+    // Includes the slowest low-band mode and the crossover decay.
+    return 0.30;
 }
 
 int ElectroBowAudioProcessor::getNumPrograms() {
@@ -219,7 +218,7 @@ void ElectroBowAudioProcessor::getStateInformation(juce::MemoryBlock& destData) 
     juce::MemoryOutputStream stream(destData, false);
 
     stream.writeInt(stateMagic);
-    stream.writeInt(4);
+    stream.writeInt(5);
     for (const auto* parameter : controls)
         stream.writeFloat(parameter->get());
 }
@@ -231,21 +230,27 @@ void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInB
     if (stream.readInt() != stateMagic)
         return;
     const int version = stream.readInt();
-    if (version < 1 || version > 4)
+    if (version < 1 || version > 5)
         return;
-    const int count = version == 4 ? static_cast<int>(numControls) : version + 4;
+    const int count =
+        version == 5 ? static_cast<int>(numControls) : (version == 4 ? 11 : version + 4);
     if (sizeInBytes < 8 + count * 4)
         return;
 
-    // Legacy sessions did not store Sustain. v1 also predates Character.
-    std::array<float, numControls> values{};
-    values[out] = 0.5f; // Unity trim and zero detail depths reproduce v1–v3 audio.
+    // Validate even retired fields before applying any part of a preset.
+    std::array<float, 11> stored{};
     for (int i = 0; i < count; ++i) {
-        auto& value = values[static_cast<size_t>(i)];
+        auto& value = stored[static_cast<size_t>(i)];
         value = stream.readFloat();
         if (!std::isfinite(value))
             return;
     }
+    std::array<float, numControls> values{};
+    if (version == 5)
+        std::copy_n(stored.begin(), numControls, values.begin());
+    else
+        values = {stored[3], stored[5], stored[7],
+                  stored[8], stored[9], version == 4 ? stored[10] : 0.5f};
     for (size_t i = 0; i < controls.size(); ++i)
         controls[i]->setValueNotifyingHost(controls[i]->convertTo0to1(values[i]));
 }

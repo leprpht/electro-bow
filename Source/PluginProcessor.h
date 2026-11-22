@@ -2,7 +2,10 @@
 
 #include <juce_audio_utils/juce_audio_utils.h>
 
-#include "FilterBank.h"
+#include <electrobow_dsp.h>
+
+#include <array>
+#include <memory>
 
 #include <atomic>
 
@@ -72,24 +75,13 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     void endUiGestures();
 
   private:
-    // Append only. Host parameter indices and EBOW v1–v4 chunks share this order.
-    enum Control {
-        pressure,
-        speed,
-        friction,
-        attack,
-        resonance,
-        character,
-        sustain,
-        noise,
-        saturation,
-        movement,
-        out,
-        numControls
-    };
+    // EBOW v5 order. VST3 automation uses the stable string-based parameter IDs.
+    enum Control { attack, character, noise, saturation, movement, out, numControls };
+    static constexpr int maxChannels = 2;
     std::array<juce::AudioParameterFloat*, numControls> controls{};
     std::array<bool, numControls> uiGestures{};
-    FilterBank filterBank;
+    std::unique_ptr<EbInstrument, decltype(&eb_instrument_destroy)> instrument{
+        nullptr, eb_instrument_destroy};
     std::atomic<float> inputLevel{0.0f};
     juce::AudioBuffer<float> wetBuffer;
     juce::SmoothedValue<float> bypassMix;

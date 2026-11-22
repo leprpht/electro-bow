@@ -20,8 +20,7 @@ const dials: FaceplateDial[] = [
   {
     id: "bowCharacter",
     label: "Bow Character",
-    description:
-      "Warm the middle register, soften the treble, and blend in the three bow textures.",
+    description: "Blend the swollen input with the resonant body.",
     position: { x: 649, y: 324, diameter: 156 },
   },
   {
@@ -33,19 +32,19 @@ const dials: FaceplateDial[] = [
   {
     id: "noise",
     label: "Noise",
-    description: "Blend string-driven bow noise into the attack and sustain.",
+    description: "Scatter some string energy into the upper resonances.",
     position: { x: 424, y: 582, diameter: 144 },
   },
   {
     id: "saturation",
     label: "Saturation",
-    description: "Soften and thicken the low-mid harmonics.",
+    description: "Round the midrange signal driving the resonances.",
     position: { x: 652, y: 582, diameter: 144 },
   },
   {
     id: "spectralMovement",
     label: "Spectral Movement",
-    description: "Vary the balance of the woody mids and the bright edge over time.",
+    description: "Move between the two sets of resonances.",
     position: { x: 880, y: 582, diameter: 144 },
   },
 ];
