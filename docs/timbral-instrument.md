@@ -33,3 +33,40 @@ Use the input to excite a fixed bank of short, inharmonic resonances. The intend
 All coefficients are prepared before rendering. Store two filter histories per mode and channel. The work per frame is independent of pitch count and host block size. Publish exactly the six faceplate parameters, preserve their existing physical units and VST3 IDs, and write a six-value v5 state. When reading v1–v4, validate the entire chunk before mapping surviving fields. Older presets will acquire the new timbre.
 
 Validate neutral reconstruction, first-frame response, modal peaks and release, stereo isolation, silence, overload, rapid automation, all control interactions, buffer partitioning, reset/reload and heap activity. Render recorded low strings, staggered chords and a riff through the packaged VST3. Measure release CPU at several buffer sizes and distinguish actual host playback from offline renders.
+
+## Phases 3 and 4 — implementation and calibration
+
+The production handle is `EbInstrument`. It owns its crossover buffers, Attack envelopes, eight stereo resonators, shared excitation and pickup modulation, meter and output protector. The older `EbFilterBank` ABI still serves direct library callers. Each handle allocates only the stages it uses.
+
+In the first implementation, full Character reduced a recorded low E by 7.39 dB RMS. Tuning the two lower pairs to 102/193 and 315/650 Hz, broadening their bandwidths, and retaining 34% direct signal at full Character filled the gap around 200–300 Hz. Final Q values are 1.6, 2.6, 4.5 and 5.5. The upper pairs retain their design frequencies. The direct/body blend follows `m = 0.66 × c × (2 − c)` and a fixed gain of `1 + 0.90 × m`. This curve depends only on the dial position. A second pick cannot inherit extra makeup from the decay of a previous note.
+
+Bow Character, Noise, Saturation and Spectral Movement each use 15 ms smoothing. Attack and Out use their own time-domain smoothing. The host tail allowance is 300 ms at 4 kHz and above. At lower rates it allows 1,200 frames for the frequency-scaled modes to decay. A full-depth impulse produces a response on the first sample and falls below 1e-8 FS in the final 10% of the reported tail at 4, 48 and 192 kHz.
+
+## Validation on macOS, November 22, 2026
+
+The universal Release VST3 passed strict code-signature verification and pluginval 1.0.4 at strictness 10 on Apple Silicon and under Rosetta. The runs exercised editor open during processing, parameter fuzzing, automation, restoring state, bus layouts, and 44.1/48/96 kHz processing. The host reported zero samples of latency. The standard host bypass appears alongside the six instrument dials.
+
+Both native and universal builds passed all four CTest suites. The 62 Rust tests cover the shared and legacy components as well as the instrument. New checks include all 64 dial endpoint combinations, the differences between two automation timelines offset by one sample, linear addition of overlapping notes with the swell and saturation at zero, channel isolation, partitioning, reset, fault handling and zero heap operations in the instrument callback. The embedded editor reopened and wrote all six controls. All 22 browser tests passed.
+
+The full native processor, including input refill and dispatch, used 0.241%, 0.216%, 0.218% and 0.213% of one M2 Pro core at 48 kHz stereo with 16, 64, 256 and 1024 frames respectively. Each value is the median of seven one-second batches. The earlier 64-frame baseline was 0.270%. These measurements exclude audio-device scheduling and GUI cost.
+
+### Recorded guitar through the VST3
+
+Measured by loading the final universal binary in Pedalboard. Values are RMS gain relative to the corresponding unprocessed recording, with the Out dial at unity and the three detail dials at noon.
+
+| Recording | Factory (50 ms Attack) | Full Character (50 ms Attack) | Full Character (0 ms Attack) |
+| --- | ---: | ---: | ---: |
+| Low E, three seconds | −1.02 dB | −1.84 dB | −1.74 dB |
+| D chord, four staggered recorded strings | −0.96 dB | −1.66 dB | −1.42 dB |
+| Staccato, five seconds | −4.25 dB | −5.11 dB | −2.03 dB |
+| Riff, up to five seconds | −0.30 dB | −0.53 dB | −0.28 dB |
+
+The staccato comparison shows the additional attenuation from a 50 ms swell on short strokes. On all four recordings, saved-state replay matched within 1e-6 FS across blocks of 1, 17, 64, 127, 1024 and 4096 samples. Inverted stereo and dry bypass checks passed. A further 6,000 blocks of continuous randomized automation and varying input levels stayed finite and below the 0.98 sample-peak ceiling.
+
+To reproduce the paired listening files, pass the built VST3 and an output directory to `tools/render_guitar_comparisons.py`. The script preserves the recording gain and also checks state recall and partition invariance. Use `ctest --test-dir build -C Release --output-on-failure` for the processor, editor, Rust and legacy regression suites.
+
+### FL Studio host check, November 23, 2026
+
+FL Studio 20.0.5.91 ran under Rosetta and batch-rendered a local test project containing the recorded D chord. The dry reference contained 163,043 stereo frames at 44.1 kHz and peaked at 0.221 FS. A control project with Fruity Balance set to mute produced silence, confirming that the renderer applied master mixer effects.
+
+The projects intended to load ElectroBow produced audio identical to the dry reference. Monitoring the FL process also failed to confirm loading the built VST3. The user reports unreliable FL Studio operation on this laptop. Successful insertion, live playback, automation and project recall in FL Studio remain unverified. The cause of the dry renders is undetermined.

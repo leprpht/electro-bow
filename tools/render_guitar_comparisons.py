@@ -61,6 +61,13 @@ def main():
             setattr(effect, parameter, value)
         wet = effect.process(dry, rate, buffer_size=127)
         assert dry.shape == wet.shape and np.isfinite(wet).all() and np.max(np.abs(wet)) <= 0.980001
+        # Check the packaged plugin's state and streaming behavior on each take.
+        recalled = load_plugin(str(args.plugin.resolve()))
+        recalled.raw_state = effect.raw_state
+        assert recalled.reported_latency_samples == 0
+        for block in (17, 1024):
+            replay = recalled.process(dry, rate, buffer_size=block)
+            np.testing.assert_allclose(replay, wet, rtol=0, atol=1e-6)
         for label, audio in [("dry", dry), ("wet", wet)]:
             sf.write(args.out / f"{name}-{label}.wav", audio, rate, subtype="PCM_24")
 

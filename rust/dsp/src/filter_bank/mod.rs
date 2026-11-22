@@ -108,6 +108,16 @@ impl BandSplit {
 
     /// Splits a validated input block and advances this channel’s crossover history.
     pub(crate) fn split_channel(&mut self, channel: usize, input: &[f32]) {
+        self.split_channel_observing(channel, input, |_| {});
+    }
+
+    /// The input meter sees the same sanitized sample as the crossover.
+    pub(crate) fn split_channel_observing(
+        &mut self,
+        channel: usize,
+        input: &[f32],
+        mut observe: impl FnMut(f64),
+    ) {
         let state = &mut self.states[channel];
         let [low_band, low_mid_band, high_mid_band, high_band] = &mut self.bands;
         let outputs = low_band[channel][..input.len()]
@@ -121,6 +131,7 @@ impl BandSplit {
             } else {
                 0.0
             };
+            observe(x);
             let mut low = [0.0; 3];
             for ((low, state), coefficient) in
                 low.iter_mut().zip(state.iter_mut()).zip(self.coefficients)

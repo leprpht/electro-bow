@@ -73,16 +73,10 @@ impl Instrument {
     }
 
     pub(crate) fn ingest(&mut self, ch: usize, input: &[f32]) {
-        self.split.split_channel(ch, input);
         let mut level = self.levels[ch];
-        for &sample in input {
-            let peak = if sample.is_finite() {
-                f64::from(sample.abs()).min(16.0)
-            } else {
-                0.0
-            };
-            level = peak.max(level * self.meter_release);
-        }
+        self.split.split_channel_observing(ch, input, |sample| {
+            level = sample.abs().max(level * self.meter_release);
+        });
         self.levels[ch] = level;
     }
 
@@ -105,14 +99,20 @@ impl Instrument {
             }
             let [character, noise, saturation, movement] = *depths;
             let (scatter, blend) = self.body.modulation(noise, movement);
-            let mix = 0.72 * character * (2.0 - character);
+            let mix = 0.66 * character * (2.0 - character);
+            // The two pickups discard off-resonance energy. A fixed mix curve
+            // limits the level drop without following chord peaks.
+            let pickup_trim = 1.0 + 0.90 * mix;
             for (ch, output) in channels.iter_mut().enumerate() {
                 let input = std::array::from_fn(|band| f64::from(bands[band][ch][i]));
                 let direct = input.iter().sum::<f64>();
                 let body = self.body.pickup(ch, input, scatter, blend, saturation);
-                output[i] = (direct + mix * (body - direct)) as f32;
+                output[i] = ((direct + mix * (body - direct)) * pickup_trim) as f32;
             }
         }
         self.output.process(channels, controls.out);
     }
 }
+
+#[cfg(test)]
+mod tests;
