@@ -40,7 +40,7 @@ The production handle is `EbInstrument`. It owns its crossover buffers, Attack e
 
 In the first implementation, full Character reduced a recorded low E by 7.39 dB RMS. Tuning the two lower pairs to 102/193 and 315/650 Hz, broadening their bandwidths, and retaining 34% direct signal at full Character filled the gap around 200–300 Hz. Final Q values are 1.6, 2.6, 4.5 and 5.5. The upper pairs retain their design frequencies. The direct/body blend follows `m = 0.66 × c × (2 − c)` and a fixed gain of `1 + 0.90 × m`. This curve depends only on the dial position. A second pick cannot inherit extra makeup from the decay of a previous note.
 
-Bow Character, Noise, Saturation and Spectral Movement each use 15 ms smoothing. Attack and Out use their own time-domain smoothing. The tail reported to the host is 300 ms. A full-depth impulse produces a response on the first sample and falls below 1e-8 FS in the final 10% of the reported tail at 4, 48 and 192 kHz.
+Bow Character, Noise, Saturation and Spectral Movement each use 15 ms smoothing. Attack and Out use their own time-domain smoothing. The host tail allowance is 300 ms at 4 kHz and above. At lower rates it allows 1,200 frames for the frequency-scaled modes to decay. A full-depth impulse produces a response on the first sample and falls below 1e-8 FS in the final 10% of the reported tail at 4, 48 and 192 kHz.
 
 ## Validation on macOS, November 22, 2026
 

@@ -187,8 +187,10 @@ bool ElectroBowAudioProcessor::isMidiEffect() const {
 }
 
 double ElectroBowAudioProcessor::getTailLengthSeconds() const {
-    // Includes the slowest low-band mode and the crossover decay.
-    return 0.30;
+    // At low rates the modes scale with Nyquist, so their decay takes a
+    // fixed number of frames. Preserve the 4 kHz decay allowance in frames.
+    const double rate = getSampleRate();
+    return rate > 0.0 ? std::max(0.30, 1200.0 / rate) : 0.30;
 }
 
 int ElectroBowAudioProcessor::getNumPrograms() {

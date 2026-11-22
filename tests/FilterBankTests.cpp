@@ -370,6 +370,28 @@ void testProcessor() {
         << "PASS: processor mono/stereo, variable/oversized/empty blocks, latency and lifecycle\n";
 }
 
+void testReportedTailContainsRingingBody() {
+    ElectroBowAudioProcessor processor;
+    processor.setUiParameter("attackMs", 0);
+    processor.setUiParameter("bowCharacter", 1);
+    juce::MidiBuffer midi;
+    for (int rate : {1000, 2000, 4000, 48000}) {
+        processor.setRateAndBufferSizeDetails(rate, 31);
+        processor.prepareToPlay(rate, 31);
+        const int tail = static_cast<int>(std::ceil(rate * processor.getTailLengthSeconds()));
+        juce::AudioBuffer<float> buffer(2, rate + tail + 256);
+        buffer.clear();
+        // Ring the slowest mode for one second, then stop the excitation.
+        const double hz = 102.0 * std::min(1.0, 0.45 * rate / 4100.0);
+        for (int i = 0; i < rate; ++i)
+            buffer.setSample(0, i, static_cast<float>(0.5 * std::sin(2 * pi * hz * i / rate)));
+        processor.processBlock(buffer, midi);
+        require(buffer.getMagnitude(0, rate, 32) > 0.01f, "body rings after the input stops");
+        require(buffer.getMagnitude(0, rate + tail, 256) < 1e-8f,
+                "reported tail includes the scaled low-frequency modes at " + std::to_string(rate));
+    }
+}
+
 void testAttackIntegration() {
     for (double rate : {8000.0, 44100.0, 48000.0, 96000.0, 192000.0}) {
         ElectroBowAudioProcessor dry, wet;
@@ -722,6 +744,7 @@ int main() {
     testCppParity();
     testStateAndBands();
     testProcessor();
+    testReportedTailContainsRingingBody();
     testAttackIntegration();
     testCharacterIntegration();
     testInvalidStateKeepsProcessing();
