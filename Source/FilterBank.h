@@ -41,8 +41,8 @@ class FilterBank {
         eb_filter_bank_character(handle.get(), amount);
     }
     void process(const float* const* input, float* const* output, int samples,
-                 EbBowControls controls) noexcept {
-        const auto ok = eb_bow_process(handle.get(), input, output, samples, controls);
+                 EbBowControls controls, EbPanelControls panel = {0, 0, 0, 0.5}) noexcept {
+        const auto ok = eb_bow_process_panel(handle.get(), input, output, samples, controls, panel);
         assert(ok != 0);
         (void)ok;
     }

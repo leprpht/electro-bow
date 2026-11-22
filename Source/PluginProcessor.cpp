@@ -25,8 +25,8 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
             0.0f, maximum, {}, {}, [initial](float low, float high, float value) {
                 return std::isfinite(value) ? std::clamp(value, low, high) : initial;
             }};
-        auto p = std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id, 1}, name, range,
-                                                             initial, attributes);
+        auto p = std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID{id, index >= noise ? 2 : 1}, name, range, initial, attributes);
         controls[index] = p.get();
         addParameter(p.release()); // AudioProcessor owns the parameter.
     };
@@ -35,8 +35,12 @@ ElectroBowAudioProcessor::ElectroBowAudioProcessor()
     add(friction, "friction", "Bow Friction", 1.0f, 0.127f);
     add(attack, "attackMs", "Attack", 500.0f, 50.0f);
     add(resonance, "naturalResonanceMs", "Resonance", 1000.0f, 200.0f);
-    add(character, "bowCharacter", "Bow Character", 1.0f, 0.45f);
+    add(character, "bowCharacter", "Bow Character", 1.0f, 0.5f);
     add(sustain, "sustain", "Sustain", 1.0f, 0.5f);
+    add(noise, "noise", "Noise", 1.0f, 0.5f);
+    add(saturation, "saturation", "Saturation", 1.0f, 0.5f);
+    add(movement, "spectralMovement", "Spectral Movement", 1.0f, 0.5f);
+    add(out, "out", "Out", 1.0f, 0.5f);
 }
 
 void ElectroBowAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
@@ -115,6 +119,8 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
                                  controls[sustain]->get(),  controls[resonance]->get(),
                                  controls[pressure]->get(), controls[speed]->get(),
                                  controls[friction]->get()};
+    const EbPanelControls panel{controls[noise]->get(), controls[saturation]->get(),
+                                controls[movement]->get(), controls[out]->get()};
     const float dryTarget = bypassed ? 1.0f : 0.0f;
     if (firstBlock) {
         bypassMix.setCurrentAndTargetValue(dryTarget);
@@ -136,7 +142,7 @@ void ElectroBowAudioProcessor::render(juce::AudioBuffer<float>& buffer, bool byp
                        : buffer.getWritePointer(channel, offset);
         }
 
-        filterBank.process(input.data(), output.data(), count, settings);
+        filterBank.process(input.data(), output.data(), count, settings, panel);
         if (mixDry) {
             for (int i = 0; i < count; ++i) {
                 const float dryGain = bypassMix.getNextValue();
@@ -213,7 +219,7 @@ void ElectroBowAudioProcessor::getStateInformation(juce::MemoryBlock& destData) 
     juce::MemoryOutputStream stream(destData, false);
 
     stream.writeInt(stateMagic);
-    stream.writeInt(3);
+    stream.writeInt(4);
     for (const auto* parameter : controls)
         stream.writeFloat(parameter->get());
 }
@@ -225,14 +231,15 @@ void ElectroBowAudioProcessor::setStateInformation(const void* data, int sizeInB
     if (stream.readInt() != stateMagic)
         return;
     const int version = stream.readInt();
-    if (version < 1 || version > 3)
+    if (version < 1 || version > 4)
         return;
-    const int count = version + 4;
+    const int count = version == 4 ? static_cast<int>(numControls) : version + 4;
     if (sizeInBytes < 8 + count * 4)
         return;
 
     // Legacy sessions did not store Sustain. v1 also predates Character.
     std::array<float, numControls> values{};
+    values[out] = 0.5f; // Unity trim and zero detail depths reproduce v1–v3 audio.
     for (int i = 0; i < count; ++i) {
         auto& value = values[static_cast<size_t>(i)];
         value = stream.readFloat();

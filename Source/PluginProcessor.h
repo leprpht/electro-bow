@@ -72,8 +72,21 @@ class ElectroBowAudioProcessor : public juce::AudioProcessor {
     void endUiGestures();
 
   private:
-    // Order is also the serialized EBOW v3 layout. v1 and v2 are prefixes.
-    enum Control { pressure, speed, friction, attack, resonance, character, sustain, numControls };
+    // Append only. Host parameter indices and EBOW v1–v4 chunks share this order.
+    enum Control {
+        pressure,
+        speed,
+        friction,
+        attack,
+        resonance,
+        character,
+        sustain,
+        noise,
+        saturation,
+        movement,
+        out,
+        numControls
+    };
     std::array<juce::AudioParameterFloat*, numControls> controls{};
     std::array<bool, numControls> uiGestures{};
     FilterBank filterBank;
