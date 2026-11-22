@@ -184,7 +184,7 @@ fn output_guard_links_gain_during_finite_overload() {
     let mut protection = crate::output::Output::new(48000.0);
     let mut left = [2.0, -4.0, 0.2];
     let mut right = [1.0, -2.0, 0.1];
-    protection.process(&mut [&mut left, &mut right]);
+    protection.process(&mut [&mut left, &mut right], 0.5);
     for (l, r) in left.into_iter().zip(right) {
         assert!(l.abs() <= 0.980001);
         assert!((l * 0.5 - r).abs() < 1e-7);
@@ -518,4 +518,81 @@ fn friction_keeps_the_difference_product_below_the_played_fifth() {
         amplitude(50.0) < 0.065 * amplitude(100.0),
         "spurious bass below the chord"
     );
+}
+
+#[test]
+fn faceplate_is_repeatable_across_resets_partitions_and_rejected_controls() {
+    for rate in [8000.0, 44100.0, 96000.0] {
+        let input: Vec<_> = (0..4096).map(|i| material(i, rate, 1)).collect();
+        let bank = eb_filter_bank_create(rate, 4096, 1);
+        let settings = BowControls {
+            character: 0.8,
+            ..BowControls::NEUTRAL
+        };
+        let panel = PanelControls {
+            noise: 0.8,
+            saturation: 1.0,
+            spectral_movement: 0.9,
+            out: 0.75,
+        };
+        // SAFETY: bank is exclusive and each mono buffer has the given frame count.
+        unsafe {
+            let render = |size| {
+                let mut audio = input.clone();
+                for block in audio.chunks_mut(size) {
+                    let src = [block.as_ptr()];
+                    let dst = [block.as_mut_ptr()];
+                    assert_eq!(
+                        eb_bow_process_panel(
+                            bank,
+                            src.as_ptr(),
+                            dst.as_ptr(),
+                            block.len() as i32,
+                            settings,
+                            panel
+                        ),
+                        1
+                    );
+                }
+                audio
+            };
+            let whole = render(4096);
+            assert!(whole.iter().all(|x| x.is_finite() && x.abs() <= 0.980001));
+            eb_filter_bank_reset(bank);
+            for invalid in [
+                PanelControls {
+                    noise: f64::NAN,
+                    ..panel
+                },
+                PanelControls {
+                    saturation: f64::INFINITY,
+                    ..panel
+                },
+                PanelControls {
+                    spectral_movement: f64::NEG_INFINITY,
+                    ..panel
+                },
+                PanelControls {
+                    out: f64::NAN,
+                    ..panel
+                },
+            ] {
+                let mut sample = 0.2_f32;
+                assert_eq!(
+                    eb_bow_process_panel(
+                        bank,
+                        [&sample as *const f32].as_ptr(),
+                        [&mut sample as *mut f32].as_ptr(),
+                        1,
+                        settings,
+                        invalid
+                    ),
+                    0
+                );
+                assert_eq!(sample, 0.2);
+            }
+            assert_eq!(render(17), whole);
+            eb_filter_bank_destroy(bank);
+        }
+    }
 }

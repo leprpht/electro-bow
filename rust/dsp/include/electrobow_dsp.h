@@ -150,6 +150,18 @@ typedef struct EbBowControls {
 int32_t eb_bow_process(EbFilterBank* bank, const float* const* input, float* const* output,
                        int32_t samples, EbBowControls controls);
 
+/** Normalized detail depths are scaled by character. Out maps 0..1 to 0..2 gain. */
+typedef struct EbPanelControls {
+    double noise;
+    double saturation;
+    double spectral_movement;
+    double out;
+} EbPanelControls;
+
+/** Extended processing with the same ownership and buffer contract as eb_bow_process. */
+int32_t eb_bow_process_panel(EbFilterBank* bank, const float* const* input, float* const* output,
+                             int32_t samples, EbBowControls controls, EbPanelControls panel);
+
 /**
  * @brief Apply the coordinated spectral/friction character control.
  *
