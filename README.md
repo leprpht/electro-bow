@@ -1,9 +1,10 @@
 # ElectroBow
 
-ElectroBow is a zero-latency mono/stereo VST3 effect for electric guitar.
-Its Rust DSP swells the original pick attack, supports the falling string
-level, shapes its harmonics across four complementary bands, and adds a short
-damped body response. Chords, bends, and slides pass through the same audio path.
+ElectroBow is a zero-latency mono/stereo timbral instrument that runs as a VST3
+guitar effect. A pick, bend or whole chord excites eight short resonances. The
+two rows of resonances give the sound a hollow, vowel-like color. Bow Character
+brings that body forward, while Spectral Movement moves between the rows.
+[Architecture and measurements](docs/timbral-instrument.md)
 
 ## Requirements
 
@@ -167,11 +168,11 @@ Visual Studio is only used as the compiler/generator on Windows; no solution fil
 - `Source/PluginEditor.*` hosts JUCE's WebView and serves the embedded frontend assets.
 - `UI/` contains the TypeScript/React/Tailwind frontend. Its production bundle is generated in
   `UI/dist/` and embedded into the VST3 during the CMake build.
-- `rust/dsp/` owns the filter-bank algorithm, channel state, and band buffers.
-- `Source/FilterBank.h` is the C++ ownership adapter for the Rust DSP C API.
+- `rust/dsp/src/instrument/` owns the modal body, excitation and six-control audio path.
+- `Source/FilterBank.h` adapts the legacy filter-bank API for its reference tests.
 - `cmake/RustDsp.cmake` integrates Cargo, native linking, and universal builds.
 - `Source/PitchDetector.h` contains the retained aubio-based pitch detector.
-- `ThirdParty/` contains the vendored aubio and STK sources used by the plugin.
+- `ThirdParty/` contains the vendored aubio and STK sources used by the legacy component tests.
 - `CMakeLists.txt` defines the platform-independent build.
 
 The vendored dependencies retain their upstream licenses in `ThirdParty/aubio-src/COPYING` and `ThirdParty/stk/LICENSE`.
@@ -185,22 +186,22 @@ The six faceplate dials support host automation. New instances open with all poi
 
 | Dial | Audio response |
 | --- | --- |
-| Attack | Sets the pick-to-bow swell from 0 to 500 ms. Noon is 50 ms. The lower half of the dial gives short swells finer adjustment. |
-| Bow Character | Emphasizes the woody low mids, softens the treble, and scales the depth of the three dials beneath it. At zero, those three textures drop out. |
-| Out | Sets gain after body resonance and before the stereo peak protector. Full left mutes, noon is unity, and full right adds 6.02 dB. |
-| Noise | Blends in filtered bow-contact noise driven by the low and low-mid string signal. Silent input produces no new noise. |
-| Saturation | Softens peaks in the 200–800 Hz wood band and adds harmonics as the string gets louder. |
-| Spectral Movement | Sets the depth of a slow, 0.8 Hz shift between the low mids and upper bands. The sweep follows the same phase in both channels. |
+| Attack | Sets the swell feeding both the direct sound and the resonances, from 0 to 500 ms. Noon is 50 ms. Short settings preserve more of a muted pick. |
+| Bow Character | Brings the resonant body forward. At zero you hear the input with the selected Attack. At full depth some direct sound still carries pitches between resonances. |
+| Out | Trims the result before stereo-linked peak protection. Full left mutes, noon is unity, and full right adds 6.02 dB. |
+| Noise | Uses the low strings' signal to excite grain in the upper resonances. A silent channel stays silent. |
+| Saturation | Rounds the two middle bands driving the body. The response grows with playing level. |
+| Spectral Movement | Sets the depth of a 0.57 Hz movement between the two sets of resonances. Both stereo channels share the motion. |
 
 Drag vertically to turn a dial, hold Shift for finer changes, or use the arrow,
 Home, and End keys. Hover or focus a dial to read its value in milliseconds,
 percent, or dB. Double-click restores its factory setting.
 
-Saved sessions keep their original host parameter IDs and automation. Sustain,
-Resonance, Bow Pressure, Bow Speed, and Bow Friction remain available in the
-host parameter list. Loading a v1–v3 state sets the new texture depths to zero
-and Out to unity. The existing 5 ms host-bypass crossfade also applies to the
-new controls.
+The six faceplate dials keep their VST3 parameter IDs. The plugin reads v1–v4
+sessions and restores the surviving dial values into the redesigned instrument.
+Sessions predating the texture dials start with the three depths at zero and Out
+at unity. The five former host-only parameters, including Sustain, are retired.
+Older sessions therefore sound different. Host bypass crossfades over 5 ms.
 
 The reference photograph is bundled with the editor for offline use. Each live
 dial rotates the corresponding face from the artwork. Dial positions and

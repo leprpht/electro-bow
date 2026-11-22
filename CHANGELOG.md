@@ -5,6 +5,17 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Replaced the plugin's bow emulation with an eight-mode Rust instrument. Attack shapes the excitation, Bow Character blends in the resonant body, and the three texture dials shape its drive and spectral balance.
+- Unified host automation and the faceplate around six controls. Existing sessions recover the surviving dial values and play through the new instrument.
+
+### Removed
+
+- Retired the host-only Sustain, Resonance, Bow Pressure, Bow Speed and Bow Friction parameters.
+
 ## [1.5.4] - 2026-11-21
 
 ### Changed
