@@ -64,3 +64,9 @@ Measured by loading the final universal binary in Pedalboard. Values are RMS gai
 The staccato comparison shows the additional attenuation from a 50 ms swell on short strokes. On all four recordings, saved-state replay matched within 1e-6 FS across blocks of 1, 17, 64, 127, 1024 and 4096 samples. Inverted stereo and dry bypass checks passed. A further 6,000 blocks of continuous randomized automation and varying input levels stayed finite and below the 0.98 sample-peak ceiling.
 
 To reproduce the paired listening files, pass the built VST3 and an output directory to `tools/render_guitar_comparisons.py`. The script preserves the recording gain and also checks state recall and partition invariance. Use `ctest --test-dir build -C Release --output-on-failure` for the processor, editor, Rust and legacy regression suites.
+
+### FL Studio host check, November 23, 2026
+
+FL Studio 20.0.5.91 ran under Rosetta and batch-rendered a local test project containing the recorded D chord. The dry reference contained 163,043 stereo frames at 44.1 kHz and peaked at 0.221 FS. A control project with Fruity Balance set to mute produced silence, confirming that the renderer applied master mixer effects.
+
+The projects intended to load ElectroBow produced audio identical to the dry reference. Monitoring the FL process also failed to confirm loading the built VST3. The user reports unreliable FL Studio operation on this laptop. Successful insertion, live playback, automation and project recall in FL Studio remain unverified. The cause of the dry renders is undetermined.
