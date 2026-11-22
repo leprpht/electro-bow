@@ -1,7 +1,7 @@
 # ElectroBow - minimal VST3 plugin skeleton
 cmake_minimum_required(VERSION 3.22)
 
-project(ElectroBow VERSION 1.5.2)
+project(ElectroBow VERSION 1.5.3)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
