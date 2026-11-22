@@ -1,4 +1,5 @@
 use super::Attack;
+use crate::filter_bank::FilterBank;
 
 fn fixture() -> [[Vec<f32>; 2]; 4] {
     std::array::from_fn(|_| {
@@ -106,5 +107,116 @@ fn automating_attack_in_silence_engages_the_next_swell_and_releases_smoothly() {
     assert!(
         (previous - 0.5).abs() < 1e-6,
         "zero attack must recover unity"
+    );
+}
+
+fn shaped(signal: &[f32], amount: f64, scale: f32, chunk: usize) -> Vec<f32> {
+    let mut bank = FilterBank::new(48000.0, chunk, 1).unwrap();
+    let mut result = Vec::new();
+    for input in signal.chunks(chunk) {
+        let input: Vec<_> = input.iter().map(|x| x * scale).collect();
+        bank.split_channel(0, &input);
+        bank.attack.process(&mut bank.bands, 1, input.len(), amount);
+        let mut output = vec![0.0; input.len()];
+        bank.recombine_channel(0, &mut output);
+        result.extend(output);
+    }
+    result
+}
+
+#[test]
+fn attack_preserves_level_scaling_and_continuous_playing() {
+    for kind in 0..5 {
+        let signal: Vec<f32> = (0..48000)
+            .map(|i| {
+                let t = i as f64 / 48000.0;
+                let carrier = (t * 220.0 * std::f64::consts::TAU).sin()
+                    + 0.4 * (t * 330.0 * std::f64::consts::TAU).sin()
+                    + 0.2 * (t * 6000.0 * std::f64::consts::TAU).sin();
+                let envelope = match kind {
+                    0 => (-t * 3.0).exp(),                                     // single pluck
+                    1 => 1.0,                                                  // sustained chord
+                    2 => (-(t % 0.06) * 50.0).exp(),                           // fast picking
+                    3 => 0.6 + 0.4 * (t * 12.0 * std::f64::consts::TAU).sin(), // tremolo
+                    _ => {
+                        if i < 24000 {
+                            0.1
+                        } else {
+                            1.0
+                        }
+                    } // changing playing level
+                };
+                (0.3 * carrier * envelope) as f32
+            })
+            .collect();
+        for amount in [0.0, 250.0, 500.0] {
+            let loud = shaped(&signal, amount, 1.0, 257);
+            let quiet = shaped(&signal, amount, 0.1, 257);
+            let partitioned = shaped(&signal, amount, 1.0, 17);
+            for ((a, b), c) in loud.iter().zip(quiet).zip(partitioned) {
+                assert!(a.is_finite());
+                assert!((a * 0.1 - b).abs() < 1e-7, "playing level scaling");
+                assert!((a - c).abs() < 1e-7, "block invariance");
+            }
+        }
+    }
+}
+
+#[test]
+fn attack_softens_guitar_fundamentals_and_pick_noise_and_recovers_sustain() {
+    for frequency in [82.4, 330.0, 6000.0] {
+        let signal: Vec<f32> = (0..96000)
+            .map(|i| (i as f64 * frequency * std::f64::consts::TAU / 48000.0).sin() as f32)
+            .collect();
+        let energy = |x: &[f32]| x.iter().map(|x| f64::from(*x).powi(2)).sum::<f64>();
+        let dry = shaped(&signal, 0.0, 1.0, 64);
+        let middle = shaped(&signal, 250.0, 1.0, 64);
+        let smooth = shaped(&signal, 500.0, 1.0, 64);
+        let ratio = energy(&smooth[48..960]) / energy(&dry[48..960]);
+        assert!(ratio < 0.025);
+        assert!(energy(&smooth[48..960]) < energy(&middle[48..960]));
+        assert!(energy(&middle[48..960]) < energy(&dry[48..960]));
+        let sustain = energy(&smooth[80000..]) / energy(&dry[80000..]);
+        assert!(
+            (sustain - 1.0).abs() < 0.04,
+            "{frequency} Hz steady-state power ratio {sustain}"
+        );
+        println!("Attack onset energy ratio={ratio:.6}, sustained energy ratio={sustain:.6}");
+    }
+}
+
+#[test]
+fn attack_softens_a_new_pick_above_a_ringing_string() {
+    let rate = 48000.0;
+    let partial = |hz: f64, i: usize| (std::f64::consts::TAU * hz * i as f64 / rate).sin();
+    let input: Vec<_> = (0..48000)
+        .map(|i| {
+            let pick = if i >= 24000 {
+                0.14 * partial(6000.0, i)
+            } else {
+                0.0
+            };
+            (0.35 * partial(100.0, i) + pick) as f32
+        })
+        .collect();
+    let audio = shaped(&input, 120.0, 1.0, 97);
+    // Use complete cycles to isolate the two components in the same 10 ms.
+    let amplitude = |start: usize, hz: f64| {
+        let (mut re, mut im) = (0.0, 0.0);
+        for (i, &sample) in audio[start..start + 480].iter().enumerate() {
+            let phase = std::f64::consts::TAU * hz * i as f64 / rate;
+            re += f64::from(sample) * phase.cos();
+            im += f64::from(sample) * phase.sin();
+        }
+        re.hypot(im) / 240.0
+    };
+    assert!(
+        amplitude(24000, 6000.0) < 0.08,
+        "treble pick breaks through"
+    );
+    assert!(amplitude(24000, 100.0) > 0.32, "ringing bass ducks");
+    assert!(
+        amplitude(43200, 6000.0) > 0.135,
+        "sustained brightness is lost"
     );
 }

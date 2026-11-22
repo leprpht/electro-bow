@@ -103,6 +103,6 @@ pull request; cross-platform success is required before opening it.
   bounded jobs/timeouts, runtime versions and retained diagnostics.
 - `build.py`: explicit build parallelism with environment and CLI overrides.
 - `Source/PluginProcessor.cpp`: finite session validation and callback snapshots.
-- `rust/dsp/src/final_tests.rs`: combined-stage dynamics and partition regression.
+- `rust/dsp/src/signal_path_tests.rs`: combined-stage dynamics and partition regression.
 - `tests/FilterBankTests.cpp`: invalid-session regressions and corrected benchmark.
 - `docs/roadmap-audit.md`: requirements, failure evidence and current measurements.

@@ -16,7 +16,7 @@ implemented in Rust, migrating each existing component with a parity test.
 
 - `rust/dsp/src/filter_bank/mod.rs` implements DSP in safe Rust and forbids unsafe
   code at compile time. Preparation is the only allocation/coefficient stage.
-- `rust/dsp/src/lib.rs` contains the small C ABI boundary. Its unsafe operations
+- `rust/dsp/src/ffi/mod.rs` contains the small C ABI boundary. Its unsafe operations
   are explicit, documented pointer conversions; invalid counts/indices/nulls
   return errors before accessing audio. Raw non-null pointers still require
   the caller to supply valid lengths and lifetimes.
