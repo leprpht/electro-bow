@@ -5,6 +5,14 @@ All notable changes to ElectroBow are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Rebuilt the editor from the Electro-Bow reference faceplate with six rotary controls.
+- Added string-driven Noise, low-mid Saturation, and Spectral Movement under the Bow Character control.
+- Added output trim from mute to +6.02 dB with unity at noon. Earlier sessions recall their original settings with the new textures off.
+
 ## [1.5.2] - 2026-11-21
 
 ### Fixed

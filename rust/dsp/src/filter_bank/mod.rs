@@ -9,6 +9,7 @@ pub const MAX_CHANNELS: usize = 2;
 pub const CROSSOVERS_HZ: [f64; 3] = [200.0, 800.0, 3000.0];
 
 pub struct FilterBank {
+    pub(crate) texture: crate::texture::Texture,
     pub(crate) expression: crate::expression::Expression,
     pub(crate) resonance: crate::resonance::Resonance,
     pub(crate) output: crate::output::Output,
@@ -47,6 +48,7 @@ impl FilterBank {
             }
         }
         Some(Self {
+            texture: crate::texture::Texture::new(rate),
             expression: crate::expression::Expression::new(rate),
             resonance: crate::resonance::Resonance::new(rate)?,
             output: crate::output::Output::new(rate),
@@ -63,6 +65,7 @@ impl FilterBank {
     }
 
     pub fn reset(&mut self) {
+        self.texture.reset();
         self.expression.reset();
         self.resonance.reset();
         self.output.reset();

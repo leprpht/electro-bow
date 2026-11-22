@@ -8,6 +8,7 @@ mod expression;
 pub mod filter_bank;
 mod output;
 mod resonance;
+mod texture;
 use filter_bank::FilterBank;
 use std::{ptr, slice};
 
@@ -287,6 +288,50 @@ pub unsafe extern "C" fn eb_bow_process(
     samples: i32,
     controls: BowControls,
 ) -> i32 {
+    // SAFETY: same exclusive bank and caller buffer contract.
+    unsafe {
+        eb_bow_process_panel(
+            bank,
+            input,
+            output,
+            samples,
+            controls,
+            PanelControls::NEUTRAL,
+        )
+    }
+}
+
+/// Normalized faceplate parameters. Out is a linear amplitude trim with unity at 0.5.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct PanelControls {
+    pub noise: f64,
+    pub saturation: f64,
+    pub spectral_movement: f64,
+    pub out: f64,
+}
+
+impl PanelControls {
+    pub const NEUTRAL: Self = Self {
+        noise: 0.0,
+        saturation: 0.0,
+        spectral_movement: 0.0,
+        out: 0.5,
+    };
+}
+
+/// Full signal path, including the three character details and output trim.
+/// # Safety
+/// Identical ownership, buffer and aliasing requirements to eb_filter_bank_process.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn eb_bow_process_panel(
+    bank: *mut FilterBank,
+    input: *const *const f32,
+    output: *const *mut f32,
+    samples: i32,
+    controls: BowControls,
+    panel: PanelControls,
+) -> i32 {
     let finite = [
         controls.attack_ms,
         controls.character,
@@ -295,6 +340,10 @@ pub unsafe extern "C" fn eb_bow_process(
         controls.pressure,
         controls.speed,
         controls.friction,
+        panel.noise,
+        panel.saturation,
+        panel.spectral_movement,
+        panel.out,
     ]
     .into_iter()
     .all(f64::is_finite);
@@ -325,6 +374,14 @@ pub unsafe extern "C" fn eb_bow_process(
             .process(&mut processor.bands, count, samples as usize, &controls);
         eb_filter_bank_attack(bank, controls.attack_ms);
         eb_filter_bank_character(bank, controls.character);
+        let processor = &mut *bank;
+        processor.texture.process(
+            &mut processor.bands,
+            count,
+            samples as usize,
+            controls.character,
+            panel,
+        );
         eb_filter_bank_recombine(bank, output);
     }
     let mut channels: [&mut [f32]; 2] = [&mut [], &mut []];
@@ -337,7 +394,7 @@ pub unsafe extern "C" fn eb_bow_process(
         (*bank)
             .resonance
             .process(&mut channels[..count], controls.resonance_ms);
-        (*bank).output.process(&mut channels[..count]);
+        (*bank).output.process(&mut channels[..count], panel.out);
     }
     1
 }

@@ -81,11 +81,10 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
     };
 
     static constexpr KnobEdit edits[] = {{"Attack", "attackMs", 172},
-                                         {"Sustain", "sustain", 0.78},
-                                         {"Resonance", "naturalResonanceMs", 456},
-                                         {"Bow Pressure", "bowPressure", 0.26},
-                                         {"Bow Speed", "bowSpeed", 0.38},
-                                         {"Bow Friction", "friction", 0.52},
+                                         {"Out", "out", 0.78},
+                                         {"Noise", "noise", 0.26},
+                                         {"Saturation", "saturation", 0.38},
+                                         {"Spectral Movement", "spectralMovement", 0.52},
                                          {"Bow Character", "bowCharacter", 0.64}};
 
     double editValue(const KnobEdit& edit) const {
@@ -147,19 +146,18 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
         const auto script = juce::String(R"JS(
             (() => {
                 const shell = document.querySelector('.app-shell');
-                const pressure = document.querySelector('input[aria-label="Bow Character"]');
-                const ready = !!shell && !!pressure
-                    && document.querySelectorAll('input[type="range"]').length === 7
-                    && document.querySelectorAll('input[type="range"]:enabled').length === 7
-                    && !!document.querySelector('.tuner-needle')
+                const character = document.querySelector('input[aria-label="Bow Character"]');
+                const ready = !!shell && !!character
+                    && document.querySelectorAll('input[type="range"]').length === 6
+                    && document.querySelectorAll('input[type="range"]:enabled').length === 6
+                    && shell.querySelector('img')?.naturalWidth === 1280
                     && document.fonts.status === 'loaded'
-                    && document.fonts.check('20px "Lobster"')
                     && document.fonts.check('20px "Barlow Condensed"')
                     && document.documentElement.scrollWidth <= window.innerWidth
                     && document.documentElement.scrollHeight <= window.innerHeight
-                    && !!document.querySelector('.status-live')
-                    && parseFloat(getComputedStyle(shell).paddingTop) > 0
-                    && Math.abs(Number(pressure.value) - )JS") +
+                    && document.querySelector('[role="status"]')?.textContent === "Connected"
+                    && Math.abs(shell.clientWidth / shell.clientHeight - 1280 / 853) < 0.01
+                    && Math.abs(Number(character.value) - )JS") +
                             expectedValue + R"JS() < 0.001;
                 return {
                     ready,
@@ -173,9 +171,9 @@ class EditorSmokeTests final : public juce::JUCEApplication, private juce::Timer
                     })),
                     text: document.body ? document.body.innerText.slice(0, 200) : '',
                     sliders: document.querySelectorAll('input[type="range"]').length,
-                    connected: !!document.querySelector('.status-live'),
-                    padding: shell ? getComputedStyle(shell).paddingTop : '',
-                    pressure: pressure ? pressure.value : ''
+                    connected: document.querySelector('[role="status"]')?.textContent === "Connected",
+                    width: shell?.clientWidth,
+                    character: character ? character.value : ''
                 };
             })()
         )JS";

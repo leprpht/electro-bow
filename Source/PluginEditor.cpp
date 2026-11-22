@@ -22,7 +22,7 @@ std::optional<juce::WebBrowserComponent::Resource> makeResource(const char* reso
 
 ElectroBowAudioProcessorEditor::ElectroBowAudioProcessorEditor(ElectroBowAudioProcessor& p)
     : AudioProcessorEditor(&p), processorRef(p) {
-    setSize(960, 700);
+    setSize(960, 640);
     browserError.setJustificationType(juce::Justification::centred);
     browserError.setColour(juce::Label::textColourId, juce::Colours::white);
     addChildComponent(browserError);

@@ -460,8 +460,9 @@ void testInvalidStateKeepsProcessing() {
     }
     juce::MemoryBlock original;
     processor.getStateInformation(original);
-    for (int version : {1, 2, 3}) {
-        for (int field = 0; field < (4 + version); ++field) {
+    for (int version : {1, 2, 3, 4}) {
+        const int count = version == 4 ? 11 : version + 4;
+        for (int field = 0; field < count; ++field) {
             for (float invalid :
                  {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
                   -std::numeric_limits<float>::infinity()}) {
@@ -469,7 +470,7 @@ void testInvalidStateKeepsProcessing() {
                 juce::MemoryOutputStream stream(state, false);
                 stream.writeInt(0x45424F57);
                 stream.writeInt(version);
-                for (int i = 0; i < (4 + version); ++i)
+                for (int i = 0; i < count; ++i)
                     stream.writeFloat(i == field ? invalid : 0.0f);
                 processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
                 juce::MemoryBlock after;
@@ -525,12 +526,12 @@ void testInvalidHostAutomation() {
 
 void testHostControlStateAndBypass() {
     ElectroBowAudioProcessor source, restored;
-    require(source.getParameters().size() == 7, "seven host parameters");
+    require(source.getParameters().size() == 11, "all legacy and faceplate host parameters");
     size_t index = 0;
     for (auto* param : source.getParameters()) {
         auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(param);
         require(ranged != nullptr && ranged->isAutomatable(), "host automation");
-        float normalized = 0.13f * static_cast<float>(++index);
+        float normalized = 0.08f * static_cast<float>(++index);
         param->setValueNotifyingHost(normalized);
         auto physical = ranged->convertFrom0to1(normalized);
         auto ui = source.getUiState().getProperty("parameters", {});
@@ -542,7 +543,7 @@ void testHostControlStateAndBypass() {
     source.getStateInformation(saved);
     restored.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
     restored.getStateInformation(reloaded);
-    require(saved == reloaded, "all seven host parameters survive reload");
+    require(saved == reloaded, "all host parameters survive reload");
 
     juce::MemoryBlock legacy;
     juce::MemoryOutputStream stream(legacy, false);
@@ -591,24 +592,51 @@ void testHostControlStateAndBypass() {
             "transport reset clears meter");
 }
 
+void testLegacyPanelRecall() {
+    for (int version : {1, 2, 3}) {
+        ElectroBowAudioProcessor processor;
+        processor.setUiParameter("out", 0.0f);
+        juce::MemoryBlock state;
+        juce::MemoryOutputStream stream(state, false);
+        stream.writeInt(0x45424F57);
+        stream.writeInt(version);
+        const std::array<float, 7> stored{0.2f, 0.4f, 0.1f, 75, 300, 0.8f, 0.65f};
+        for (int i = 0; i < version + 4; ++i)
+            stream.writeFloat(stored[static_cast<size_t>(i)]);
+        processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        auto params = processor.getUiState().getProperty("parameters", {});
+        for (auto id : {"noise", "saturation", "spectralMovement"})
+            require(static_cast<float>(params.getProperty(id, -1)) == 0, "legacy detail bypass");
+        require(static_cast<float>(params.getProperty("out", -1)) == 0.5f, "legacy unity output");
+        require(static_cast<float>(params.getProperty("sustain", -1)) ==
+                    (version >= 3 ? stored[6] : 0.0f),
+                "legacy sustain recall");
+    }
+}
+
 void testAutomationRouting() {
+    EbBowControls settings{50, 0.5, 0.5, 200, 0.5, 0.5, 0.127f};
+    EbPanelControls panel{0.5, 0.5, 0.5, 0.5};
     struct Route {
         const char* id;
-        double EbBowControls::* field;
+        double& field;
         float max;
     };
-    const Route routes[] = {{"attackMs", &EbBowControls::attack_ms, 500},
-                            {"bowCharacter", &EbBowControls::character, 1},
-                            {"sustain", &EbBowControls::sustain, 1},
-                            {"naturalResonanceMs", &EbBowControls::resonance_ms, 1000},
-                            {"bowPressure", &EbBowControls::pressure, 1},
-                            {"bowSpeed", &EbBowControls::speed, 1},
-                            {"friction", &EbBowControls::friction, 1}};
+    const Route routes[] = {{"attackMs", settings.attack_ms, 500},
+                            {"bowCharacter", settings.character, 1},
+                            {"sustain", settings.sustain, 1},
+                            {"naturalResonanceMs", settings.resonance_ms, 1000},
+                            {"bowPressure", settings.pressure, 1},
+                            {"bowSpeed", settings.speed, 1},
+                            {"friction", settings.friction, 1},
+                            {"noise", panel.noise, 1},
+                            {"saturation", panel.saturation, 1},
+                            {"spectralMovement", panel.spectral_movement, 1},
+                            {"out", panel.out, 1}};
     ElectroBowAudioProcessor processor;
     processor.prepareToPlay(48000, 64);
     FilterBank reference;
     reference.prepare(48000, 64, 2);
-    EbBowControls settings{50, 0.45f, 0.5, 200, 0.5, 0.5, 0.127f};
     auto source = makeSignal(64);
     juce::MidiBuffer midi;
     for (const auto& route : routes) {
@@ -623,13 +651,13 @@ void testAutomationRouting() {
         for (int block = 0; block < 90; ++block) {
             const float normalized = static_cast<float>((block / 15) % 2);
             parameter->setValueNotifyingHost(normalized);
-            settings.*(route.field) = normalized * route.max;
+            route.field = normalized * route.max;
             juce::AudioBuffer<float> wet(2, 64), expected(2, 64);
             const float envelope = static_cast<float>(std::exp(-0.08 * (block % 45)));
             for (int ch = 0; ch < 2; ++ch)
                 wet.copyFrom(ch, 0, source[static_cast<size_t>(ch)].data(), 64, envelope);
             reference.process(wet.getArrayOfReadPointers(), expected.getArrayOfWritePointers(), 64,
-                              settings);
+                              settings, panel);
             processor.processBlock(wet, midi);
             for (int ch = 0; ch < 2; ++ch)
                 for (int i = 0; i < 64; ++i)
@@ -696,6 +724,7 @@ int main() {
     testCharacterIntegration();
     testInvalidStateKeepsProcessing();
     testHostControlStateAndBypass();
+    testLegacyPanelRecall();
     testAutomationRouting();
     testInvalidHostAutomation();
     benchmark();
