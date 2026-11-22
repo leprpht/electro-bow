@@ -115,10 +115,11 @@ fn shaped(signal: &[f32], amount: f64, scale: f32, chunk: usize) -> Vec<f32> {
     let mut result = Vec::new();
     for input in signal.chunks(chunk) {
         let input: Vec<_> = input.iter().map(|x| x * scale).collect();
-        bank.split_channel(0, &input);
-        bank.attack.process(&mut bank.bands, 1, input.len(), amount);
+        bank.split.split_channel(0, &input);
+        bank.attack
+            .process(&mut bank.split.bands, 1, input.len(), amount);
         let mut output = vec![0.0; input.len()];
-        bank.recombine_channel(0, &mut output);
+        bank.split.recombine_channel(0, &mut output);
         result.extend(output);
     }
     result

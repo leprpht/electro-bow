@@ -89,11 +89,11 @@ fn character_render(input: &[f32], amount: f64, scale: f32, chunk: usize, rate: 
     let mut result = Vec::new();
     for source in input.chunks(chunk) {
         let source: Vec<_> = source.iter().map(|x| x * scale).collect();
-        bank.split_channel(0, &source);
+        bank.split.split_channel(0, &source);
         bank.character
-            .process(&mut bank.bands, 1, source.len(), amount);
+            .process(&mut bank.split.bands, 1, source.len(), amount);
         let mut output = vec![0.0; source.len()];
-        bank.recombine_channel(0, &mut output);
+        bank.split.recombine_channel(0, &mut output);
         result.extend(output);
     }
     result
@@ -134,29 +134,37 @@ fn character_silence_stereo_and_reset() {
     let mut bank = FilterBank::new(48000.0, 256, 2).unwrap();
     for amount in [0.0, 0.5, 1.0] {
         for _ in 0..10 {
-            bank.character.process(&mut bank.bands, 2, 256, amount);
-            assert!(bank.bands.iter().flatten().flatten().all(|x| *x == 0.0));
+            bank.character
+                .process(&mut bank.split.bands, 2, 256, amount);
+            assert!(
+                bank.split
+                    .bands
+                    .iter()
+                    .flatten()
+                    .flatten()
+                    .all(|x| *x == 0.0)
+            );
         }
     }
     let signal: Vec<f32> = (0..256).map(|i| (i as f32 * 0.17).sin() * 0.5).collect();
-    bank.split_channel(0, &signal);
-    bank.split_channel(1, &signal);
-    bank.character.process(&mut bank.bands, 2, 256, 1.0);
-    for band in &bank.bands {
+    bank.split.split_channel(0, &signal);
+    bank.split.split_channel(1, &signal);
+    bank.character.process(&mut bank.split.bands, 2, 256, 1.0);
+    for band in &bank.split.bands {
         assert_eq!(band[0], band[1]);
     }
-    let first = bank.bands.clone();
+    let first = bank.split.bands.clone();
     bank.reset();
-    bank.split_channel(0, &signal);
-    bank.split_channel(1, &signal);
-    bank.character.process(&mut bank.bands, 2, 256, 1.0);
+    bank.split.split_channel(0, &signal);
+    bank.split.split_channel(1, &signal);
+    bank.character.process(&mut bank.split.bands, 2, 256, 1.0);
     // Reset restores the envelope and control smoother.
     let mut fresh = FilterBank::new(48000.0, 256, 2).unwrap();
-    fresh.split_channel(0, &signal);
-    fresh.split_channel(1, &signal);
-    fresh.character.process(&mut fresh.bands, 2, 256, 1.0);
-    assert_eq!(bank.bands, fresh.bands);
-    assert_ne!(first, bank.bands);
+    fresh.split.split_channel(0, &signal);
+    fresh.split.split_channel(1, &signal);
+    fresh.character.process(&mut fresh.split.bands, 2, 256, 1.0);
+    assert_eq!(bank.split.bands, fresh.split.bands);
+    assert_ne!(first, bank.split.bands);
 }
 
 #[test]
