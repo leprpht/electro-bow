@@ -1,0 +1,11 @@
+# ElectroBow timbral instrument
+
+## Phase 1 — audit of v1.5.4 (7971ab1)
+
+The JUCE callback snapshots eleven host parameters once per block, chunks oversized buffers and calls the Rust panel entry point. The TypeScript editor shows six. Attack sets a linked two-region swell. Bow Character shifts the band gains, waveshapes the low mids and multiplies the three texture depths. Noise amplitude-modulates filtered noise with the low bands. Saturation adds another low-mid soft knee. Spectral Movement sweeps a triangle-wave tilt. Out trims the result before the 0.98 linked sample-peak protector.
+
+Pressure, Speed, Friction, Sustain and Resonance also affect every new instance through host-only parameters. The signal encounters level-dependent makeup and low-band friction, then attack, character shaping, texture shaping, recombination, feedback delays, output trim and limiting. Multiple nonlinearities act on the same overlapping notes. Products between chord tones and gain changes on repicks can therefore accumulate. Makeup can lift a falling chord by up to 10 dB, while the edge band can lose 84% of its level from Character alone. A sample-peak ceiling contains peaks but cannot undo upstream intermodulation or spectral loss. These are mechanisms identified in code. There was no reproducible block-boundary click in the baseline checks.
+
+With the v1.5.4 VST3 at factory settings, the repository's staggered recorded D chord peaked at 0.566 dry and 0.450 wet. Wet RMS was 2.53 dB above dry. Zeroing hidden sustain, pressure, friction and resonance gave 1.02 dB above dry at the same faceplate settings. Measured with Pedalboard, 64-frame blocks, original recording gain. The 54 baseline Rust tests and the processor integration executable passed. The native 48 kHz stereo benchmark used 0.270% of one M2 Pro core at 64 frames.
+
+Reuse the complementary crossover, level-relative Attack, linked output protection, channel layout, block chunking, host bypass ramp and editor. Replace the instrument's sound-generating stages and meter the raw input independently of expression processing. Preserve old EBOW chunk decoding and the six surviving parameter IDs. The existing C API has standalone callers and tests. Keep its legacy behavior available separately from the new plugin callback. aubio and STK are linked by historical test targets only.
