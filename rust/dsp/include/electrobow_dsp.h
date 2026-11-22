@@ -44,8 +44,26 @@ extern "C" {
  * counts, and the documented aliasing restrictions.
  */
 
+/** Six-control timbral instrument. All functions use serialized access per handle.
+ * Prepare and destroy off the audio thread. Reset clears all history without allocation. */
+typedef struct EbInstrument EbInstrument;
+typedef struct EbInstrumentControls {
+    double attack_ms;                                            /* 0..500 */
+    double character, noise, saturation, spectral_movement, out; /* 0..1, Out unity at 0.5 */
+} EbInstrumentControls;
+
+EbInstrument* eb_instrument_create(double rate, int32_t capacity, int32_t channels);
+void eb_instrument_reset(EbInstrument* handle);
+void eb_instrument_destroy(EbInstrument* handle);
+float eb_instrument_input_level(const EbInstrument* handle);
+/** One pointer per prepared channel. Audio buffers may be in-place. Outputs must be disjoint.
+ * No pointer is retained. Returns 0 on invalid arguments, before modifying audio or history.
+ * Zero frames permits null buffers. Controls must be finite. */
+int32_t eb_instrument_process(EbInstrument* handle, const float* const* input, float* const* output,
+                              int32_t frames, EbInstrumentControls controls);
+
 /**
- * @brief Opaque Rust-owned filter-bank instance.
+ * @brief Opaque Rust-owned legacy filter-bank instance.
  *
  * Instances must be created using eb_filter_bank_create()
  * and released using eb_filter_bank_destroy().

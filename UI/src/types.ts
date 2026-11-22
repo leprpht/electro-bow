@@ -1,15 +1,5 @@
 export type ParameterId =
-  | "bowCharacter"
-  | "bowPressure"
-  | "bowSpeed"
-  | "friction"
-  | "attackMs"
-  | "naturalResonanceMs"
-  | "sustain"
-  | "noise"
-  | "saturation"
-  | "spectralMovement"
-  | "out";
+  "bowCharacter" | "attackMs" | "noise" | "saturation" | "spectralMovement" | "out";
 
 export type PluginState = {
   inputLevel: number;
@@ -33,12 +23,7 @@ export const defaultState: PluginState = {
     saturation: 0.5,
     spectralMovement: 0.5,
     out: 0.5,
-    sustain: 0.5,
-    bowPressure: 0.5,
-    bowSpeed: 0.5,
-    friction: 0.127,
     attackMs: 50,
-    naturalResonanceMs: 200,
   },
   pitch: {
     note: "—",

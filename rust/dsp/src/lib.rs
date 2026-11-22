@@ -1,5 +1,5 @@
 //! Rust DSP for the ElectroBow JUCE plugin.
-//! Use [`eb_bow_process_panel`] for a complete block, or [`eb_filter_bank_split`]
+//! Use [`eb_instrument_process`] for the six-control instrument, or [`eb_filter_bank_split`]
 //! and [`eb_filter_bank_recombine`] for direct access to the four bands.
 #![deny(unsafe_op_in_unsafe_fn)]
 
@@ -8,11 +8,13 @@ mod character;
 mod expression;
 mod ffi;
 pub mod filter_bank;
+mod instrument;
 mod output;
 mod resonance;
 mod texture;
 
 pub use ffi::*;
+pub use instrument::InstrumentControls;
 
 /// Physical control values at the C boundary. Unitless controls range from
 /// zero to one. Bow speed has a neutral midpoint.

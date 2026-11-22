@@ -1,6 +1,9 @@
 //! C entry points shared with the JUCE adapter via `include/electrobow_dsp.h`.
 //! Each handle owns one stream. The caller serializes access to its state and buffers.
 
+mod instrument;
+pub use instrument::*;
+
 use crate::filter_bank::{self, FilterBank};
 use crate::{BowControls, PanelControls};
 use std::{ptr, slice};
@@ -62,8 +65,8 @@ pub unsafe extern "C" fn eb_filter_bank_split(
     let Some(bank) = (unsafe { bank.as_mut() }) else {
         return 0;
     };
-    bank.valid_samples = 0;
-    if samples < 0 || samples as usize > bank.capacity {
+    bank.split.valid_samples = 0;
+    if samples < 0 || samples as usize > bank.split.capacity {
         return 0;
     }
     if samples == 0 {
@@ -73,16 +76,16 @@ pub unsafe extern "C" fn eb_filter_bank_split(
         return 0;
     }
     // SAFETY: pointer-array length is guaranteed by the caller's contract.
-    let inputs = unsafe { slice::from_raw_parts(input, bank.channels) };
+    let inputs = unsafe { slice::from_raw_parts(input, bank.split.channels) };
     if inputs.iter().any(|input| input.is_null()) {
         return 0;
     }
     for (channel, &input) in inputs.iter().enumerate() {
         // SAFETY: length, lifetime and disjointness from bank guaranteed by caller.
         let input = unsafe { slice::from_raw_parts(input, samples as usize) };
-        bank.split_channel(channel, input);
+        bank.split.split_channel(channel, input);
     }
-    bank.valid_samples = samples as usize;
+    bank.split.valid_samples = samples as usize;
     1
 }
 
@@ -101,21 +104,21 @@ pub unsafe extern "C" fn eb_filter_bank_recombine(
     let Some(bank) = (unsafe { bank.as_ref() }) else {
         return 0;
     };
-    if bank.valid_samples == 0 {
+    if bank.split.valid_samples == 0 {
         return 1;
     }
     if output.is_null() {
         return 0;
     }
     // SAFETY: caller guarantees pointer-array length.
-    let outputs = unsafe { slice::from_raw_parts(output, bank.channels) };
+    let outputs = unsafe { slice::from_raw_parts(output, bank.split.channels) };
     if outputs.iter().any(|output| output.is_null()) {
         return 0;
     }
     for (channel, &output) in outputs.iter().enumerate() {
         // SAFETY: caller guarantees writable length and no overlap with bank.
-        let output = unsafe { slice::from_raw_parts_mut(output, bank.valid_samples) };
-        bank.recombine_channel(channel, output);
+        let output = unsafe { slice::from_raw_parts_mut(output, bank.split.valid_samples) };
+        bank.split.recombine_channel(channel, output);
     }
     1
 }
@@ -139,11 +142,11 @@ pub unsafe extern "C" fn eb_filter_bank_band(
     if band < 0
         || band as usize >= filter_bank::NUM_BANDS
         || channel < 0
-        || channel as usize >= bank.channels
+        || channel as usize >= bank.split.channels
     {
         return ptr::null_mut();
     }
-    bank.bands[band as usize][channel as usize].as_mut_ptr()
+    bank.split.bands[band as usize][channel as usize].as_mut_ptr()
 }
 
 /// Returns the valid frame count from the most recent split, or zero for a null bank.
@@ -153,7 +156,7 @@ pub unsafe extern "C" fn eb_filter_bank_band(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn eb_filter_bank_samples(bank: *const FilterBank) -> i32 {
     // SAFETY: caller supplies a live handle or null.
-    unsafe { bank.as_ref() }.map_or(0, |bank| bank.valid_samples as i32)
+    unsafe { bank.as_ref() }.map_or(0, |bank| bank.split.valid_samples as i32)
 }
 
 /// Writes the three effective crossover frequencies in ascending order, in Hz.
@@ -174,7 +177,7 @@ pub unsafe extern "C" fn eb_filter_bank_crossovers(
         return 0;
     }
     // SAFETY: output has room for three doubles and does not overlap bank.
-    unsafe { ptr::copy_nonoverlapping(bank.crossovers_hz.as_ptr(), output, 3) };
+    unsafe { ptr::copy_nonoverlapping(bank.split.crossovers_hz.as_ptr(), output, 3) };
     1
 }
 
@@ -201,9 +204,9 @@ pub unsafe extern "C" fn eb_filter_bank_attack(bank: *mut FilterBank, millisecon
         return 0;
     }
     bank.attack.process(
-        &mut bank.bands,
-        bank.channels,
-        bank.valid_samples,
+        &mut bank.split.bands,
+        bank.split.channels,
+        bank.split.valid_samples,
         milliseconds,
     );
     1
@@ -221,8 +224,12 @@ pub unsafe extern "C" fn eb_filter_bank_character(bank: *mut FilterBank, amount:
     if !amount.is_finite() {
         return 0;
     }
-    bank.character
-        .process(&mut bank.bands, bank.channels, bank.valid_samples, amount);
+    bank.character.process(
+        &mut bank.split.bands,
+        bank.split.channels,
+        bank.split.valid_samples,
+        amount,
+    );
     1
 }
 
@@ -313,7 +320,7 @@ pub unsafe extern "C" fn eb_bow_process_panel(
         return 1;
     }
     // SAFETY: handle is exclusively owned by caller; inspect metadata only.
-    let count = unsafe { (*bank).channels };
+    let count = unsafe { (*bank).split.channels };
     if output.is_null() {
         return 0;
     }
@@ -328,14 +335,17 @@ pub unsafe extern "C" fn eb_bow_process_panel(
             return 0;
         }
         let processor = &mut *bank;
-        processor
-            .expression
-            .process(&mut processor.bands, count, samples as usize, &controls);
+        processor.expression.process(
+            &mut processor.split.bands,
+            count,
+            samples as usize,
+            &controls,
+        );
         eb_filter_bank_attack(bank, controls.attack_ms);
         eb_filter_bank_character(bank, controls.character);
         let processor = &mut *bank;
         processor.texture.process(
-            &mut processor.bands,
+            &mut processor.split.bands,
             count,
             samples as usize,
             controls.character,

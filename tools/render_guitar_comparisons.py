@@ -42,11 +42,13 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     cases = [
         ("low-E-swell", excerpt("1a-Low-E", 4.0, align=True),
-         dict(attack_ms=240, sustain=0.8, bow_character=0.68, resonance_ms=300)),
+         dict(attack_ms=240, bow_character=0.68, spectral_movement=0.85)),
         ("staccato", excerpt("GStaccato", 5.0),
-         dict(attack_ms=35, sustain=0.35, bow_speed=0.72, bow_pressure=0.3, resonance_ms=75)),
+         dict(attack_ms=35, bow_character=0.72, noise=0.3, saturation=0.65)),
         ("layered-D-chord", strum(),
-         dict(attack_ms=115, sustain=0.7, bow_character=0.8, bow_friction=0.24, resonance_ms=360)),
+         dict(attack_ms=115, bow_character=0.8, saturation=0.7, spectral_movement=0.85)),
+        ("riff", excerpt("riff_0_0", 5.0, align=True),
+         dict(attack_ms=22, bow_character=0.85, noise=0.55, spectral_movement=1.0)),
     ]
     for name, (dry, rate), settings in cases:
         # Taper the edit and include silence for the body decay. Identical

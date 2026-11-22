@@ -314,9 +314,8 @@ void testCppParity() {
 
 void testProcessor() {
     ElectroBowAudioProcessor processor;
-    for (auto id :
-         {"attackMs", "sustain", "naturalResonanceMs", "friction", "bowPressure", "bowCharacter"})
-        processor.setUiParameter(id, 0.0f);
+    processor.setUiParameter("attackMs", 0.0f);
+    processor.setUiParameter("bowCharacter", 0.0f);
     juce::MidiBuffer midi;
     for (int channels : {1, 2}) {
         auto layout = processor.getBusesLayout();
@@ -325,7 +324,8 @@ void testProcessor() {
         require(processor.setBusesLayout(layout), "mono/stereo bus layout");
         for (double rate : {8000.0, 44100.0, 48000.0, 96000.0, 192000.0}) {
             processor.prepareToPlay(rate, 64);
-            require(processor.getLatencySamples() == 0 && processor.getTailLengthSeconds() >= 1.0,
+            require(processor.getLatencySamples() == 0 && processor.getTailLengthSeconds() >= 0.1 &&
+                        processor.getTailLengthSeconds() < 1.0,
                     "zero latency and finite body decay allowance");
             for (int size : {0, 1, 17, 64, 127, 512, 4097}) {
                 const auto original = makeSignal(size);
@@ -341,7 +341,7 @@ void testProcessor() {
                                                  [static_cast<std::size_t>(sample)]) < 2.0e-7f,
                                 "processor reconstruction including oversized blocks");
             }
-            require(processor.getActiveVoiceCount() == 0, "no bow processing in Phase 1");
+            require(processor.getActiveVoiceCount() == 0, "instrument requires no voices");
             processor.releaseResources();
         }
     }
@@ -375,10 +375,8 @@ void testAttackIntegration() {
         ElectroBowAudioProcessor dry, wet;
         dry.setUiParameter("attackMs", 0.0f);
         wet.setUiParameter("attackMs", 500.0f);
-        for (auto* processor : {&dry, &wet}) {
+        for (auto* processor : {&dry, &wet})
             processor->setUiParameter("bowCharacter", 0.0f);
-            processor->setUiParameter("friction", 0.0f);
-        }
         dry.prepareToPlay(rate, 64);
         wet.prepareToPlay(rate, 64);
         juce::MidiBuffer midi;
@@ -460,8 +458,8 @@ void testInvalidStateKeepsProcessing() {
     }
     juce::MemoryBlock original;
     processor.getStateInformation(original);
-    for (int version : {1, 2, 3, 4}) {
-        const int count = version == 4 ? 11 : version + 4;
+    for (int version : {1, 2, 3, 4, 5}) {
+        const int count = version == 5 ? 6 : (version == 4 ? 11 : version + 4);
         for (int field = 0; field < count; ++field) {
             for (float invalid :
                  {std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<float>::infinity(),
@@ -526,7 +524,7 @@ void testInvalidHostAutomation() {
 
 void testHostControlStateAndBypass() {
     ElectroBowAudioProcessor source, restored;
-    require(source.getParameters().size() == 11, "all legacy and faceplate host parameters");
+    require(source.getParameters().size() == 6, "exactly six automatable instrument controls");
     size_t index = 0;
     for (auto* param : source.getParameters()) {
         auto* ranged = dynamic_cast<juce::AudioParameterFloat*>(param);
@@ -554,7 +552,7 @@ void testHostControlStateAndBypass() {
     restored.setStateInformation(legacy.getData(), static_cast<int>(legacy.getSize()));
     auto old = restored.getUiState().getProperty("parameters", {});
     require(std::abs(static_cast<float>(old.getProperty("bowCharacter", -1)) - 0.9f) < 1e-6f &&
-                static_cast<float>(old.getProperty("sustain", -1)) == 0.0f,
+                static_cast<float>(old.getProperty("attackMs", -1)) == 125.0f,
             "v2 state migration");
 
     restored.prepareToPlay(48000.0, 17);
@@ -593,30 +591,37 @@ void testHostControlStateAndBypass() {
 }
 
 void testLegacyPanelRecall() {
-    for (int version : {1, 2, 3}) {
+    for (int version : {1, 2, 3, 4}) {
         ElectroBowAudioProcessor processor;
         processor.setUiParameter("out", 0.0f);
         juce::MemoryBlock state;
         juce::MemoryOutputStream stream(state, false);
         stream.writeInt(0x45424F57);
         stream.writeInt(version);
-        const std::array<float, 7> stored{0.2f, 0.4f, 0.1f, 75, 300, 0.8f, 0.65f};
-        for (int i = 0; i < version + 4; ++i)
+        const std::array<float, 11> stored{0.2f,  0.4f,  0.1f,  75,    300,  0.8f,
+                                           0.65f, 0.16f, 0.27f, 0.38f, 0.49f};
+        const int count = version == 4 ? 11 : version + 4;
+        for (int i = 0; i < count; ++i)
             stream.writeFloat(stored[static_cast<size_t>(i)]);
         processor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
-        auto params = processor.getUiState().getProperty("parameters", {});
-        for (auto id : {"noise", "saturation", "spectralMovement"})
-            require(static_cast<float>(params.getProperty(id, -1)) == 0, "legacy detail bypass");
-        require(static_cast<float>(params.getProperty("out", -1)) == 0.5f, "legacy unity output");
-        require(static_cast<float>(params.getProperty("sustain", -1)) ==
-                    (version >= 3 ? stored[6] : 0.0f),
-                "legacy sustain recall");
+        const auto params = processor.getUiState().getProperty("parameters", {});
+        const std::array<const char*, 6> ids{"attackMs",   "bowCharacter",     "noise",
+                                             "saturation", "spectralMovement", "out"};
+        const std::array<float, 6> expected{75,
+                                            version >= 2 ? 0.8f : 0.0f,
+                                            version == 4 ? stored[7] : 0.0f,
+                                            version == 4 ? stored[8] : 0.0f,
+                                            version == 4 ? stored[9] : 0.0f,
+                                            version == 4 ? stored[10] : 0.5f};
+        for (size_t i = 0; i < ids.size(); ++i)
+            require(std::abs(static_cast<float>(params.getProperty(ids[i], -1)) - expected[i]) <
+                        1e-6f,
+                    "legacy preset maps each surviving dial");
     }
 }
 
 void testAutomationRouting() {
-    EbBowControls settings{50, 0.5, 0.5, 200, 0.5, 0.5, 0.127f};
-    EbPanelControls panel{0.5, 0.5, 0.5, 0.5};
+    EbInstrumentControls settings{50, 0.5, 0.5, 0.5, 0.5, 0.5};
     struct Route {
         const char* id;
         double& field;
@@ -624,19 +629,15 @@ void testAutomationRouting() {
     };
     const Route routes[] = {{"attackMs", settings.attack_ms, 500},
                             {"bowCharacter", settings.character, 1},
-                            {"sustain", settings.sustain, 1},
-                            {"naturalResonanceMs", settings.resonance_ms, 1000},
-                            {"bowPressure", settings.pressure, 1},
-                            {"bowSpeed", settings.speed, 1},
-                            {"friction", settings.friction, 1},
-                            {"noise", panel.noise, 1},
-                            {"saturation", panel.saturation, 1},
-                            {"spectralMovement", panel.spectral_movement, 1},
-                            {"out", panel.out, 1}};
+                            {"noise", settings.noise, 1},
+                            {"saturation", settings.saturation, 1},
+                            {"spectralMovement", settings.spectral_movement, 1},
+                            {"out", settings.out, 1}};
     ElectroBowAudioProcessor processor;
     processor.prepareToPlay(48000, 64);
-    FilterBank reference;
-    reference.prepare(48000, 64, 2);
+    std::unique_ptr<EbInstrument, decltype(&eb_instrument_destroy)> reference(
+        eb_instrument_create(48000, 64, 2), eb_instrument_destroy);
+    require(reference != nullptr, "prepare six-control reference");
     auto source = makeSignal(64);
     juce::MidiBuffer midi;
     for (const auto& route : routes) {
@@ -656,8 +657,9 @@ void testAutomationRouting() {
             const float envelope = static_cast<float>(std::exp(-0.08 * (block % 45)));
             for (int ch = 0; ch < 2; ++ch)
                 wet.copyFrom(ch, 0, source[static_cast<size_t>(ch)].data(), 64, envelope);
-            reference.process(wet.getArrayOfReadPointers(), expected.getArrayOfWritePointers(), 64,
-                              settings, panel);
+            require(eb_instrument_process(reference.get(), wet.getArrayOfReadPointers(),
+                                          expected.getArrayOfWritePointers(), 64, settings) == 1,
+                    "reference renders automation block");
             processor.processBlock(wet, midi);
             for (int ch = 0; ch < 2; ++ch)
                 for (int i = 0; i < 64; ++i)

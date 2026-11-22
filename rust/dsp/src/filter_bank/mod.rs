@@ -19,6 +19,38 @@ pub struct FilterBank {
     pub(crate) output: crate::output::Output,
     pub(crate) character: crate::character::Character,
     pub(crate) attack: crate::attack::Attack,
+    pub(crate) split: BandSplit,
+}
+
+impl FilterBank {
+    /// Prepares the legacy bow-effect handle.
+    pub fn new(rate: f64, capacity: usize, channels: usize) -> Option<Self> {
+        let split = BandSplit::new(rate, capacity, channels)?;
+        Some(Self {
+            texture: crate::texture::Texture::new(rate),
+            expression: crate::expression::Expression::new(rate),
+            resonance: crate::resonance::Resonance::new(rate)?,
+            output: crate::output::Output::new(rate),
+            character: crate::character::Character::new(rate),
+            attack: crate::attack::Attack::new(rate),
+            split,
+        })
+    }
+
+    /// Clears the legacy stages and their shared crossover.
+    pub fn reset(&mut self) {
+        self.texture.reset();
+        self.expression.reset();
+        self.resonance.reset();
+        self.output.reset();
+        self.attack.reset();
+        self.character.reset();
+        self.split.reset();
+    }
+}
+
+/// Causal crossover and its planar scratch buffers, shared by both C entry points.
+pub(crate) struct BandSplit {
     pub(crate) capacity: usize,
     pub(crate) channels: usize,
     pub(crate) valid_samples: usize,
@@ -28,7 +60,7 @@ pub struct FilterBank {
     pub(crate) bands: [[Vec<f32>; MAX_CHANNELS]; NUM_BANDS],
 }
 
-impl FilterBank {
+impl BandSplit {
     /// Prepares buffers for up to `capacity` frames at `rate` Hz. Returns `None`
     /// for invalid dimensions, an invalid rate, or a failed buffer reservation.
     pub fn new(rate: f64, capacity: usize, channels: usize) -> Option<Self> {
@@ -53,12 +85,6 @@ impl FilterBank {
             }
         }
         Some(Self {
-            texture: crate::texture::Texture::new(rate),
-            expression: crate::expression::Expression::new(rate),
-            resonance: crate::resonance::Resonance::new(rate)?,
-            output: crate::output::Output::new(rate),
-            character: crate::character::Character::new(rate),
-            attack: crate::attack::Attack::new(rate),
             capacity,
             channels,
             valid_samples: 0,
@@ -71,12 +97,6 @@ impl FilterBank {
 
     /// Clears all stage histories and buffered audio for the next stream.
     pub fn reset(&mut self) {
-        self.texture.reset();
-        self.expression.reset();
-        self.resonance.reset();
-        self.output.reset();
-        self.attack.reset();
-        self.character.reset();
         self.states = [[0.0; 3]; MAX_CHANNELS];
         self.valid_samples = 0;
         for band in &mut self.bands {

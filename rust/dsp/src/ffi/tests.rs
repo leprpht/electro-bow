@@ -61,14 +61,14 @@ fn ffi_rejects_bad_arguments_without_changing_history() {
         let signal = [1.0; 64];
         let input = [signal.as_ptr(), signal.as_ptr()];
         assert_eq!(eb_filter_bank_split(bank, input.as_ptr(), 64), 1);
-        let history = (*bank).states;
+        let history = (*bank).split.states;
         assert_eq!(eb_filter_bank_split(bank, input.as_ptr(), 65), 0);
         assert_eq!(eb_filter_bank_samples(bank), 0);
         assert_eq!(eb_filter_bank_split(bank, input.as_ptr(), -1), 0);
         assert_eq!(eb_filter_bank_split(bank, ptr::null(), 1), 0);
         let invalid_input = [signal.as_ptr(), ptr::null()];
         assert_eq!(eb_filter_bank_split(bank, invalid_input.as_ptr(), 64), 0);
-        assert_eq!((*bank).states, history);
+        assert_eq!((*bank).split.states, history);
         assert_eq!(eb_filter_bank_split(bank, ptr::null(), 0), 1);
         assert_eq!(eb_filter_bank_recombine(bank, ptr::null()), 1);
         assert!(eb_filter_bank_band(bank, -1, 0).is_null());
