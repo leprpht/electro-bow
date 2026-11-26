@@ -1,5 +1,13 @@
 # Implementation ledger
 
+## 2026-11-26 · Review of Prompt 0.1
+
+**Prompt 1 is authorized to implement the isolated Rust nonlinear bow-contact solver.** Reviewed `91b58c5..bdc8072`. The 80,500 standard V02 cases agreed with a separately written intersection search. A narrow, increasing segment inside the playing range exposes a branch error shared by M3b and its oracle. Resolve that case and record the correction before closing V02. The ring may proceed independently. Prescribed-Hz waveguide work can follow passing contact and ring tests. [Review findings and stage decisions](REVIEW_00_1_SPECIFICATION.md)
+
+The original ledger replay reproduced 399/399 octave errors. Fitted selection recovered all 399 on the exact parent samples. A fresh run of all 6,725 expanded fixtures matched the reference manifest. The 110 Hz dominant-second input still returned 220.055 Hz on all 200 frames at each tested level. At 711.111111 Hz, coverage fell from 8/8 accurate estimates to 0/8. Production selection and its live-input consumers remain on hold. The review also records false passes in the pitch checker and V03 phase probe, and the missing delivered-output and legacy-ABI observations in the staged matrix.
+
+V08's five sample counts and fault-tick endpoints checked out. A native JUCE driver reproduced the tail overflow and verified the proposed H predicate on an isolated test build. The locked Rust suite passed 59 unit and 3 integration tests, Release CTest passed 4/4, and the existing packaged render matched its baseline hashes. This review adds the report and this ledger entry. Specification changes are deferred to the named corrections. [Evidence, replay and authorization by stage](REVIEW_00_1_SPECIFICATION.md#authorization-by-implementation-stage)
+
 ## 2026-11-24 · Independent specification sign-off
 
 **Reviewed base:** `91b58c5c1d32ee20406aac3a0ec73d478008a0d6`. Entry worktree clean. `git diff --name-status 20d4ee56..HEAD` showed only the three Prompt 0 status files. Production Rust, C/C++, public header, build files, presets and UI remain at baseline. All current code changes are offline validation tools.
