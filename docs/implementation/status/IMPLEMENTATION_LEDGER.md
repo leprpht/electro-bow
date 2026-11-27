@@ -1,5 +1,11 @@
 # Implementation ledger
 
+## 2026-11-27 · Review 6 authorizes one isolated provisional O2 increment
+
+**Reviewed `85b0aa1..d53bc11` from a clean tree.** Retain S2a contact/ring, S2b guide and O1. Independent seven-rate transfer and lifecycle diagnostics passed. Fresh O1 reproduced the 440 Hz common/delivery peaks of 1.005419/.710938 FS and all 384 estimated gain corners. The 6.155 dB extreme implication and nine injected identity failures remain visible. Cargo, guide/O1 replay, fixtures, native CTest and shipping package regressions passed. No production files changed.
+
+Implement private O2 with fixed provisional constants and same-successful-tick O1 in the isolated harness. Qualification requires the reviewed strongest-component, required-row and sweep scorer corrections, actual Rust tap parity and reset/fault checks. Keep the original converted-M5 V17 denominator. Final colored residual, live linked V08, pickup calibration, owner listening and public Noise mapping remain open. I1, S3/A2, amended gesture/S4b, supported S5, integration and release remain held. Baseline injected S4a retains its independent scope. [Review and next increment](REVIEW_06_O2_SPECIFICATION.md)
+
 ## 2026-11-27 · Stage 06 submitted for independent Review 6
 
 The O2 specification and executable offline matrix use qualified Rust O1. All eleven electrical rate cases passed. At 48 kHz/440 Hz the common and trimmed peaks were 1.005419/.710938 FS, implying 6.155 dB demand at maximum G and Out. Nine injected identity cases failed level or strongest-fundamental criteria. Original M5 remains the V17 denominator. Physical and shipping regressions passed. The compact owner listening package, linked nominal-use test and proposed post-commit O2 fault behavior have separate owners. Rust O2, I1, amended gesture, live wet routing, integration and release remain held. Baseline S4a retains its independent scope. [Stage 06 handoff and commands](STAGE_06_O2_SPECIFICATION.md) · [O2 specification](../../architecture/ELECTROBOW_O2_PICKUP_RESPONSE_SPECIFICATION.md)
