@@ -483,18 +483,28 @@ def provenance():
             observed[Path(name).stem] = digest
     kept = set(observed) | {physical_key(fs, 1318.51) for fs in RATE}
     traces = {name: guide.digest(OUT / "traces" / (name + ".f64le")) for name in kept}
-    return manifest, observed, traces
+    with (FIX / "o2_replay_sha256.tsv").open() as stream:
+        reviewed = {r["case"]: r for r in csv.DictReader(stream, delimiter="\t")}
+    keys(reviewed, set(manifest) | set(traces), "reviewed replay")
+    return manifest, observed, traces, reviewed
 
 
 def replay_grade(result):
     from o2_audio import physical_key
 
-    manifest, observed, traces = provenance()
+    manifest, observed, traces, reviewed = provenance()
     rows = result["replay"]
     keys(rows, set(manifest) | set(traces), "physical replay")
     for name, row in rows.items():
         n = manifest[name]["successful_ticks"] if name in manifest else 3 * 48000
         require(row["ticks"] == row["commits"] == row["calls"] == n, "replay clock")
+        require(
+            (row["original_sha256"], row["observed_sha256"], row.get("sha256", "-"))
+            == tuple(
+                reviewed[name][k] for k in ("guide_M5", "guide_M5_O1", "retained_O2")
+            ),
+            "reviewed replay hashes",
+        )
         if name in manifest:
             require(
                 row["original_sha256"] == manifest[name]["raw_sha256"], "original M5"
@@ -659,6 +669,17 @@ def grade(result):
             < (0.0005 if k == "demand_db" else 1e-6),
             "gain " + k,
         )
+
+
+def grade_complete(result):
+    grade(result)
+    grade_controls(result["negatives"])
+    require(
+        result["neutral_candidate_passed"] is True
+        and result["all_tested_vectors_passed"]
+        is (not bool(result["failed_predicates"])),
+        "inconsistent qualification summary",
+    )
 
 
 def grade_controls(controls):

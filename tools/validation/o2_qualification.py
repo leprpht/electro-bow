@@ -19,7 +19,7 @@ from o2_audio import physical_key
 from o2_audio import qualify as qualify_audio
 from o2_audio import rows as audio_rows
 from o2_bench import BINARY, DEPTHS, OUT, check_rate, replay, run, timing
-from o2_coverage import UniqueRows, coverage_negatives, grade, grade_controls
+from o2_coverage import UniqueRows, coverage_negatives, grade, grade_complete
 from o2_response import (
     RATES_EXTENDED,
     ROOT2,
@@ -871,6 +871,7 @@ def tool_hashes():
         FIX / "o1_sha256.tsv",
         FIX / "o2_sha256.tsv",
         FIX / "o2_corner_peaks.tsv",
+        FIX / "o2_replay_sha256.tsv",
         FIX / "acoustic/SHA256SUMS",
     ]
     return {p.name: guide.digest(p) for p in paths}
@@ -916,8 +917,8 @@ def qualify(result):
     result["renderer_sha256"] = guide.digest(BINARY)
     grade(result)
     result["negatives"].update(coverage_negatives(result))
-    grade_controls(result["negatives"])
     result["neutral_candidate_passed"] = True
+    grade_complete(result)
     print("Retained downstream failures", result["failed_predicates"])
 
 
