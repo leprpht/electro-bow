@@ -2,6 +2,9 @@
 #![forbid(unsafe_code)]
 
 mod body;
+// S2a is built in isolation until the driven waveguide owns the per-lane mode.
+#[cfg_attr(not(test), allow(dead_code))]
+mod friction;
 
 use crate::{attack::Attack, filter_bank::BandSplit, output::Output};
 use body::Body;

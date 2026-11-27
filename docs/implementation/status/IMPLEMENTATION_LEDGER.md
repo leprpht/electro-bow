@@ -1,5 +1,11 @@
 # Implementation ledger
 
+## 2026-11-26 · S2a nonlinear contact implemented, awaiting independent Review 1
+
+Clean entry at `0110e1fe513bc603491edccef68865d899d42d33`. The private Rust instrument module implements M3a/M3b, scattering and pre-commit Fault. M3b now admits all enclosing, increasing stored f64 load pairs, evaluates the fraction first and resolves coincident loads to the upper endpoint. The review case selects Slide(+) with r=.030000277554192455 m/s. The migration matrix now names the delivered S6R V10/V11 measurements and both active and legacy V19 ABI observations.
+
+V02 passed 84,874 Rust versus independent graph comparisons, including the original 80,500 cases, and rejected the three negative controls. Maximum lookup was nine segments. The prepared allocator probe counted zero heap operations. All 90 reference spectra/RMS cases passed. The paired reference renders retained their branch sequences and published precision. Cargo formatting, Clippy, 64 unit and 3 integration tests, the native Release build and 4/4 CTest passed. The rebuilt packaged and ABI fixed-pluck payloads matched the shipping baseline. The JUCE render still calls the existing instrument graph. Review 1 and S2a fractional-ring qualification precede S2b. [Stage report, files and replay](STAGE_01_CONTACT_IMPLEMENTATION.md) · [Decision](DECISION_LOG.md) · [Migration ownership](../ELECTROBOW_MIGRATION_PLAN.md#validation-ownership)
+
 ## 2026-11-26 · Review of Prompt 0.1
 
 **Prompt 1 is authorized to implement the isolated Rust nonlinear bow-contact solver.** Reviewed `91b58c5..bdc8072`. The 80,500 standard V02 cases agreed with a separately written intersection search. A narrow, increasing segment inside the playing range exposes a branch error shared by M3b and its oracle. Resolve that case and record the correction before closing V02. The ring may proceed independently. Prescribed-Hz waveguide work can follow passing contact and ring tests. [Review findings and stage decisions](REVIEW_00_1_SPECIFICATION.md)

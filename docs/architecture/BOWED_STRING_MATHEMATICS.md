@@ -48,12 +48,15 @@ Z is constant in this normalized virtual instrument. Use Z=1 N·s/m as a scale c
 if d or k is nonfinite, k < 0, or required curve/load arithmetic is nonfinite: return Fault
 if k == 0: return (0, Stick)
 if d == 0 or (previous != Slide(s) and h <= k*mu0): return (d, Stick)
-if h >= h9: q = h − k*mu9
+if h == h9: q = q9
+else if h > h9: q = h − k*mu9
 else:
     search i = 8 down to 0, at most 9 segments
-    choose first with h[i+1] − h[i] > 1e−12 m/s and h[i] <= abs(d) <= h[i+1]
-    if found:
-        q = q[i] + (q[i+1]−q[i])*(abs(d)−h[i])/(h[i+1]−h[i])
+    choose first with h[i] <= h <= h[i+1]
+    if found and h == h[i+1]: q = q[i+1]      # includes coincident endpoints
+    else if found:
+        u = (h−h[i])/(h[i+1]−h[i])            # 0 <= u < 1 before rounding
+        q = q[i] + (q[i+1]−q[i])*u
     else:
         if h <= k*mu0 + 1e−12: return (clamp(d,−k*mu0,k*mu0), Stick)
         otherwise raise numerical fault
@@ -61,7 +64,11 @@ if q <= 1e−12 m/s: return (d, Stick)
 return (d − s*q, Slide(s))
 ```
 
-Here h[i] and q[i] denote tabulated knot loads and slip speeds. The solve is exact to roundoff for the chosen linear segments, even if successive samples cross multiple knots. No convergence tolerance or iteration count depends on pitch or pressure. A flat segment at the fold has an adjacent upper branch; choose its upper endpoint by scanning in reverse. The analytic tail avoids running beyond the table. V02 uses the signed load-line residual |r+j−d|<1e−10 m/s on every finite result. With k=0 the returned Stick tag clears branch memory, j=0 and physical r=d. With k>0 on Stick the graph at r=0 is the static interval: require |r|<1e−10, |j−d|<1e−10 and |j|≤kμ₀+1e−10 m/s. On Slide require q>1e−12, sign(r)=sign(d)=stored sign, |q+kμ(q)−h|<1e−10 and the same force bound. Check the chosen upper root independently of these residuals. The 1e−12 static fallback covers roundoff at a numerically flat segment. Fault is a distinct solver result with no usable wave or branch to commit. M6 owns the audible response.
+Each hᵢ is the stored binary64 sum of qᵢ and the separately rounded product kμᵢ. Use ordinary f64 multiply, add, subtract and divide in the order shown. An enclosing pair with distinct increasing loads is admissible at **any representable width**. Descending pairs cannot satisfy the ordered enclosure. A coincident pair intersects only at its common load and contributes its upper slip endpoint. Searching from high q selects the maximum admissible intersection, including ties with neighboring segments and the constant tail. The enclosed numerator bounds the interpolation fraction in [0,1]. There is one division on the selected interior segment and at most nine probes.
+
+The rejected width cutoff of 1e−12 m/s lost a root at k=.12029965498642688 and h=.12026541114915246. The stored loads span 5.000028169277471e−13 m/s. From Slide(+) they give q=.030000277554192455 m/s by the f64 operations above. Forming the endpoint loads in exact arithmetic from the same prepared knots gives approximately .03000064466 m/s. The inverse slope amplifies endpoint rounding near a fold. V02 compares against intersections of the stored graph. [Review counterexample](../implementation/status/REVIEW_00_1_SPECIFICATION.md) · [Implementation replay](../implementation/status/STAGE_01_CONTACT_IMPLEMENTATION.md)
+
+V02 uses the signed load-line residual |r+j−d|<1e−10 m/s on every finite result. With k=0 the returned Stick tag clears branch memory, j=0 and physical r=d. With k>0 on Stick the graph at r=0 is the static interval: require |r|<1e−10, |j−d|<1e−10 and |j|≤kμ₀+1e−10 m/s. On Slide require q>1e−12, sign(r)=sign(d)=stored sign, |q+kμ(q)−h|<1e−10 and the same force bound. Check the chosen upper root independently of these residuals. The 1e−12 static fallback margin applies only after exhausting the search. The separate 1e−12 slip floor applies only after selecting q. Fault is a distinct solver result with no usable wave or branch to commit. M6 owns the audible response.
 
 **Worked branch check.** At Z=1, k=.10 m/s and d=.14 m/s, the static limit is .165 m/s. From Stick, j=.14, r=0 and F=.280 N. From Slide(+), the same inputs intersect the increasing segment between q=.08 and .16 at r=.08552224 m/s. Then j=.05447776 m/s and F=.10895552 N. Both choices satisfy the load line. This case catches a solver that always chooses the static root, reverses the slip sign, or uses the full force as a velocity correction.
 

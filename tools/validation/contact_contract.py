@@ -1,12 +1,35 @@
 """Independent graph-intersection oracle for M3 and sample-index/host arithmetic checks."""
 
+import argparse
+import subprocess
 from bisect import bisect_right
+from fractions import Fraction
 from itertools import product
-from math import copysign, exp, floor, inf, isfinite, nan, nextafter
+from math import copysign, exp, floor, inf, isfinite, nan, nextafter, ulp
 from sys import float_info
 
 Q = (0.0, 0.005, 0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28)
 MU = tuple(0.35 + 0.85 * exp(-q / 0.01) + 0.45 * exp(-q / 0.1) for q in Q)
+
+
+def intersections(h, k):
+    """Enumerate the entire unsigned graph, including unstable and flat roots."""
+    loads = [q + k * mu for q, mu in zip(Q, MU)]
+    roots = []
+    for i, (left, right) in enumerate(zip(loads, loads[1:])):
+        if min(left, right) <= h <= max(left, right):
+            if left == right:
+                # The full interval intersects. Its endpoints suffice for extrema.
+                roots.extend((q, "flat") for q in Q[i : i + 2])
+            else:
+                # Exact barycentric interpolation of stored f64 endpoints;
+                # this also works for the descending intersection.
+                lo, hi, x = map(Fraction, (left, right, h))
+                q = ((hi - x) * Fraction(Q[i]) + (x - lo) * Fraction(Q[i + 1])) / (hi - lo)
+                roots.append((float(q), "rising" if left < right else "falling"))
+    if h >= loads[-1]:
+        roots.append((Q[-1] if h == loads[-1] else h - k * MU[-1], "tail"))
+    return roots
 
 
 def graph(d, k, previous):
@@ -14,30 +37,28 @@ def graph(d, k, previous):
         return None
     if k == 0:
         return 0.0, d, 0
-    if not isfinite(k * MU[0]):
+    limit = k * MU[0]
+    if not isfinite(limit):
         return None
     h = abs(d)
     sign = 1 if d > 0 else -1
-    if d == 0 or (previous != sign and h <= k * MU[0]):
-        return d, 0.0, 0
-    # Enumerate feasible positive-slope intersections in forward order, then maximize q.
-    loads = [q + k * mu for q, mu in zip(Q, MU)]
-    roots = [h - k * MU[-1]] if h >= loads[-1] else []
-    for i, (left, right) in enumerate(zip(loads, loads[1:])):
-        if left <= h <= right and right - left > 1e-12:
-            roots.append(Q[i] + (Q[i + 1] - Q[i]) * (h - left) / (right - left))
-    if not roots:
-        if h <= k * MU[0] + 1e-12:
-            return copysign(min(h, k * MU[0]), d), 0.0, 0
-        return None
-    q = max(roots)
-    if q <= 1e-12:
-        return d, 0.0, 0
-    return d - sign * q, sign * q, sign
+    j, slip, mode = d, 0.0, 0
+    if d != 0 and (previous == sign or h > limit):
+        admissible = [q for q, slope in intersections(h, k) if slope != "falling"]
+        if admissible:
+            q = max(admissible)
+            if q > 1e-12:
+                slip, mode = sign * q, sign
+                j = d - slip
+        elif h <= limit + 1e-12:
+            j = copysign(min(h, limit), d)
+        else:
+            return None
+    return (j, slip, mode) if isfinite(2 * j) else None
 
 
-def verify(d, k, prev):
-    j, r, mode = graph(d, k, prev)
+def verify_physics(d, k, solution):
+    j, r, mode = solution
     v_bow, a, z = 0.1, 0.13, 1.0
     b = v_bow - a - d
     v = a + b + j
@@ -56,25 +77,130 @@ def verify(d, k, prev):
         mu = MU[i]
         if i + 1 < len(Q):
             mu += (MU[i + 1] - mu) * (q - Q[i]) / (Q[i + 1] - Q[i])
-        assert r * d > 0 and abs(q + k * mu - abs(d)) < 1e-10
+        assert q > 1e-12 and mode == copysign(1, r) and r * d > 0
+        assert abs(q + k * mu - abs(d)) < 1e-10 and abs(j - copysign(k * mu, r)) < 1e-10
     return mode
 
 
-if __name__ == "__main__":
-    count = 0
+def verify(d, k, prev):
+    return verify_physics(d, k, graph(d, k, prev))
+
+
+def sweep():
     for k in (0.0, 0.03, 0.1, 0.23):
         seq = [i / 1000 for i in range(-2000, 2001)]
         knots = [q + k * mu for q, mu in zip(Q, MU)]
         for h in knots + [knots[0] - 1e-11, knots[0] + 1e-11]:
             seq.extend([h, -h])
         for d, prev in product(seq, (-1, 0, 1)):
-            verify(d, k, prev)
-            count += 1
+            yield d, k, prev
         for direction in (sorted(seq), sorted(seq, reverse=True)):
             previous = 0
             for d in direction:
-                previous = verify(d, k, previous)
-                count += 1
+                yield d, k, previous
+                previous = graph(d, k, previous)[2]
+
+
+def fold_cases():
+    # Perturb both the load parameter and the query by single binary64 steps.
+    for i in range(len(Q) - 1):
+        for width in (0.0, 5e-13, 1e-14):
+            center = (Q[i + 1] - Q[i] - width) / (MU[i] - MU[i + 1])
+            for k in (nextafter(center, 0), center, nextafter(center, inf)):
+                left, right = (Q[t] + k * MU[t] for t in (i, i + 1))
+                for h in (left, right, (left + right) / 2):
+                    for x in (nextafter(h, 0), h, nextafter(h, inf)):
+                        for sign, previous in product((-1, 1), (-1, 0, 1)):
+                            yield x * sign, k, previous
+
+
+def compare(d, actual, expected):
+    j, r, mode = actual
+    ref_j, ref_r, ref_mode = expected
+    assert mode == ref_mode, (d, actual, expected)
+    tolerance = 4 * ulp(ref_r)
+    assert abs(r - ref_r) <= tolerance, (d, actual, expected)
+    assert abs(j - ref_j) < 1e-10
+    # The two subtractions forming j and reconstructing r round separately.
+    assert abs((d - j) - ref_r) <= tolerance + ulp(j) + ulp(d - j)
+
+
+def counterexample():
+    i = 3
+    k = (Q[i + 1] - Q[i] - 5e-13) / (MU[i] - MU[i + 1])
+    left, right = (Q[t] + k * MU[t] for t in (i, i + 1))
+    d = (left + right) / 2
+    # Re-form q+k*mu exactly from prepared knot bits, before rounding the loads.
+    lo, hi = (Fraction(Q[t]) + Fraction(k) * Fraction(MU[t]) for t in (i, i + 1))
+    fraction = (Fraction(d) - lo) / (hi - lo)
+    q = Fraction(Q[i]) + (Fraction(Q[i + 1]) - Fraction(Q[i])) * fraction
+    expected = graph(d, k, 1)
+    assert expected[2] == 1 and Q[i] < expected[1] < Q[i + 1]
+    print("review k,d,width,j,r,mode", k, d, right - left, *expected)
+    print("root with unrounded loads from prepared knots", float(q))
+    return d, k
+
+
+def negative_controls():
+    d, k = counterexample()
+    # At the reported query the original solver exhausts its search and takes
+    # the admissible static fallback. Check those preconditions explicitly.
+    loads = [q + k * mu for q, mu in zip(Q, MU)]
+    assert d < loads[-1] and d <= loads[0]
+    assert not any(
+        left <= d <= right and right - left > 1e-12
+        for left, right in zip(loads, loads[1:])
+    )
+    cases = [("old cutoff", d, k, (d, 0.0, 0))]
+    d, k = 0.14, 0.10
+    cases.append(("always static when admissible", d, k, (d, 0.0, 0)))
+    lower = min(q for q, _ in intersections(d, k))
+    cases.append(("lower sliding intersection", d, k, (d - lower, lower, 1)))
+    for name, d, k, wrong in cases:
+        verify_physics(d, k, wrong)
+        try:
+            compare(d, wrong, graph(d, k, 1))
+        except AssertionError:
+            print("branch comparison rejected", name)
+        else:
+            raise AssertionError(name)
+
+
+def check_rust(binary, cases):
+    rows = "".join(f"{d!r} {k!r} {prev}\n" for d, k, prev in cases)
+    output = subprocess.run([binary], input=rows, text=True, capture_output=True, check=True)
+    lines = output.stdout.splitlines()
+    assert len(lines) == len(cases)
+    max_probes = 0
+    min_dissipation = inf
+    max_slip_ulps = 0.0
+    for (d, k, prev), line in zip(cases, lines):
+        j, r, mode, probes = line.split()
+        actual = float(j), float(r), int(mode)
+        expected = graph(d, k, prev)
+        compare(d, actual, expected)
+        min_dissipation = min(min_dissipation, 2 * actual[0] * actual[1])
+        max_slip_ulps = max(max_slip_ulps, abs(actual[1] - expected[1]) / ulp(expected[1]))
+        verify_physics(d, k, actual)
+        assert 0 <= int(probes) <= 9
+        max_probes = max(max_probes, int(probes))
+    assert max_probes == 9 and min_dissipation >= 0.0
+    print("minimum dissipation W", min_dissipation, "maximum slip error ULP", max_slip_ulps)
+    print("Rust/oracle finite comparisons", len(cases), "max probes", max_probes)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--rust", help="compiled tools/validation/contact_replay.rs")
+    args = parser.parse_args()
+    standard = list(sweep())
+    assert len(standard) == 80500
+    folds = list(fold_cases())
+    for d, k, prev in standard + folds:
+        verify(d, k, prev)
+    negative_controls()
+    if args.rust:
+        check_rust(args.rust, standard + folds)
     vectors = [
         (0.14, 0.1, 0, 0.14, 0.0, 0),
         (0.14, 0.1, 1, 0.05447776066490598, 0.08552223933509404, 1),
@@ -101,9 +227,10 @@ if __name__ == "__main__":
         (0.0, nan),
         (0.0, -0.1),
         (0.14, float_info.max),
+        (-1e308, 1e308),
     ):
         assert graph(d, k, 0) is None
-    print("branch/flux cases", count)
+    print("standard/fold branch and flux cases", len(standard), len(folds))
     for fs, expected in (
         (32000, 160),
         (44100, 221),

@@ -1,5 +1,13 @@
 # Decision log
 
+## 2026-11-26 · Admit every representably increasing M3b load span
+
+Review 00.1 identified a width-dependent loss of the upper root. From Slide(+) at d=.12026541114915246 and k=.12029965498642688 m/s the old search and its oracle fell back to Stick. The two stored loads are distinct and enclose d, so their linear interpolant has a sliding intersection. V02 now compares selected mode and slip independently of force balance.
+
+Use inclusive ordered endpoints. Divide the enclosed load offset by the positive span before scaling by the knot span. On coincidence choose the upper knot at the common load. A smaller positive width cutoff would lose roots at finer scales. Re-forming loads at higher precision would define another graph and would make the choice depend on the arithmetic backend. The remaining 1e−12 slip floor and post-search static margin serve their original branch rules. Near a fold, a one-ULP change in a stored load or incident mismatch can still move slip appreciably.
+
+The isolated Rust solve selected q=.030000277554192455 m/s in six probes on the review vector. Its independent rational intersection comparison passed 80,500 standard and 4,374 fold cases. All three faulty policies passed the physical residuals on their respective fixtures and failed branch comparison. Across 108 paired eager waveguide renders every sample retained its previous branch result at published playing points. Contact implementation awaits Review 1. [Review](REVIEW_00_1_SPECIFICATION.md) · [Mathematics](../../architecture/BOWED_STRING_MATHEMATICS.md#m3-force-and-scattering-at-a-massless-point) · [Results and replay](STAGE_01_CONTACT_IMPLEMENTATION.md)
+
 ## 2026-11-23 · Use the production instrument at 20d4ee56 as the migration baseline
 
 The source audit pins aa1be375. Its production, test and build inputs match 20d4ee56 byte for byte. On this checkout the rebuilt ElectroBow 1.6.0 VST3 renders the fixed non-neutral pluck like its own exported eb_instrument_process, with a maximum difference of 1.18e−38 FS (rounded up). The native automation test maps every host ID against that function. Future comparisons can use the input, control settings, bundle identity and waveform hashes recorded here. [Guide, authority map and rules 1, 4, 6](../AI_IMPLEMENTATION_GUIDE.md#rules-for-implementation) · [Migration step 1, lines 5–11](../ELECTROBOW_MIGRATION_PLAN.md#1-establish-the-production-baseline) · [A4, lines 85–87](../../architecture/ELECTROBOW_TARGET_ARCHITECTURE.md#a4-mix-and-host-contract) · [Native automation test, lines 650–696](../../../tests/FilterBankTests.cpp#L650) · [Measured baseline](IMPLEMENTATION_LEDGER.md#observed-results)

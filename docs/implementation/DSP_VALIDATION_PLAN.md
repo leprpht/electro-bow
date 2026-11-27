@@ -60,7 +60,7 @@ For static model pitch, compute an independent FFT of a ≥.5 s mean-free Hann s
 | ID | Input, duration and measurement | Required result |
 |---|---|---|
 | V01 — baseline and neutral | 2 s deterministic guitar, impulse and zeros. Test existing/supported/fallback rates, mono/stereo. Attack=Character=0, Out=.5, below limiter. Compare input/output samplewise through normal JUCE and C ABI, in-place and separate. | Error ≤2e−7 FS, no added direct delay; zero-frame call consumes no state. Restored v1–v5 parameter mappings and six automation IDs match baseline. Verify native bypass returns original finite host audio after ramp. |
-| V02 — junction oracle | At one synthetic sample per case sweep d=−2…+2 m/s in .001 increments, k in {0,.03,.10,.23}, previous in {Stick,Slide±}. Add exact knot values transformed into h, h₀±1e−11 and both sweep directions. Check residual, branch selection and Fv flux identity from M6 for a=.13, b=V−a−d. | Every finite result: abs(r+j−d)<1e−10 m/s, power error <1e−10 W, abs(F)≤F_N μ₀+2e−10 N, Fr≥−1e−12 W. Stick with k>0: abs(r), abs(j−d)<1e−10 and abs(j)≤kμ₀+1e−10. Slide: q>1e−12, correct sign/previous-mode policy, increasing upper root and abs(q+kμ(q)−h)<1e−10. Lift: j=0, r=d, memory cleared. Exercise sign reversal, h₉, flat fold and exact M3b vectors. Nonfinite input or failed solve returns Fault before commit. ≤9 segment probes. Audible fault recovery belongs to V08. |
+| V02 — junction oracle | At one synthetic sample per case sweep d=−2…+2 m/s in .001 increments, k in {0,.03,.10,.23}, previous in {Stick,Slide±}. Add exact knot values transformed into h, h₀±1e−11 and both sweep directions. Check residual, branch selection and Fv flux identity from M6 for a=.13, b=V−a−d. | Every finite result: abs(r+j−d)<1e−10 m/s, power error <1e−10 W, abs(F)≤F_N μ₀+2e−10 N, Fr≥−1e−12 W. Stick with k>0: abs(r), abs(j−d)<1e−10 and abs(j)≤kμ₀+1e−10. Slide: q>1e−12, correct sign/previous-mode policy, increasing upper root and abs(q+kμ(q)−h)<1e−10. Lift: j=0, r=d, memory cleared. Exercise sign reversal, h₉, the exact M3b vectors and signed narrow/flat folds. Enclose h using ordered stored f64 loads, accept every positive width and choose the upper endpoint on coincidence. Compare mode and signed slip with an independent enumeration including descending intersections, as detailed below. Nonfinite input or failed solve returns Fault before commit. ≤9 segment probes. Audible fault recovery belongs to V08. |
 | V03 — delay and seed | Impulse into a single f64 ring, D=1, 3.25, max−2, and integer-boundary ramps, 3 wraps each. In the passive guide measure the returning wave after one complete circuit, cutting the loop at the injection point and unwrapping phase relative to P, at 65.41, 440, 1318.51 Hz. Compare M4 lazy vs prefilled negative history for 100 ms including a downward retune. | Fractional impulse weights .75/.25 at samples 3/4 for D=3.25; max tap error <1e−10 m/s, no early sample. Total passive phase delay within .003 samples of nominal P at f₀. Lazy and eager output agree to 1e−9 m/s. |
 | V04 — generated pitch and stable bow | M4 launch with no continuing external audio, 3 s per note on the 54-case research grid and 44.1/96 kHz. Measure last-second pitch, η, RMS and rising slip episodes (count Slide onset after Stick). | Dominant fundamental within 12 cents, η≥.90, ≥3 harmonics above −36 dB relative to fundamental for f≤880. AC RMS>.04 m/s, last/penultimate RMS within 2 dB. Nominal 196 Hz at 48 kHz should have 0.95–1.05 slip episodes/period and mean slip duty within .05 of β. Log other regimes, reject persistent octave substitution or silent seeds. |
 | V05 — remove bow work | Same initial history, f=65.41/82.41/440 Hz, release k to zero at 1 s in a 7 s pure-string render (no output envelope). Compare 0.8–1 s and 6.8–7 s AC RMS with continuously driven twin. | Passive drop ≥60 dB even at 65.41 Hz, driven twin within ±2 dB. No hidden periodic seed after negative history expires. Production musical release tested separately. |
@@ -104,12 +104,18 @@ Stage entry, observation points and ownership of every clause are specified in t
 
 Use `cargo test --workspace --locked --offline` and the repository's normal CMake build followed by `ctest --test-dir <build> -C Release --output-on-failure`. For the binary-level fixtures run `python tools/render_guitar_comparisons.py <built.vst3> <output-dir>` with its optional Python packages. Extend that tool's silence padding to at least 1.3 s for active-note tail tests. Keep measurements in build artifacts; the [migration plan](ELECTROBOW_MIGRATION_PLAN.md) assigns each gate to a change.
 
+## V02 stored-graph comparison
+
+At an enclosing increasing segment the Rust solver computes the bounded fraction before multiplying by the slip span. The offline oracle enumerates forward, evaluates both slopes with exact rational barycentric weights on the stored f64 endpoint loads, includes the extremes of a coincident interval and the constant tail, then applies admissibility and maximizes slip. Compare the selected mode exactly. Use the rounded exact root as the signed slip reference. For the near-fold fixtures, subtraction of the nearby binary64 loads is exact by Sterbenz's lemma, as is the knot difference for these spans. Division, multiplication and final addition each round once. With nonnegative terms the accumulated error fits within four ULPs of the reference slip (including reference rounding). For slip reconstructed as d−j allow this amount plus one ULP each for j and d−j to cover cancellation. These are additional branch tests. The force, signed residual, sliding equality, flux and dissipation gates in the V02 row still apply.
+
+Replay all 80,500 grid, knot and history cases and the signed fold neighborhoods. On the review vector require Slide(+) near .0300002775542 m/s, its negative counterpart from Slide(−), and Stick from previous Stick. Grade the old width-cutoff fallback, unconditional static preference and lower sliding intersection as negative controls. Each can satisfy force balance. [Independent graph oracle](../../tools/validation/contact_contract.py) · [Rust replay, commands and results](status/STAGE_01_CONTACT_IMPLEMENTATION.md)
+
 ## Executable reference for the low E energy check
 
-For routine replay run [the standalone string oracle](../../tools/validation/string_oracle.py), which also checks the 90-case spectral grid and the paired seven-second release windows. The following Python 3 block records the original scalar calculation. It deliberately recomputes knot loads and eagerly evaluates the initial history to give the Rust implementation a small, independently organized oracle. Its returned statistic is standard deviation of the last second of the uncolored bridge **velocity**. Change `lift` only between the two runs. Do not put this reference loop on an audio thread.
+For routine replay run [the standalone string oracle](../../tools/validation/string_oracle.py), which also checks the 90-case spectral grid and the paired seven-second release windows. The following Python 3 block runs the scalar calculation with the reviewed M3b endpoint rule. It prepares knot loads and eagerly evaluates the initial history to give the Rust implementation a small, independently organized oracle. Its returned statistic is standard deviation of the last second of the uncolored bridge **velocity**. Change `lift` only between the two runs. Do not put this reference loop on an audio thread.
 
 ```python
-from math import exp, floor, ceil
+from math import exp, floor, ceil, isfinite
 from statistics import pstdev
 
 def final_bridge_rms(lift):
@@ -121,6 +127,8 @@ def final_bridge_rms(lift):
     mu = [.35 + .85*exp(-v/.01) + .45*exp(-v/.1) for v in q]
     k = ratio * speed / mu[0]
     loads = [v + k*m for v, m in zip(q, mu)]
+    if k < 0 or not all(map(isfinite, loads)):
+        raise ArithmeticError("invalid contact load")
 
     def saw(t):
         return t - floor(t) - .5
@@ -142,27 +150,42 @@ def final_bridge_rms(lift):
         x = read(bridge, n, db)
         a = -read(neck, n, dn)
         b = -.98*(.125*x + .75*x1 + .125*x2)
-        x2, x1 = x1, x
         d = speed - a - b
+        if not isfinite(d):
+            raise ArithmeticError("invalid incident mismatch")
         h, sign = abs(d), 1 if d >= 0 else -1
-        if lift and n >= fs:
-            j, sliding = 0., 0
+        if (lift and n >= fs) or k == 0:
+            j, sliding = 0.0, 0
         else:
-            slip = 0.
-            if h > loads[0] or sliding == sign:
-                if h >= loads[-1]:
-                    slip = h - k*mu[-1]
+            slip = 0.0
+            if d != 0 and (h > loads[0] or sliding == sign):
+                if h == loads[-1]:
+                    slip = q[-1]
+                elif h > loads[-1]:
+                    slip = h - k * mu[-1]
                 else:
-                    for i in range(len(q)-2, -1, -1):
-                        width = loads[i+1] - loads[i]
-                        if width > 1e-12 and loads[i] <= h <= loads[i+1]:
-                            slip = q[i] + (q[i+1]-q[i])*(h-loads[i])/width
+                    for i in range(len(q) - 2, -1, -1):
+                        left, right = loads[i], loads[i + 1]
+                        if left == right == h:
+                            slip = q[i + 1]
                             break
+                        if left <= h <= right and left < right:
+                            u = (h - left) / (right - left)
+                            slip = q[i] + (q[i + 1] - q[i]) * u
+                            break
+                    else:
+                        if h > loads[0] + 1e-12:
+                            raise ArithmeticError("no admissible contact")
+                        d = sign * min(h, loads[0])
             sliding = sign if slip > 1e-12 else 0
-            j = d - sign*slip if sliding else d
+            j = d - sign * slip if sliding else d
+        outgoing = a + j, b + j
+        if not all(map(isfinite, (*outgoing, 2 * j, a + b + j))):
+            raise ArithmeticError("invalid scattering")
+        x2, x1 = x1, x
         if n >= 5*fs:
             tail.append(read(bridge, n, beta*period/2))
-        bridge[n % count], neck[n % count] = a+j, b+j
+        bridge[n % count], neck[n % count] = outgoing
     return pstdev(tail)
 
 assert abs(final_bridge_rms(False) - .228131) < .000002

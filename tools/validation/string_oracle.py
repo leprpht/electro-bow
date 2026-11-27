@@ -1,7 +1,7 @@
 """Offline double-precision eager-history reference from V03–V07."""
 
 from itertools import product
-from math import ceil, exp, floor
+from math import ceil, exp, floor, isfinite
 
 import numpy as np
 from scipy.signal import find_peaks
@@ -16,6 +16,8 @@ def trace(fs, frequency, ratio, speed, lift, seconds):
     mu = [0.35 + 0.85 * exp(-v / 0.01) + 0.45 * exp(-v / 0.1) for v in q]
     k = ratio * speed / mu[0]
     loads = [v + k * m for v, m in zip(q, mu)]
+    if k < 0 or not all(map(isfinite, loads)):
+        raise ArithmeticError("invalid contact load")
 
     def saw(t):
         return t - floor(t) - 0.5
@@ -37,26 +39,41 @@ def trace(fs, frequency, ratio, speed, lift, seconds):
         x = read(bridge, n, db)
         a = -read(neck, n, dn)
         b = -0.98 * (0.125 * x + 0.75 * x1 + 0.125 * x2)
-        x2, x1 = x1, x
         d = speed - a - b
+        if not isfinite(d):
+            raise ArithmeticError("invalid incident mismatch")
         h, sign = abs(d), 1 if d >= 0 else -1
-        if lift and n >= fs:
+        if (lift and n >= fs) or k == 0:
             j, sliding = 0.0, 0
         else:
             slip = 0.0
-            if h > loads[0] or sliding == sign:
-                if h >= loads[-1]:
+            if d != 0 and (h > loads[0] or sliding == sign):
+                if h == loads[-1]:
+                    slip = q[-1]
+                elif h > loads[-1]:
                     slip = h - k * mu[-1]
                 else:
                     for i in range(len(q) - 2, -1, -1):
-                        width = loads[i + 1] - loads[i]
-                        if width > 1e-12 and loads[i] <= h <= loads[i + 1]:
-                            slip = q[i] + (q[i + 1] - q[i]) * (h - loads[i]) / width
+                        left, right = loads[i], loads[i + 1]
+                        if left == right == h:
+                            slip = q[i + 1]
                             break
+                        if left <= h <= right and left < right:
+                            u = (h - left) / (right - left)
+                            slip = q[i] + (q[i + 1] - q[i]) * u
+                            break
+                    else:
+                        if h > loads[0] + 1e-12:
+                            raise ArithmeticError("no admissible contact")
+                        d = sign * min(h, loads[0])
             sliding = sign if slip > 1e-12 else 0
             j = d - sign * slip if sliding else d
+        outgoing = a + j, b + j
+        if not all(map(isfinite, (*outgoing, 2 * j, a + b + j))):
+            raise ArithmeticError("invalid scattering")
+        x2, x1 = x1, x
         tail.append((read(bridge, n, beta * period / 2), sliding))
-        bridge[n % count], neck[n % count] = a + j, b + j
+        bridge[n % count], neck[n % count] = outgoing
     return np.array(tail).T
 
 
