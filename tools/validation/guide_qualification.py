@@ -44,7 +44,7 @@ def cents(ratio):
     return 1200 * np.log2(ratio)
 
 
-def spectrum(signal, fs, target):
+def spectrum(signal, fs, target, include_orders=False):
     """One-second mean-free Hann, strongest positive peak and merged harmonic bins."""
     assert len(signal) == fs
     amp = abs(np.fft.rfft((signal - signal.mean()) * np.hanning(fs), 8 * fs))
@@ -71,7 +71,7 @@ def spectrum(signal, fs, target):
             .tolist()
         )
     )
-    return dict(
+    stats = dict(
         hz=f,
         cents=cents(f / target),
         eta=power[mask].sum() / power[1:].sum(),
@@ -79,6 +79,14 @@ def spectrum(signal, fs, target):
         rms=signal.std(),
         bright_fraction=power[12000:48001].sum() / power[1:].sum(),
     )
+    if include_orders:
+        # Index 0 of this list is the fundamental. Each power bin is assigned
+        # once, to its nearest admitted harmonic band.
+        fractions = (
+            np.bincount(harmonic[mask].astype(int), power[mask]) / power[1:].sum()
+        )
+        stats["power_by_harmonic"] = fractions[1:].tolist()
+    return stats
 
 
 def trajectory(t, kind):
@@ -162,7 +170,9 @@ def static_case(fs, hz, ratio, speed=0.1):
         ),
     )
     for key, col in [("bridge", 2), ("pickup", 5)]:
-        stats = spectrum(data[-fs:, col], fs, hz)
+        stats = spectrum(
+            data[-fs:, col], fs, hz, include_orders=(fs == 48000 and hz == 440)
+        )
         stats["drift_db"] = db(stats["rms"] / data[-2 * fs : -fs, col].std())
         e[key] = stats
         assert abs(stats["cents"]) <= 12 and stats["eta"] >= 0.90, (
@@ -173,8 +183,12 @@ def static_case(fs, hz, ratio, speed=0.1):
         assert stats["rms"] > 0.04 and abs(stats["drift_db"]) <= 2
         assert hz > 880 or len(stats["upper_partials"]) >= 3
     slip = data[-fs:, 10] != 0
+    onsets = np.flatnonzero(slip & (data[-fs - 1 : -1, 10] == 0))
     e.update(
-        slip_onsets=int(np.sum(slip & (data[-fs - 1 : -1, 10] == 0))),
+        slip_onsets=len(onsets),
+        mean_slip_interval_ms=float(np.diff(onsets).mean() * 1000 / fs)
+        if len(onsets) > 1
+        else None,
         duty=slip.mean(),
         normal_force=2 * ratio * speed / 1.65,
         static_force_limit=2 * ratio * speed,
@@ -338,6 +352,8 @@ if __name__ == "__main__":
         grid = {}
         for fs, hz, ratio in product(RATES, NOTES, RATIOS):
             grid[fs, hz, ratio] = static_case(fs, hz, ratio)
+        for fs, hz in product(RATES, (110, 329.63)):
+            static_case(fs, hz, 1.8)
         lo, hi = [grid[48000, 440, r] for r in (1.2, 2.4)]
         assert abs(hi["normal_force"] / lo["normal_force"] - 2) <= 1e-6
         assert hi["band_1500_6000"] - lo["band_1500_6000"] >= 0.01
