@@ -307,6 +307,20 @@ def controls():
                     and w[1] <= w[3] < w[4],
                     "causal capture",
                 )
+                end = row["tick"]
+                count = math.floor(64000 / frames[end].hz + 0.5)
+                first = end - 3 * (count - 1)
+                require(
+                    w
+                    == [
+                        first - 96,
+                        end,
+                        first + end - 96,
+                        end + math.ceil(count / 5) - 1,
+                        end + 240,
+                    ],
+                    "FIR window/support clock",
+                )
             if "publish" in row["actions"]:
                 prev = by[row["tick"] - hop]
                 require(
@@ -315,6 +329,11 @@ def controls():
                     and prev["owner"] == row["owner"],
                     "stale publication",
                 )
+        for i in (18, 19, 23, 28, 31, 34):
+            require(
+                by[ticks[i]]["held"] == by[ticks[i - 1]]["held"],
+                "unsupported source changed held identity",
+            )
         for i in (18, 19, 23, 28, 31, 34, 59, 91):
             require("publish" not in by[ticks[i]]["actions"], "invalid refresh")
         first = next(r for r in rows if r["window"])
@@ -360,6 +379,11 @@ def controls():
 
     for name, i, edit in (
         ("wrong event order", 38, lambda r: r.update(event="mute")),
+        (
+            "wrong capture window",
+            14,
+            lambda r: r["window"].__setitem__(0, r["window"][0] + 3),
+        ),
         ("future input", 10, lambda r: r["window"].__setitem__(1, r["tick"] + 1)),
         ("invalid refresh", 18, lambda r: r["actions"].append("publish")),
         ("stale owner", 14, lambda r: r.update(owner=(0, -2))),

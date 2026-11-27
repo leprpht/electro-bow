@@ -5,7 +5,7 @@ from copy import deepcopy
 from itertools import combinations, product
 
 import numpy as np
-from acoustic_identity import audio, distances
+from acoustic_identity import audio
 from acoustic_observation import db, rms
 from i1_clock import OUT
 from i1_safety import GRID, check_state, check_trajectory, inspect, moments
@@ -152,6 +152,7 @@ def audit(result):
         result["clock"]["negatives"],
         (
             "wrong launch token",
+            "wrong capture window",
             "wrong event order",
             "future input",
             "invalid refresh",
@@ -345,19 +346,29 @@ def negative_controls(result):
         rows = deepcopy(data["depths"])
         mutate(rows[depth])
         reject(name, lambda rows=rows: check(rows), reason)
-    p = result["expression"]
+    from i1_study import grade
+
+    def check_expression(changed):
+        failures, _ = grade({**result, "stationary": changed})
+        require(not failures, ", ".join(failures))
+
+    flat_pressure = deepcopy(result["stationary"])
+    flat_pressure["48000/440/0.1/2.4/opposed"]["depths"] = flat_pressure[
+        "48000/440/0.1/1.2/opposed"
+    ]["depths"]
     reject(
         "lost pressure variation",
-        lambda: require(0 >= 0.5 * abs(p["pressure"][0]), "pressure contrast"),
-        "pressure",
+        lambda: check_expression(flat_pressure),
+        "pressure contrast",
     )
-    h = neutral[0]["harmonics"]["peak_FS"]
+    neutral_sources = deepcopy(result["stationary"])
+    for name in ("bright", "dark"):
+        entry = neutral_sources[f"48000/196/0.1/1.8/{name}"]
+        entry["depths"] = entry["neutral_depths"]
     reject(
         "neutral-only identity",
-        lambda: require(
-            distances(np.array(h), np.array(h)) >= 1, "held differentiation"
-        ),
-        "held differentiation",
+        lambda: check_expression(neutral_sources),
+        "source transfer",
     )
     reject(
         "missing required case",
@@ -386,7 +397,7 @@ def negative_controls(result):
     n = 1960
     t = np.arange(n) / n
     base = np.cos(2 * np.pi * 8 * t)
-    defect = 0.9 * (-1.0) ** np.arange(n)
+    defect = -0.5 * base + 0.6 * (-1.0) ** np.arange(n)
     require(
         not inspect(moments(base, defect), np.ones(1), 0.5, False)[0],
         "Nyquist veto escaped",
