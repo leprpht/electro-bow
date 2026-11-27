@@ -1,5 +1,7 @@
 # Proposed acoustic validation and listening gate
 
+Stage 08 proposes an [executable I1 matrix](I1_ACCEPTANCE_MATRIX.md) and [registered held-source protocol](../research/I1_SOURCE_REPEATABILITY_EVIDENCE.md). The Stage 07 neutral evidence and historical unsafe stress vectors remain separate references. Review 8 owns the tooling and mathematical disposition. Original V17–V22 and owner hearing retain their stage ownership.
+
 The signed-off V01–V22 matrix remains in force. The [Stage 06 matrix](O2_ACCEPTANCE_MATRIX.md) fixes intermediate diagnostics and preserves the converted-M5-to-final wet denominator. It defines strict JSON nulls for ineligible O1 phase and partial ratios, including lift tails below the 1e−12 m/s diagnostic floor. A physics pass, source-feature discrimination, acoustic reference match and a human preference are different deliverables. [Existing qualification criteria](DSP_VALIDATION_PLAN.md) · [Proposed specification](../architecture/ELECTROBOW_ACOUSTIC_OUTPUT_SPECIFICATION.md)
 
 The Stage 07 renderer compares actual Rust intermediate taps to independent convolution and grades the same-tick returned audio with the Review 6 scorer. The frozen corpus includes physical/M5 parity, explicit injected identity failures and original-gain and matched listening files. [Stage 07 reproduction](status/STAGE_07_O2_IMPLEMENTATION.md#reproduction)

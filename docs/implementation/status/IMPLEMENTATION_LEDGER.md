@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Stage 08 I1 specification awaiting independent Review 8
+
+Stage 08 submits one offline I1 architecture and the four Review 7 tooling corrections. The physical carrier comes from the returned Rust O2 stream. The coupled rule passes the stationary engineering grid while held G3 passage separation ranges down to .110 dB and the vibrato trial stays neutral. Independent Review 8, controlled source identity and owner listening remain pending. [Stage 08 evidence](STAGE_08_I1_SPECIFICATION.md)
+
 ## 2026-11-28 · Review 7 qualifies the private Rust O2 component and holds scorer sign-off
 
 **Reviewed `c9e480a..874e9ff` from a clean tracked and untracked tree.** The eleven-rate differential, 33 full Rust steps, fault and partition probes, zero-allocation workloads and optimized timing passed. The historical O1-only executable matched all 22 guide/M5/O1 columns over 46,818,000 ticks. The canonical M5 WAVs, 81 acoustic WAVs, Stage 06 listening archive and shipping ABI/package evidence reproduced. S2a contact/ring, S2b guide and O1 retain qualification. Rust O2 qualifies in isolation at its provisional settings.

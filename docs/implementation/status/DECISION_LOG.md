@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-28 · Stage 08 I1 specification awaiting independent Review 8
+
+Propose a common 17-point coefficient ray chosen from complete measured windows, with an independent realized-output veto and stamped per-gesture capture/publication. Retain original converted M5 and the paired factory residual. Natural source discrimination and persistent color under vibrato remain open. This submission requests independent Review 8. Review 7 retains architectural authority, with baseline S4a separately authorized. [Stage 08 evidence](STAGE_08_I1_SPECIFICATION.md)
+
 ## 2026-11-28 · Qualify provisional Rust O2 at the isolated sample boundary
 
 Accept the same-commit O1 input, ordered electrical arithmetic, transactional four-scalar histories, local real-time measurements and exact diagnostic parity. Keep the O2 qualification runner open until its aggregate rejects missing or inconsistent evidence, records failed anchors in strict JSON, requires final-wet pairs aligned to M5 and demonstrates live subnormal work. Retain the original M5 denominator and V17 thresholds. S6R owns actual linked headroom and asymptotic recovery counting.
