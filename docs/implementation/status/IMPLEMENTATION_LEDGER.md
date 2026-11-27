@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-27 · Stage 05 submits isolated Rust O1 for independent Review 5
+
+Implementation `9342622`, final entry-state probe `027a7a6`, clean entry `0c98f60`. The independently evolving guide and observer-only differential passed 403 fixtures and 2,066,150 ticks. Worst absolute differences were 2.5591e−14 and 2.5647e−14 m/s. All 46,242,000 rows across 152 observer-enabled renders matched the qualified physical and M5 bits. Largest Python replay difference was 4.441e−16 m/s. Twelve compiled O1 defects failed their nominated predicates. Local allocator counters were zero and all partition timestamps and samples matched. The Release package hash matched the baseline. The observer returns physical velocity on successful private guide ticks. O2, I1, the proposed A3 amendment, supported wet routing and perceptual acceptance retain their Review 4 gates. [Stage 05 handoff and replay](STAGE_05_O1_OBSERVATION_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Review 4 approves isolated pickup observation and holds the acoustic wet path
 
 Reviewed the full `29cf221..0e7c074` delta from clean entry `0e7c074a899a7d8ae3effa243d9d12e387ef389b`. Production code and public surfaces are identical. Retain S2a contact/ring and S2b guide. The pickup-led owner reference is confirmed. The two-ray post-commit observation agrees with the eager oracle and can advance in isolation. The selected electrical surrogate is stable and the measured spectra differ from raw M5. The 196 Hz I1 counterexample raises H2 above H1 by 9.24 dB, violating V17. Labeled source contrasts overlap within-player passage variation. Pickup/string repeatability, attack naturalness, revised control semantics, full-graph RT and owner listening remain open. [Review 4 findings and authorizations](REVIEW_04_ACOUSTIC_RESEARCH.md)

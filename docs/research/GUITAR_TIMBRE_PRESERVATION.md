@@ -34,7 +34,7 @@ For each stem project twelve partials, express log magnitudes relative to the gr
 | Controlled source pair | Input dB | M5 dB | Four-band ablation dB | Selected held dB | Within, each source dB | Contrast correlation |
 |---|---:|---:|---:|---:|---|---:|
 | Q low E / GK low E, 82.41 Hz | 11.25 | 0 | .098 | 2.014 | 1.18 / .93 | .42 |
-| Q low E at 24th fret / open high E, 329.63 Hz | 17.38 | 0 | 1.284 | 3.277 | .65 / .58 | .90 |
+| Q low E at 24th fret / open high E, 329.63 Hz | 17.38 | 0 | 1.307 | 3.277 | .65 / .58 | .90 |
 | Guitar-TECHS G3, first passage | 7.59 | 0 | .183 | 1.733 | 1.06 / .64 | .54 |
 | Guitar-TECHS G3, second passage | 6.94 | 0 | .208 | 1.415 | 1.02 / .48 | .35 |
 | Guitar-TECHS G3, third passage | 7.31 | 0 | .354 | 2.649 | .64 / .39 | .88 |

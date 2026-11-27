@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-27 · Bind isolated O1 reads to the successful guide transaction
+
+Return an owned three-station velocity snapshot from a single private observed-tick call. Its period comes directly from the committed guide transaction. Shift the integer lag by one while preserving the original fraction, and evaluate missing history with the launch seed. A valid cleared tick has no sample. The bounded reads introduce no additional fault after commit. The isolated implementation and measurements await independent Review 5. Any change to acoustic transfer, identity, gesture or production routing requires its separate review. [Contract, measurements and ownership](STAGE_05_O1_OBSERVATION_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Qualify the pickup observation in isolation and retain the acoustic gates
 
 Independent Review 4 confirms the recorded pickup-led target and approves the two-ray, post-commit nut-arm observer for isolated Rust work. Keep the M5 diagnostic, contact, fractional-delay ring, recurrence, M4 history, M6 contract and shipping fallback. The observer uses committed emission and original launch history. Treat the aperture as an effective reference geometry. Do not make the proposed acoustic specification authoritative for the wet path.
