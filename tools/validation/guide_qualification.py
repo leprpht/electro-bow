@@ -1,10 +1,15 @@
 """Run from repository root. Writes actual Rust traces, WAVs and measurements under build/."""
 
+if not __debug__:
+    raise RuntimeError("guide qualification requires enabled Python assertions")
+
 from hashlib import sha256
 from itertools import product
 import json
 from pathlib import Path
 import subprocess
+
+from guide_audit_build import build, PROBES
 
 import numpy as np
 from scipy.io import wavfile
@@ -37,7 +42,21 @@ def git(*args):
 
 
 def db(ratio):
-    return float(20 * np.log10(ratio))
+    if not np.isfinite(ratio) or ratio < 0:
+        raise ValueError("expected finite nonnegative amplitude ratio")
+    return float(20 * np.log10(max(ratio, 1e-12)))
+
+
+def decay_levels(start, end):
+    if not (np.isfinite(start) and start > 0):
+        raise ValueError("decay requires a voiced reference RMS")
+    ratio = end / start
+    return dict(
+        start_rms=start,
+        end_rms=end,
+        delta_db=db(ratio),
+        unfloored_delta_db=float(20 * np.log10(ratio)) if ratio > 0 else None,
+    )
 
 
 def cents(ratio):
@@ -120,10 +139,12 @@ def render(fs, hz, ratio=1.8, speed=0.1, seconds=3, kind="steady", listening=Fal
         )
         if run.returncode:
             raise RuntimeError(run.stderr.decode())
-    ticks, launches = map(int, run.stderr.split())
+    ticks, launches, faults, invalidations = map(int, run.stderr.split())
     assert (
         ticks == len(t)
         and launches == 1
+        and faults == 0
+        and invalidations == 1
         and path.stat().st_size == ticks * len(COLUMNS) * 8
     )
     data = np.memmap(path, dtype="<f8", mode="r", shape=(len(t), len(COLUMNS)))
@@ -142,7 +163,9 @@ def render(fs, hz, ratio=1.8, speed=0.1, seconds=3, kind="steady", listening=Fal
         phase_context_samples=pad,
         launches=launches,
         successful_ticks=ticks,
-        faults=0,
+        faults=faults,
+        invalidations=invalidations,
+        epoch_checks=ticks + 1,
         raw=path.name,
         raw_sha256=digest(path),
         controls_sha256=sha256(controls.tobytes()).hexdigest(),
@@ -215,12 +238,13 @@ def decay(fs, hz):
             assert np.all(y[fs:, 6] == 0) and np.all(y[fs:, 10] == 0)
         p = y[:, 5]
         start, end = p[4 * fs // 5 : fs].std(), p[-fs // 5 :].std()
+        last = p[-fs:]
         e.update(
-            start_rms=start,
-            end_rms=end,
-            delta_db=db(end / start),
+            **decay_levels(start, end),
             six_second_rms=p[5 * fs : 6 * fs].std(),
-            last_second=spectrum(p[-fs:], fs, hz),
+            last_second=None
+            if kind == "lift" and last.std() == 0
+            else spectrum(last, fs, hz),
         )
         assert e["delta_db"] <= -60 if kind == "lift" else abs(e["delta_db"]) <= 2
         # V05 measures pitch while voiced. Also retain the unconstrained peak in
@@ -333,11 +357,13 @@ def dynamic(fs, hz, kind):
 
 RESULTS = {}
 if __name__ == "__main__":
-    subprocess.run(
-        ["rustc", "--edition", "2024", "-O", str(ADAPTER), "-o", str(BINARY)],
-        check=True,
-    )
-    sources = SOURCES + [ADAPTER, Path(__file__)]
+    build(BINARY)
+    sources = SOURCES + [
+        ADAPTER,
+        PROBES,
+        Path(__file__),
+        Path(__file__).with_name("guide_audit_build.py"),
+    ]
     manifest = dict(
         revision=git("rev-parse", "HEAD"),
         source_status=git("status", "--porcelain"),

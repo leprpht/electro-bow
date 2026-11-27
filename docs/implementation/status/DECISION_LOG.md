@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-27 · Approve the reference direction; propose the acoustic algorithms
+
+**Owner decision.** Use a pickup-led bowed electric guitar retaining incoming DI character. **Proposed for independent review.** Use nut-arm spatial total velocity, a finite-aperture loaded pickup, bounded twelve-partial source transfer and a seeded virtual stroke with evolving speed/force. Retain S2a/S2b and the shipping fallback. The geometry, electrical constants, control semantics and perceptual gate have no production approval. Stage 04 also maintains the actual lifecycle, optimization and ratio-floor checks in validation tooling. [Evidence and per-stage decisions](STAGE_04_ACOUSTIC_RESEARCH.md) · [Proposed amendments](../ACOUSTIC_MIGRATION_PLAN.md#proposed-reconciliation-for-independent-sign-off)
+
 ## 2026-11-27 · Commit both guide arms, loss, branch and DC as one sample
 
 The private guide receives prescribed Hz, V and normalized k. M4 installs the seed under zero wet gain. Each tick observes the actual midpoint pickup before solving, stages both writes and commits scalar state only when both tokens exist. The M5 DC result is available at unity captured gain for the future controller. A fault returns on the detection tick after invalidating both histories. The future controller owns the cached gain and wet fade.
