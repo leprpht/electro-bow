@@ -6,6 +6,8 @@ mod body;
 #[cfg_attr(not(test), allow(dead_code))]
 mod friction;
 #[cfg_attr(not(test), allow(dead_code))]
+mod o2;
+#[cfg_attr(not(test), allow(dead_code))]
 mod ring;
 #[cfg_attr(not(test), allow(dead_code))]
 mod waveguide;

@@ -14,8 +14,8 @@ ADAPTER = Path("tools/validation/guide_render.rs")
 PROBES = ADAPTER.with_name("guide_epoch.rs")
 
 
-def build(binary, late_relaunch=False):
-    with TemporaryDirectory() as tmp:
+def build(binary, late_relaunch=False, *, o2=False, mutation=None):
+    with TemporaryDirectory(dir=binary.parent if o2 else None) as tmp:
         root = Path(tmp)
         src = root / GUIDE_DIR
         src.mkdir(parents=True)
@@ -102,6 +102,44 @@ impl DelayRing {
                         code = code.replace(before, after)
                 code += PROBES.read_text()
             target.write_text(code)
+        if o2:
+            for name in ("o2_replay.rs", "o2_lifecycle.rs"):
+                copy2(ADAPTER.with_name(name), adapter.with_name(name))
+            lane = src / "o2.rs"
+            lane.write_text(
+                (GUIDE_DIR / "o2.rs").read_text()
+                + ADAPTER.with_name("o2_probes.rs").read_text()
+            )
+            (src / "o2").mkdir()
+            (src / "o2/tests.rs").touch()
+            # Count physical commits at the real two-ring publication boundary.
+            guide = src / "waveguide.rs"
+            code = guide.read_text()
+            for site, replacement in [
+                (
+                    "    invalidations: usize,",
+                    "    pub commits: usize,\n    invalidations: usize,",
+                ),
+                (
+                    "            invalidations: 0,",
+                    "            commits: 0,\n            invalidations: 0,",
+                ),
+                (
+                    "        nut.commit();",
+                    "        nut.commit();\n        self.commits += 1;",
+                ),
+            ]:
+                if code.count(site) != 1:
+                    raise ValueError(site)
+                code = code.replace(site, replacement)
+            guide.write_text(code)
+            if mutation:
+                name, before, after = mutation
+                path = lane if name == "o2" else adapter.with_name("o2_replay.rs")
+                code = path.read_text()
+                if code.count(before) != 1:
+                    raise ValueError(f"ambiguous mutation {before}")
+                path.write_text(code.replace(before, after))
         run(
             [
                 "rustc",
@@ -111,6 +149,7 @@ impl DelayRing {
                 "test",
                 "--cfg",
                 "epoch_audit",
+                *(["--cfg", "o2_audit"] if o2 else []),
                 "-O",
                 str(adapter),
                 "-o",

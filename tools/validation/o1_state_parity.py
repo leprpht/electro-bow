@@ -23,7 +23,7 @@ def main():
         shutil.copytree("rust/dsp", root / "rust/dsp")
         outputs = []
         for label in ("entry", "observed"):
-            for name in ("friction.rs", "ring.rs", "waveguide.rs"):
+            for name in ("mod.rs", "friction.rs", "ring.rs", "waveguide.rs"):
                 path = INSTRUMENT / name
                 code = (
                     subprocess.check_output(["git", "show", f"{ENTRY}:{path}"])
