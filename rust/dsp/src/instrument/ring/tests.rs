@@ -290,3 +290,22 @@ fn measured_arm_impulse_phase_delay() {
     assert!(worst < 0.0011);
     println!("42 isolated arm impulse phase delays, maximum error {worst} samples");
 }
+
+// Read-only instrumentation for the integrated guide's transaction and epoch tests.
+impl DelayRing {
+    pub(in crate::instrument) fn epoch_state(&self) -> (usize, usize, Option<(f64, f64)>) {
+        (
+            self.write,
+            self.count,
+            self.seed.map(|s| (s.period, s.amplitude)),
+        )
+    }
+
+    pub(in crate::instrument) fn storage(&self) -> &[f64] {
+        &self.samples
+    }
+
+    pub(in crate::instrument) fn poison_history(&mut self) {
+        self.samples.fill(f64::NAN);
+    }
+}

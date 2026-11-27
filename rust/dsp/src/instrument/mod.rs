@@ -2,11 +2,13 @@
 #![forbid(unsafe_code)]
 
 mod body;
-// S2a is built in isolation until the driven waveguide owns the per-lane mode.
+// Prepared physical model is private until controller integration.
 #[cfg_attr(not(test), allow(dead_code))]
 mod friction;
 #[cfg_attr(not(test), allow(dead_code))]
 mod ring;
+#[cfg_attr(not(test), allow(dead_code))]
+mod waveguide;
 
 use crate::{attack::Attack, filter_bank::BandSplit, output::Output};
 use body::Body;

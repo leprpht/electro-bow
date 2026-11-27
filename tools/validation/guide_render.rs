@@ -1,0 +1,167 @@
+//! Offline binary adapter around the same private Rust sources as the instrument.
+//! stdin is little-endian binary64 (Hz,V,k) frames, stdout is binary64 telemetry.
+#![forbid(unsafe_code)]
+#[allow(dead_code)]
+#[path = "../../rust/dsp/src/instrument/friction.rs"]
+mod friction;
+#[path = "../../rust/dsp/src/instrument/ring.rs"]
+mod ring;
+#[path = "../../rust/dsp/src/instrument/waveguide.rs"]
+mod waveguide;
+
+use friction::{Direction, Mode};
+use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+
+fn render(rate: f64, input: impl Read, output: impl Write) -> io::Result<()> {
+    let mut guide = waveguide::Guide::prepare(rate).expect("supported rate");
+    let mut input = BufReader::new(input);
+    let mut output = BufWriter::new(output);
+    let mut tick = 0;
+    let mut launches = 0;
+    while !input.fill_buf()?.is_empty() {
+        let mut controls = [0.0; 3];
+        for value in &mut controls {
+            let mut word = [0; 8];
+            input.read_exact(&mut word)?;
+            *value = f64::from_le_bytes(word);
+        }
+        let [hz, speed, k] = controls;
+        if tick == 0 {
+            guide.launch(hz, speed).expect("valid launch");
+            launches += 1;
+        }
+        let sample = guide
+            .tick(hz, speed, k)
+            .unwrap_or_else(|_| panic!("guide fault on tick {tick} at {controls:?}"))
+            .expect("live epoch");
+        let c = sample.contact;
+        let branch = match c.mode {
+            Mode::Stick => 0.0,
+            Mode::Slide(Direction::Positive) => 1.0,
+            Mode::Slide(Direction::Negative) => -1.0,
+        };
+        for value in [
+            sample.from_nut,
+            sample.from_bridge,
+            c.to_bridge,
+            c.to_nut,
+            sample.x,
+            sample.pickup,
+            c.j,
+            c.slip,
+            c.force,
+            c.string_velocity,
+            branch,
+            sample.audio,
+        ] {
+            output.write_all(&value.to_le_bytes())?;
+        }
+        tick += 1;
+    }
+    output.flush()?;
+    eprintln!("{tick} {launches}");
+    Ok(())
+}
+
+fn benchmark() {
+    use std::{hint::black_box, time::Instant};
+    for rate in [32000_u32, 48000, 192000] {
+        let mut guide = waveguide::Guide::prepare(f64::from(rate)).unwrap();
+        let capacity = (f64::from(rate) / 65.0).ceil() as usize + 4;
+        let bytes = size_of::<waveguide::Guide>() + 2 * capacity * 8;
+        guide.launch(440.0, 0.1).unwrap();
+        let k = 1.8 * 0.1 / 1.65;
+        for _ in 0..rate {
+            black_box(guide.tick(440.0, 0.1, k).unwrap());
+        }
+        for _ in 0..5 {
+            let start = Instant::now();
+            for i in 0..10 * rate {
+                if i % rate == 0 {
+                    guide.launch(440.0, 0.1).unwrap();
+                }
+                let hz = if i % 4096 < 2048 { 196.0 } else { 440.0 };
+                black_box(guide.tick(black_box(hz), 0.1, k).unwrap());
+            }
+            println!(
+                "rate {rate} bytes {bytes} ns/tick {:.3}",
+                start.elapsed().as_secs_f64() * 1e9 / f64::from(10 * rate)
+            );
+        }
+    }
+}
+
+/// Ten minutes of prescribed per-lane work. Xorshift32 chooses the next
+/// physical playing point. The per-sample Hz ramp is bounded at 4 octaves/s.
+fn stress() {
+    let rate = 48000;
+    let mut guide = waveguide::Guide::prepare(f64::from(rate)).unwrap();
+    let mut state = 1_u32;
+    let mut uniform = || {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        f64::from(state) / f64::from(u32::MAX)
+    };
+    let mut peaks = [0.0_f64; 10];
+    let mut launches = 0;
+    for note in 0..600 {
+        let start = 65.0 + 1255.0 * uniform();
+        let target = 65.0 + 1255.0 * uniform();
+        let speed = [0.06, 0.16, 0.06 + 0.10 * uniform()][note % 3];
+        let ratio = [1.2, 2.4, 1.2 + 1.2 * uniform()][note % 3];
+        let multiplier =
+            ((target / start).log2().clamp(-2.0, 2.0) / (0.5 * f64::from(rate))).exp2();
+        guide.launch(start, speed).unwrap();
+        launches += 1;
+        let mut hz = start;
+        for n in 0..rate {
+            if n >= rate / 4 && n < 3 * rate / 4 {
+                hz = (hz * multiplier).clamp(start.min(target), start.max(target));
+            }
+            let k = if n >= 7 * rate / 8 {
+                0.0
+            } else {
+                ratio * speed / 1.65
+            };
+            let s = guide.tick(hz, speed, k).unwrap().unwrap();
+            let c = s.contact;
+            for (peak, value) in peaks.iter_mut().zip([
+                s.from_nut,
+                s.from_bridge,
+                c.to_bridge,
+                c.to_nut,
+                s.pickup,
+                s.x,
+                c.j,
+                c.slip,
+                c.force,
+                c.string_velocity,
+            ]) {
+                *peak = peak.max(value.abs());
+            }
+        }
+        guide.invalidate();
+    }
+    println!(
+        "ticks {} launches {launches} faults 0 peaks a b B N p x j r F v {peaks:?}",
+        600 * rate
+    );
+}
+
+fn main() -> io::Result<()> {
+    if std::env::args().nth(1).as_deref() == Some("--stress") {
+        stress();
+        return Ok(());
+    }
+    if std::env::args().nth(1).as_deref() == Some("--benchmark") {
+        benchmark();
+        return Ok(());
+    }
+    let rate = std::env::args()
+        .nth(1)
+        .expect("guide_render SAMPLE_RATE")
+        .parse()
+        .unwrap();
+    render(rate, io::stdin().lock(), io::stdout().lock())
+}
