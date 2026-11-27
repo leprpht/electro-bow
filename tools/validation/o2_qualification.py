@@ -79,8 +79,7 @@ def trace(fs, f, speed=0.1, ratio=1.8, kind="steady"):
 
 def ratio_db(num, den):
     denom = obs.rms(den)
-    require(denom > FLOOR, "ineligible RMS denominator")
-    return guide.db(obs.rms(num) / denom)
+    return guide.db(obs.rms(num) / denom) if denom > FLOOR else None
 
 
 def strongest(f, target):
@@ -143,9 +142,15 @@ def v17_row(q, neutral, h, loaded, m5, v, nut, fs, f, noise, corrected=None):
         return ratio_db(num[tail], den[tail])
 
     wet = q if corrected is None else corrected
-    measured_f = guide.spectrum(m5[tail], fs, f)["hz"]
-    peak_f = guide.spectrum(wet[tail], fs, f)["hz"]
-    spectral = fft_metrics(wet[tail], fs, measured_f)
+
+    def voiced_pitch(x):
+        return guide.spectrum(x[tail], fs, f)["hz"] if x[tail].std() > FLOOR else None
+
+    measured_f = voiced_pitch(m5)
+    peak_f = voiced_pitch(wet)
+    voiced = measured_f is not None and peak_f is not None
+    spectral = fft_metrics(wet[tail], fs, measured_f) if voiced else None
+    eta_pass = voiced and bool(spectral["eta"] >= 0.85)
     rms_db = level(wet, m5)
     residual = level(q - neutral, neutral)
     color_db = level(wet, q)
@@ -153,7 +158,7 @@ def v17_row(q, neutral, h, loaded, m5, v, nut, fs, f, noise, corrected=None):
         "peak_FS": float(max(abs(wet))),
         "rms_FS": obs.rms(wet[tail]),
         "same_source_difference_rms_FS": obs.rms((q - neutral)[tail]),
-        "harmonics": obs.harmonic_report(wet[tail], fs, measured_f),
+        "harmonics": obs.harmonic_report(wet[tail], fs, measured_f) if voiced else None,
         "spatial_over_N": level(v, nut),
         "load_over_blocked": level(loaded, 0.85 * h / ROOT2),
         "detail_over_neutral": level(q, neutral),
@@ -165,14 +170,16 @@ def v17_row(q, neutral, h, loaded, m5, v, nut, fs, f, noise, corrected=None):
         "strongest_hz": peak_f,
         "spectral": spectral,
         "passes": {
-            "level": abs(rms_db) <= 3,
-            "coloration": abs(color_db) <= 3,
-            "fundamental": bool(strongest(peak_f, f)),
-            "high_note_eta": bool(spectral["eta"] >= 0.85)
+            "level": rms_db is not None and abs(rms_db) <= 3,
+            "coloration": color_db is not None and abs(color_db) <= 3,
+            "fundamental": voiced and bool(strongest(peak_f, f)),
+            "high_note_eta": eta_pass
             if fs == 32000 and f == 1318.51 and noise == 0
             else None,
-            "factory_eta": bool(spectral["eta"] >= 0.85) if noise == 0.5 else None,
-            "factory_residual": residual <= -28 if noise == 0.5 else None,
+            "factory_eta": eta_pass if noise == 0.5 else None,
+            "factory_residual": (residual is not None and residual <= -28)
+            if noise == 0.5
+            else None,
         },
     }
 
@@ -547,7 +554,30 @@ def negative_controls():
         all(v is None for v in o1.summarize(raw, entry, 196)["center_over_N_dB"]),
         "zero harmonic denominator",
     )
-    reject("zero RMS denominator", lambda: ratio_db(x, 0 * x))
+    silent_tail = raw[:, -1] * 0
+    missing = v17_row(
+        silent_tail,
+        silent_tail,
+        silent_tail,
+        silent_tail,
+        silent_tail,
+        silent_tail,
+        silent_tail,
+        fs,
+        196,
+        0.5,
+    )
+    require(
+        missing["final_over_M5"] is None
+        and missing["spectral"] is None
+        and not missing["passes"]["fundamental"],
+        "unavailable silent metrics",
+    )
+    json.dumps(missing, allow_nan=False)
+    reject(
+        "zero RMS denominator",
+        lambda: require(missing["passes"]["level"], "ineligible RMS denominator"),
+    )
     phase = 2 * np.pi * 196 * t
     m5 = np.sin(phase)
     upper = 0.5 * m5 + 2 * np.sin(2 * phase)
