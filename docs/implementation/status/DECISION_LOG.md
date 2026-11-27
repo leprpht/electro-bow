@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-28 · Qualify provisional Rust O2 at the isolated sample boundary
+
+Accept the same-commit O1 input, ordered electrical arithmetic, transactional four-scalar histories, local real-time measurements and exact diagnostic parity. Keep the O2 qualification runner open until its aggregate rejects missing or inconsistent evidence, records failed anchors in strict JSON, requires final-wet pairs aligned to M5 and demonstrates live subnormal work. Retain the original M5 denominator and V17 thresholds. S6R owns actual linked headroom and asymptotic recovery counting.
+
+Authorize one offline I1 specification and evidence increment for coupled gain safety, realized level and fundamental preservation, and sample-clock capture/publication. Define controlled held-source repeats and withheld comparisons before any I1 implementation decision. Baseline injected S4a retains its earlier scope. The independent A2 blocker and the owner, supported-wet, integration and release gates stand. [Review 7](REVIEW_07_O2_IMPLEMENTATION.md)
+
 ## 2026-11-28 · Keep the physical commit and electrical fault distinct
 
 The isolated harness consumes the owned observation once. An output fault preserves evidence of that physical commit and disposes the epoch once. A guide fault resets the electrical lane after the guide performs its own invalidation. Use the converted M5 denominator for V17, the returned zero-depth signal for local subtraction and paired final wet traces for downstream subtraction. The fixed gain, trim, load and detail remain provisional pending independent Review 7 and the owner's listening and calibration decisions. [Stage 07 submission](STAGE_07_O2_IMPLEMENTATION.md)
