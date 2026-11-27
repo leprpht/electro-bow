@@ -1,6 +1,14 @@
 # Implementation ledger
 
-## 2026-11-26 · S2a nonlinear contact implemented, awaiting independent Review 1
+## 2026-11-27 · Review 1 qualifies isolated S2a nonlinear contact
+
+**S2a contact complete at `e112274782bbd53148239345b691f7801bdac8aa`.** The independent review reproduced the signed near-fold failure on the parent and verified the corrected upper root on the actual Rust solver. It reran 80,500 nonzero-incident-wave Rust V02 cases, all 84,874 exact-mismatch V02 and fold comparisons, and an additional 43,580 Decimal-enumerated cases. Mode and slip passed on the reviewed stack. The maximum lookup was nine segment probes and the isolated solver allocator recorded zero operations. Three compiled Rust branch mutations failed the differential comparison while passing their physical residuals.
+
+The parent and current eager references each passed 90 spectral/harmonic/RMS cases. The paired trace comparison matched all 27,437,400 branch tags. The embedded low-E RMS matched the standalone reference. Rust format, Clippy, debug and release tests (64 unit and three integration per profile), native Release CTest (4/4), VST3 signature and the packaged ABI/VST3 payload hashes passed. The active audio path, public ABI, JUCE parameters, presets and legacy filter-bank path remain at baseline. The review changed only this ledger and the review document.
+
+Two MINOR validator issues remain for expanded replay. Exact-root rounding can differ from the prescribed binary64 slip-floor decision, and a single-load exact-tie fixture depends on the prepared coefficient bits. Neither requires a solver change for the qualified range. The S2a fractional-delay ring may proceed and still owns its V03 exit. S2b prescribed-frequency guide work is authorized after that ring passes. Guarded Rust guide trajectories and fault commits, integrated recovery, callback budgets, production routing and listening are pending downstream requirements. A2 pitch selection remains open independently. [Review findings, reruns and stage decisions](REVIEW_01_CONTACT.md)
+
+## 2026-11-26 · S2a nonlinear contact implementation handoff
 
 Clean entry at `0110e1fe513bc603491edccef68865d899d42d33`. The private Rust instrument module implements M3a/M3b, scattering and pre-commit Fault. M3b now admits all enclosing, increasing stored f64 load pairs, evaluates the fraction first and resolves coincident loads to the upper endpoint. The review case selects Slide(+) with r=.030000277554192455 m/s. The migration matrix now names the delivered S6R V10/V11 measurements and both active and legacy V19 ABI observations.
 
