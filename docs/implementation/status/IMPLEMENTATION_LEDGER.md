@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-27 · S2b driven guide awaits independent Review 3
+
+The private Rust guide at `7920de4` integrates the qualified rings and contact. Evidence source `bed28ce` produced 152 renders, 12 common-gain WAVs, zero nominal faults and the shipping ABI/VST3 payload hashes. Actual circuit timing passed 21/21 (worst .001771 samples). Full independent eager evolution differed by at most 2.235e−15 m/s. All guide-owned V04–V11 and V20 predicates passed, including the model-only vibratos and 60 s DC run. Eleven compiled guide defects were rejected. The 440 Hz lifted tail's late sub-Hz strongest peak is retained with its identical eager replay. The allocator counted zero tick/lifecycle heap operations. Production routing and the independent A2 blocker retain downstream ownership. [Stage report and replay](STAGE_03_WAVEGUIDE_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Review 2 qualifies the isolated S2a ring and Review 1 validator maintenance
 
 **S2a ring complete at `98d5ac14c84a62fbf25341a34798cd36cd5c5412`.** Independent actual-Rust checks passed 6,561,460 taps against an eager, absolute-time history across ten rates, including the full 100 ms downward-retune fixture. Worst tap error was 1.11e−16 m/s. The impulse weights were exact, all six compiled ring controls were rejected, and the ring allocation test measured zero heap operations in debug and release. The review-local passive circuit built with the Rust rings passed all 21 V03 pairs with worst absolute delay error .001770988 samples. The .003-sample gate rejected zero delay, both one-sample errors and reversed weights.

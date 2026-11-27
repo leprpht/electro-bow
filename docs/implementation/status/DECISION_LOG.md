@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-27 · Commit both guide arms, loss, branch and DC as one sample
+
+The private guide receives prescribed Hz, V and normalized k. M4 installs the seed under zero wet gain. Each tick observes the actual midpoint pickup before solving, stages both writes and commits scalar state only when both tokens exist. The M5 DC result is available at unity captured gain for the future controller. A fault returns on the detection tick after invalidating both histories. The future controller owns the cached gain and wet fade.
+
+Integrated absolute-delay and independent evolving-history measurements passed. For V05 retain the complete post-lift spectrum, including the sub-Hz envelope of the 440 Hz tail at 5.56e−22 m/s RMS. The eager model reproduces this tail sample for sample. Report retained pitch in the first second after lift and keep the specified late decay windows. Awaiting independent Review 3. [Report, investigation and evidence](STAGE_03_WAVEGUIDE_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Preserve the oldest tap through commit and measure absolute arrival
 
 Use M2's exact capacity and expose the oldest committed sample at integer D=C. At fractional delays below C, retain both neighbors through every read. Separating validation from infallible writes lets the future lane owner discard a complete prospective tick if either arm or any other M6 check fails. M4 epoch invalidation and relaunch operate in constant time.
