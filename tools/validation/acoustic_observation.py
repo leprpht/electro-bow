@@ -58,7 +58,8 @@ def read_arm(history, delay, seed_period, seed_speed):
     return (1 - u) * sample(n - lag) + u * sample(n - lag - 1)
 
 
-def pickup(data, fs, hz, speed, noise=0):
+def spatial_velocity(data, fs, hz, speed):
+    """Stage 04 spatial research observation in m/s, before loading and conversion."""
     period = fs / hz
 
     def read(d):
@@ -73,6 +74,11 @@ def pickup(data, fs, hz, speed, noise=0):
     # Check that the long tap at the bow reproduces the actual signed nut return.
     if np.max(abs(read((1 - BETA) * period) + data[:, 0])) > 1e-12:
         raise ValueError("trajectory, seed or nut-return alignment mismatch")
+    return velocity
+
+
+def pickup(data, fs, hz, speed, noise=0):
+    velocity = spatial_velocity(data, fs, hz, speed)
     c = np.exp(-2 * np.pi * 20 / fs)
     raw = 0.85 * signal.lfilter([c, -c], [1, -c], velocity)
     loaded = signal.sosfilt(signal.butter(2, 3200, fs=fs, output="sos"), raw)
@@ -184,6 +190,7 @@ def projection_diagnostics(data, fs, f, seed_hz):
 
 
 def tracking(x, fs, f, kind):
+    """Auxiliary acoustic phase diagnostic. guide_qualification.dynamic owns V10/V11."""
     limits = (150, 290) if f == 196 else (335, 650)
     fund = signal.sosfiltfilt(
         signal.butter(3, limits, fs=fs, btype="bandpass", output="sos"), x

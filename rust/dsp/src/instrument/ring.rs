@@ -83,17 +83,29 @@ impl DelayRing {
         if !(1.0..=available as f64).contains(&delay) {
             return Err(RingFault);
         }
+        Ok(self.interpolate(delay, samples_ago))
+    }
+
+    /// Physical time n-d with the cursor already at n+1. O1 geometry bounds
+    /// ceil(d)+1 by capacity, including at the sample-rate endpoints.
+    pub(super) fn read_committed(&self, delay: f64) -> f64 {
+        debug_assert!(self.seed.is_some() && self.count > 0);
+        debug_assert!((0.0..=(self.samples.len() - 1) as f64).contains(&delay));
+        self.interpolate(delay, 1)
+    }
+
+    fn interpolate(&self, delay: f64, samples_ago: usize) -> f64 {
         let Some(seed) = self.seed else {
-            return Ok(0.0);
+            return 0.0;
         };
         let m = delay as usize;
         let u = delay - m as f64;
         let lag = m + samples_ago;
         let newer = self.history(lag, seed);
         if u == 0.0 {
-            return Ok(newer);
+            return newer;
         }
-        Ok((1.0 - u) * newer + u * self.history(lag + 1, seed))
+        (1.0 - u) * newer + u * self.history(lag + 1, seed)
     }
 
     fn history(&self, lag: usize, seed: Seed) -> f64 {
