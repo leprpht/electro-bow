@@ -202,7 +202,7 @@ def v17_row(
         "harmonics": obs.harmonic_report(wet[tail], fs, measured_f) if voiced else None,
         "spatial_over_N": level(v, nut),
         "load_over_blocked": level(loaded, 0.85 * h / ROOT2),
-        "detail_over_neutral": level(q, neutral),
+        "detail_over_neutral": level(q, loaded),
         "common_over_M5": level(ROOT2 * q, m5),
         "corrected_over_neutral": color_db,
         "final_over_M5": rms_db,
@@ -343,7 +343,7 @@ def acoustic():
         key = f"{fs}/{f}/{speed}/{r}"
         raw, inputs[key] = trace(fs, f, speed, r)
         v, m5 = raw[:, 21], raw[:, 11]
-        h, loaded = raw[:, 22], raw[:, 24]
+        h, loaded, off = raw[:, 22], raw[:, 24], raw[:, 25]
         check_transfer(raw[:, 27] - loaded, 2 * (raw[:, 26] - loaded))
         require(
             obs.rms((raw[:, 26] - loaded)[-fs:]) > FLOOR,
@@ -353,16 +353,16 @@ def acoustic():
             q = raw[:, 25 + DEPTHS.index(noise)]
             verify_taps(h, raw[:, 23], loaded, q, ROOT2 * q, noise)
             rows[f"{key}/{noise}"] = v17_row(
-                q, loaded, h, loaded, m5, v, raw[:, 3], fs, f, noise
+                q, off, h, loaded, m5, v, raw[:, 3], fs, f, noise
             )
         if f < 1000 and speed == 0.1 and r == 1.8:
-            for ident, corrected in corrections(loaded, fs, f).items():
+            for ident, corrected in corrections(off, fs, f).items():
                 if ident != "neutral":
                     rows[f"stress/{f}/{ident}"] = v17_row(
-                        loaded, loaded, h, loaded, m5, v, raw[:, 3], fs, f, 0, corrected
+                        off, off, h, loaded, m5, v, raw[:, 3], fs, f, 0, corrected
                     )
         if speed == 0.16:
-            peak = float(np.max(abs(loaded)))
+            peak = float(np.max(abs(off)))
             witness = {
                 "common": ROOT2 * peak,
                 "trimmed": peak,
@@ -374,10 +374,10 @@ def acoustic():
                     abs(a - b) < (0.0005 if b == 6.155 else 1e-6), "Review 5 witness"
                 )
         elif f < 1000 and r == 1.8:
-            clips[f"{f:g}Hz"] = {"M5": m5[:fs], "O2": ROOT2 * loaded[:fs]}
+            clips[f"{f:g}Hz"] = {"M5": m5[:fs], "O2": ROOT2 * off[:fs]}
             if f == 440:
                 clips["detail"] = {
-                    "off": ROOT2 * loaded[:fs],
+                    "off": ROOT2 * off[:fs],
                     "factory": ROOT2 * raw[:, 26][:fs],
                 }
         if f == 1318.51:
@@ -417,7 +417,7 @@ def acoustic():
     for f in (82.41, 440):
         fs = 48000
         raw, inputs[f"lift/{f}"] = trace(fs, f, kind="lift")
-        h, loaded = raw[:, 22], raw[:, 24]
+        h, loaded, off = raw[:, 22], raw[:, 24], raw[:, 25]
         f0 = strongest_hz(raw[:fs, 11], fs)
         require(strongest(f0, f), "lift bridge anchor")
         for noise in (0, 0.5, 1):
@@ -437,7 +437,7 @@ def acoustic():
                 window = slice(round(start * fs), round(end * fs))
                 d = summary(q[window], fs, f0)
                 d.update(
-                    detail_difference_rms=obs.rms((q - loaded)[window]),
+                    detail_difference_rms=obs.rms((q - off)[window]),
                     load_minus_input_rms=obs.rms((loaded - 0.85 * h / ROOT2)[window]),
                 )
                 onset[f"{f}/{noise}/{start}-{end}"] = d
