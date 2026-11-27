@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-27 · Qualify the pickup observation in isolation and retain the acoustic gates
+
+Independent Review 4 confirms the recorded pickup-led target and approves the two-ray, post-commit nut-arm observer for isolated Rust work. Keep the M5 diagnostic, contact, fractional-delay ring, recurrence, M4 history, M6 contract and shipping fallback. The observer uses committed emission and original launch history. Treat the aperture as an effective reference geometry. Do not make the proposed acoustic specification authoritative for the wet path.
+
+The 3.2 kHz load and nominal trim remain conditional on gain and reference evidence. Hold the I1 transfer until the V17 fundamental-ordering failure, capture ownership and held-source repeatability are resolved. Hold the proposed gesture and supported control changes until measured DI behavior and compact owner listening provide a decision. The A2 final selector remains independently blocked. Existing injected S4a may proceed within Review 3 scope. S4b, supported S5 wet, S6 and S7 remain held. The original V17–V22 thresholds and stage owners remain authoritative. [Review 4 decision table](REVIEW_04_ACOUSTIC_RESEARCH.md#g-implementation-authorization)
+
 ## 2026-11-27 · Approve the reference direction; propose the acoustic algorithms
 
 **Owner decision.** Use a pickup-led bowed electric guitar retaining incoming DI character. **Proposed for independent review.** Use nut-arm spatial total velocity, a finite-aperture loaded pickup, bounded twelve-partial source transfer and a seeded virtual stroke with evolving speed/force. Retain S2a/S2b and the shipping fallback. The geometry, electrical constants, control semantics and perceptual gate have no production approval. Stage 04 also maintains the actual lifecycle, optimization and ratio-floor checks in validation tooling. [Evidence and per-stage decisions](STAGE_04_ACOUSTIC_RESEARCH.md) · [Proposed amendments](../ACOUSTIC_MIGRATION_PLAN.md#proposed-reconciliation-for-independent-sign-off)
