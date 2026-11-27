@@ -1,5 +1,13 @@
 # Implementation ledger
 
+## 2026-11-27 · Review 2 qualifies the isolated S2a ring and Review 1 validator maintenance
+
+**S2a ring complete at `98d5ac14c84a62fbf25341a34798cd36cd5c5412`.** Independent actual-Rust checks passed 6,561,460 taps against an eager, absolute-time history across ten rates, including the full 100 ms downward-retune fixture. Worst tap error was 1.11e−16 m/s. The impulse weights were exact, all six compiled ring controls were rejected, and the ring allocation test measured zero heap operations in debug and release. The review-local passive circuit built with the Rust rings passed all 21 V03 pairs with worst absolute delay error .001770988 samples. The .003-sample gate rejected zero delay, both one-sample errors and reversed weights.
+
+**Review 1 validator maintenance complete.** The signed slip-floor counterexamples and their neighbors passed exact mode grading. Target-prepared coefficient provenance and the bounded exact-tie search passed. Both tested targets passed 84,886 contact differential queries and 43,580 additional Decimal-oracle queries each. All three compiled V02 branch controls were rejected. The qualified contact solve is unchanged. Rust regressions, native Release CTest (4/4), strict VST3 signature and packaged payload parity passed.
+
+**S2b prescribed-frequency waveguide implementation authorized.** S2b owns the actual guide's V03 passive timing and full evolving eager/lazy wave, pickup and state comparison during retune, V04–V07 guide behavior, V08 guarded lane-wide commit and fault invalidation, V09 guide/DC stationarity, V10/V11 prescribed trajectories and V20 guide source behavior across rates. Production routing, live pitch tracking and release are not authorized. [Independent review and remaining observations](REVIEW_02_RING.md)
+
 ## 2026-11-27 · S2a ring awaits independent Review 2
 
 Clean entry at `02f9a27`. The isolated Rust ring at `98d5ac1` passed all seven ring tests. Its 100 ms retune fixtures compared 576,688 individual taps against chronological histories across eight rates. The 42 measured arm impulses had maximum phase-delay error .001066610 samples rounded up. The allocator counted zero operations during sample processing and epoch changes. All six ring mutations failed the intended tests.
