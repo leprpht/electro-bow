@@ -1,14 +1,18 @@
 """Frozen inventories and applicable gates, independent of the emitted rows."""
 
 import csv
+import json
 import math
 from copy import deepcopy
+from functools import lru_cache
 from itertools import product
 from numbers import Real
 from pathlib import Path
+from statistics import median
 
 import guide_qualification as guide
-from o2_response import require
+import numpy as np
+from o2_response import coefficients, reference, require
 
 DEPTH = (0, 0.5, 1)
 RATE = [32000, 44100, 48000, 88200, 96000, 176400, 192000]
@@ -98,6 +102,10 @@ def stationary(rows):
             gates.update(("factory_eta", "factory_residual"))
         if (fs, f, d) == (32000, 1318.51, 0):
             gates.add("high_note_eta")
+        require(
+            row.get("failure_reason") is None and isinstance(row.get("spectral"), dict),
+            key + " ineligible M5 bridge anchor or wet spectrum",
+        )
         flags = row["passes"]
         keys([g for g, v in flags.items() if v is not None], gates, key)
         for field in (
@@ -203,16 +211,63 @@ def electrical(rows):
                 "frequency probes",
             )
             for p in points:
-                for field in ("real", "imag", "load_magnitude"):
-                    finite(p[field], field)
-                eligible = p["hz"] != 0 and (p["hz"] != fs / 2 or d != 0)
-                for field in ("phase_deg", "delay_s", "delay_error_s"):
-                    if eligible:
-                        finite(p[field], field)
-                    else:
-                        require(p[field] is None, "ineligible spectral probe")
+                hz = p["hz"]
+                measured = complex(finite(p["real"], "real"), finite(p["imag"], "imag"))
+                expected = reference(fs, hz, d)
+                require(abs(measured - expected) <= 1e-9, "complex probe")
+                # Both taps are actual DFT sums of the Rust unit impulse.
+                a, l = (complex(*p[key]) for key in ("a", "l"))
+                blocked = reference(fs, hz, 40) * 0.85 / math.sqrt(2)
+                u = math.tan(math.pi * hz / fs) / math.tan(math.pi * 3200 / fs)
+                load = 1 / complex(1 - u * u, math.sqrt(2) * u)
+                require(
+                    abs(a - blocked) <= 1e-9
+                    and abs(l - blocked * load) <= 1e-9
+                    and abs(measured - (l + 0.025 * d * (a - l)) * math.sqrt(2) / 0.85)
+                    <= 1e-9,
+                    "impulse tap consistency",
+                )
+                if hz:
+                    require(
+                        abs(p["load_magnitude"] - abs(l / a)) <= 1e-12
+                        and abs(p["load_magnitude"] - abs(load)) <= 1e-9,
+                        "load magnitude",
+                    )
+                else:
+                    require(p["load_magnitude"] is None, "ineligible load ratio")
+                eligible = hz != 0 and (hz != fs / 2 or d != 0)
                 if eligible:
-                    require(0 <= p["delay_error_s"] < 1e-8, "delay")
+                    delay = (complex(*p["time_moment"]) / measured).real
+                    ref_delay = -np.angle(
+                        reference(fs, hz + 0.001, d) / reference(fs, hz - 0.001, d)
+                    ) / (0.002 * 2 * np.pi)
+                    require(
+                        abs(p["phase_deg"] - np.angle(measured, deg=True)) <= 1e-9,
+                        "phase",
+                    )
+                    require(
+                        abs(p["delay_s"] - delay) < 1e-12
+                        and abs(p["delay_error_s"] - abs(delay - ref_delay)) < 1e-12
+                        and 0 <= p["delay_error_s"] < 1e-8,
+                        "delay",
+                    )
+                else:
+                    require(
+                        all(
+                            p[k] is None
+                            for k in ("phase_deg", "delay_s", "delay_error_s")
+                        ),
+                        "ineligible spectral probe",
+                    )
+            peak_hz, re, im = resp["worst_bin"]
+            require(
+                abs(
+                    abs(complex(re, im) - reference(fs, peak_hz, d))
+                    - resp["max_complex_error"]
+                )
+                < 1e-14,
+                "worst FFT bin",
+            )
             step = row["long_step"][str(d)]
             require(
                 step["frames"] == math.ceil(60 * fs)
@@ -229,7 +284,21 @@ def electrical(rows):
                 "step output",
             )
             finite(step["first"], "step entry")
-            finite(step["peak"], "step peak")
+            first, peak = step_reference(fs, d)
+            require(
+                abs(step["first"] - first) <= 1e-9 and abs(step["peak"] - peak) <= 1e-9,
+                "long step entry/peak",
+            )
+        require(
+            np.allclose(row["coefficients"], coefficients(fs), rtol=0, atol=1e-14)
+            and np.allclose(
+                row["poles"],
+                abs(np.roots([1, *coefficients(fs)[4:]])),
+                rtol=0,
+                atol=1e-14,
+            ),
+            "coefficient or pole mismatch",
+        )
 
 
 def sweeps(rows):
@@ -326,7 +395,203 @@ LIFE = {
 }
 
 
+@lru_cache(None)
+def step_reference(fs, d):
+    from o2_bench import oracle
+
+    _h, a, l = oracle(fs, np.ones(math.ceil(fs * 0.1)))
+    q = l + 0.025 * d * (a - l)
+    return q[0], max(abs(q))
+
+
+REQUIRED = {
+    "electrical",
+    "lifecycle",
+    "local_timing",
+    "high_band",
+    "onset_release",
+    "inputs",
+    "replay",
+    "tool_hashes",
+    "head",
+    "renderer_sha256",
+    "v17",
+    "negatives",
+    "nominal_mono_input",
+    "corners",
+    "injected_vectors_dB",
+    "witness",
+    "sweep",
+    "failed_predicates",
+}
+WORKLOADS = ("silence", "near-denormal", "o2", "guide-o1", "guide-o1-o2")
+EXTRA_CONTROLS = {
+    "removed " + s
+    for s in ("local_timing", "high_band", "onset_release", "inputs", "replay")
+} | {
+    "complex cutoff",
+    "wrong phase",
+    "wrong load magnitude",
+    "fabricated Nyquist phase/delay",
+    "flushed subnormal",
+    "voiced off-target anchor",
+    "off only",
+    "factory only",
+    "joint shift",
+    "wrong epoch",
+    "wrong reference",
+    "wrong measurement window",
+}
+NEGATIVES.update(EXTRA_CONTROLS)
+
+
+def timing_ratio(records):
+    keys(
+        [(k, b) for k, b, ns, h in records],
+        product(WORKLOADS, range(1, 6)),
+        "timing batches",
+    )
+    groups = {k: [] for k in WORKLOADS}
+    for k, b, ns, h in records:
+        require(finite(ns, "time") > 0, "timing duration")
+        finite(h, "terminal h")
+        if k == "silence":
+            require(h == 0, "silence control")
+        if k == "near-denormal":
+            require(0 < abs(h) < np.finfo(float).tiny, "active subnormal workload")
+        groups[k].append(ns)
+    return median(groups["near-denormal"]) / median(groups["silence"])
+
+
+@lru_cache(None)
+def diagnostic_reference():
+    from o2_qualification import acoustic
+
+    return acoustic(make_audio=False)
+
+
+@lru_cache(None)
+def provenance():
+    import o1_qualification as o1
+    from o2_audio import FIX, OUT, physical_key
+
+    manifest = json.loads((guide.OUT / "manifest.json").read_text())["cases"]
+    observed = {}
+    for path in (o1.HASHES, FIX / "o2_sha256.tsv"):
+        for line in path.read_text().splitlines():
+            digest, name = line.split()
+            observed[Path(name).stem] = digest
+    kept = set(observed) | {physical_key(fs, 1318.51) for fs in RATE}
+    traces = {name: guide.digest(OUT / "traces" / (name + ".f64le")) for name in kept}
+    return manifest, observed, traces
+
+
+def replay_grade(result):
+    from o2_audio import physical_key
+
+    manifest, observed, traces = provenance()
+    rows = result["replay"]
+    keys(rows, set(manifest) | set(traces), "physical replay")
+    for name, row in rows.items():
+        n = manifest[name]["successful_ticks"] if name in manifest else 3 * 48000
+        require(row["ticks"] == row["commits"] == row["calls"] == n, "replay clock")
+        if name in manifest:
+            require(
+                row["original_sha256"] == manifest[name]["raw_sha256"], "original M5"
+            )
+        if name in observed:
+            require(row["observed_sha256"] == observed[name], "O1 provenance")
+        keys(row["max_error"], map(str, DEPTH), "replay depths")
+        for errors in row["max_error"].values():
+            require(
+                len(errors) == 4 and all(0 <= e <= 1e-9 for e in errors),
+                "replay differential",
+            )
+        if name in traces:
+            require(
+                row["sha256"] == traces[name]
+                and len(row["stage06_max_FS"]) == 3
+                and all(0 <= v <= 1e-9 for v in row["stage06_max_FS"]),
+                "O2 provenance",
+            )
+    inputs = {
+        f"{fs}/{f}/{v}/{r}": traces[physical_key(fs, f, v, r)]
+        for fs, f, v, r in STATIONARY
+    }
+    inputs.update(
+        {f"lift/{f}": traces[physical_key(48000, f, kind="lift")] for f in (82.41, 440)}
+    )
+    require(result["inputs"] == inputs, "input provenance")
+    for row in result["corners"]:
+        require(
+            row["trace"] == traces[physical_key(48000, 440, row["V"], row["R"])],
+            "corner provenance",
+        )
+
+
+def diagnostics(result):
+    times = (
+        (0, 1 / 48000),
+        (0, 0.01),
+        (0, 0.05),
+        (0.5, 1),
+        (0.975, 1),
+        (1, 1.025),
+        (1.025, 1.05),
+        (1.1, 1.15),
+        (2, 2.05),
+        (6, 7),
+    )
+    keys(
+        result["onset_release"],
+        (f"{f}/{d}/{a}-{b}" for f, d, (a, b) in product((82.41, 440), DEPTH, times)),
+        "transient",
+    )
+    keys(
+        result["high_band"],
+        (
+            f"{fs}/{k}"
+            for fs, k in product(RATE, ("raw", "blocked", "loaded", "factory", "full"))
+        ),
+        "high band",
+    )
+    # Remeasure the declared physical taps, including every eligible phase,
+    # residual denominator, absolute level, null and high-band reference delta.
+    for section in ("onset_release", "high_band"):
+        for k, r in result[section].items():
+            require("failure_reason" not in r, f"{k} {r.get('failure_reason')}")
+    ref = diagnostic_reference()
+    for key in ("high_band", "onset_release", "v17"):
+        require(result[key] == ref[key], "tap-derived " + key)
+    timing = result["local_timing"]
+    require(
+        (timing["coefficient_bytes"], timing["lane_bytes"]) == (48, 32), "timing sizes"
+    )
+    keys(timing["rates"], ("32000", "48000", "192000"), "timing rates")
+    for data in timing["rates"].values():
+        ratio = timing_ratio(data["records"])
+        require(ratio == data["near_denormal_ratio"] and ratio <= 2, "timing bound")
+
+
+@lru_cache(None)
+def electrical_reference(fs):
+    from o2_bench import check_rate
+
+    return check_rate(fs)
+
+
+@lru_cache(None)
+def provenance_files():
+    from o2_qualification import BINARY, tool_hashes
+
+    return tool_hashes(), guide.digest(BINARY)
+
+
 def grade(result):
+    require(
+        not REQUIRED - result.keys(),
+        f"missing evidence {sorted(REQUIRED - result.keys())}",
+    )
     require(not result.get("errors") and not result.get("error"), "recorded failure")
     expected_failures = {
         f"stress/{f}/{vector}": (
@@ -335,15 +600,48 @@ def grade(result):
         for f, vector in product((82.41, 196, 440), VECTORS[1:])
     }
     require(
-        result["failed_predicates"] == expected_failures, "recorded failures differ"
-    )
-    require(
         result["nominal_mono_input"]["sha256_f32le"]
         == "cfc6d9342aa505dd7a53bd0ae531f717bec007042918ada9949a2117342a3d09",
         "nominal pluck hash",
     )
+    source_hashes, binary_hash = provenance_files()
+    require(
+        result["tool_hashes"] == source_hashes
+        and result["renderer_sha256"] == binary_hash
+        and len(result["head"]) == 40
+        and all(c in "0123456789abcdef" for c in result["head"]),
+        "replay provenance",
+    )
+    pluck = result["nominal_mono_input"]
+    require(
+        (pluck["fs"], pluck["frames"], pluck["eligible_frames"])
+        == (48000, 211200, 144000)
+        and abs(pluck["peak_FS"] - 0.35) < 1e-7,
+        "nominal input clock/level",
+    )
+    require(
+        result["injected_vectors_dB"]
+        == {
+            "neutral": [0] * 12,
+            "upper": [5] * 12,
+            "lower": [-5] * 12,
+            "inversion": [-5, 5] + [0] * 10,
+        },
+        "stress vector inventory",
+    )
     stationary(result["v17"])
+    require(
+        result["failed_predicates"] == expected_failures, "recorded failures differ"
+    )
+
     electrical(result["electrical"])
+    for fs in ELECTRICAL_RATES:
+        require(
+            result["electrical"][str(fs)] == electrical_reference(fs),
+            f"Rust tap replay at {fs}",
+        )
+    diagnostics(result)
+    replay_grade(result)
     sweeps(result["sweep"])
     corners(result["corners"])
     wanted = {f"{fs}/{k}": v for fs in (32000, 48000, 192000) for k, v in LIFE.items()}
@@ -417,4 +715,59 @@ def coverage_negatives(result):
             rows,
             "inventory" if name == "missing predicate" else "missing/nonfinite",
         )
+
+    def defect(name, alter, reason):
+        copy = deepcopy(result)
+        alter(copy)
+        try:
+            grade(copy)
+        except ValueError as err:
+            require(reason in str(err), name + ": " + str(err))
+            controls[name] = str(err)
+        else:
+            raise ValueError("escaped " + name)
+
+    for section in ("local_timing", "high_band", "onset_release", "inputs", "replay"):
+        defect(
+            "removed " + section,
+            lambda x, section=section: x.pop(section),
+            "missing evidence",
+        )
+    for name, idx, changes, reason in (
+        ("complex cutoff", 6, {"real": 123.0, "imag": -456.0}, "complex probe"),
+        ("wrong phase", 6, {"phase_deg": 999.0}, "phase"),
+        ("wrong load magnitude", 6, {"load_magnitude": -100.0}, "load magnitude"),
+        (
+            "fabricated Nyquist phase/delay",
+            -1,
+            {"phase_deg": 900.0, "delay_s": 100.0},
+            "phase",
+        ),
+    ):
+        defect(
+            name,
+            lambda x, idx=idx, changes=changes: x["electrical"]["48000"]["response"][
+                "0.5"
+            ]["points"][idx].update(changes),
+            reason,
+        )
+
+    def flush(x):
+        for row in x["local_timing"]["rates"]["48000"]["records"]:
+            if row[0] == "near-denormal":
+                row[3] = 0.0
+
+    defect("flushed subnormal", flush, "active subnormal")
+    from o2_qualification import v17_row
+
+    t = np.arange(48000) / 48000
+    x = np.sin(2 * np.pi * 196 * t)
+    bridge = 0.5 * x + 0.6 * (-1.0) ** np.arange(len(t))
+    bad = v17_row(x, x, x, x, bridge, x, x, 48000, 196, 0.5, operation="neutral")
+    json.dumps(bad, allow_nan=False)
+    defect(
+        "voiced off-target anchor",
+        lambda r: r["v17"].update({key: bad}),
+        "ineligible M5",
+    )
     return controls

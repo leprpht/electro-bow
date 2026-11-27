@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 import subprocess
 from pathlib import Path
 
@@ -10,7 +11,7 @@ from o2_coverage import UniqueRows
 from o2_response import ROOT2, check_transfer, reference, require
 from scipy import optimize, signal
 
-OUT = Path("build/stage-07")
+OUT = Path(os.environ.get("ELECTROBOW_O2_OUT", "build/stage-07"))
 BINARY = OUT / "render"
 DEPTHS = (0, 0.5, 1)
 PROBES = (0, 20, 82.41, 196, 440, 1000, 3200, 6000, 12000)
@@ -97,6 +98,8 @@ def check_rate(fs):
         )
         q = taps[:, 3] * ROOT2 / 0.85
         error = check_transfer(np.fft.rfft(q), reference(fs, freq, depth))
+        spectrum_fft = np.fft.rfft(q)
+        worst = np.argmax(abs(spectrum_fft - reference(fs, freq, depth)))
         tail = np.max(abs(taps[-1]))
         require(tail < 1e-10, "impulse decay")
         points = []
@@ -114,12 +117,22 @@ def check_rate(fs):
                 delta = abs(delay - ref_delay)
                 require(delta < 1e-8, "eligible delay")
                 phase = np.angle(measured, deg=True)
+            phasor = np.exp(-2j * np.pi * hz * times)
+            input_tap = phasor @ unit[:, 1]
+            load_tap = phasor @ unit[:, 2]
             points.append(
                 {
                     "hz": hz,
                     "real": measured.real,
                     "imag": measured.imag,
-                    "load_magnitude": abs(lp(hz)),
+                    "a": [input_tap.real, input_tap.imag],
+                    "l": [load_tap.real, load_tap.imag],
+                    "time_moment": list(
+                        map(float, ((times @ spectrum).real, (times @ spectrum).imag))
+                    ),
+                    "load_magnitude": abs(load_tap / input_tap)
+                    if eligible or hz != 0
+                    else None,
                     "phase_deg": phase,
                     "delay_s": delay,
                     "delay_error_s": delta,
@@ -127,6 +140,11 @@ def check_rate(fs):
             )
         response[str(depth)] = {
             "max_complex_error": error,
+            "worst_bin": [
+                freq[worst],
+                spectrum_fft[worst].real,
+                spectrum_fft[worst].imag,
+            ],
             "terminal": tail,
             "points": points,
         }
@@ -164,7 +182,6 @@ def check_rate(fs):
 
 
 def timing():
-    from statistics import median
 
     widths = list(map(int, run("size", 48000).split()))
     require(widths == [48, 32], "Rust coefficient/lane size")
@@ -172,22 +189,14 @@ def timing():
     for fs in (32000, 48000, 192000):
         raw = run("timing", fs)
         (OUT / f"timing-{fs}.tsv").write_text(raw)
-        groups = {
-            k: [] for k in ("silence", "near-denormal", "o2", "guide-o1", "guide-o1-o2")
-        }
+        records = []
         for line in raw.splitlines():
             label, batch, ns, h = line.split()
-            require(
-                int(batch) == len(groups[label]) + 1 and float(ns) > 0, "timing batch"
-            )
-            groups[label].append(float(ns))
-            if label == "near-denormal":
-                require(
-                    math.isfinite(float(h)) and abs(float(h)) < np.finfo(float).tiny,
-                    "subnormal workload",
-                )
-        require(all(len(values) == 5 for values in groups.values()), "timing repeats")
-        ratio = median(groups["near-denormal"]) / median(groups["silence"])
-        require(ratio <= 2, "near-denormal runtime relative to silence")
-        batches[str(fs)] = {"ns_per_tick": groups, "near_denormal_ratio": ratio}
+            records.append([label, int(batch), float(ns), float(h)])
+        from o2_coverage import timing_ratio
+
+        batches[str(fs)] = {
+            "records": records,
+            "near_denormal_ratio": timing_ratio(records),
+        }
     return {"coefficient_bytes": widths[0], "lane_bytes": widths[1], "rates": batches}

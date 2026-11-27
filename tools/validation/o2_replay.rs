@@ -79,6 +79,7 @@ fn stream(fs: f64, observed: bool) -> io::Result<()> {
     let mut out = io::BufWriter::new(io::stdout().lock());
     let mut harness = Harness::new(fs);
     let mut factory = O2Lane::default();
+    let mut factory_return = O2Lane::default();
     let mut full = O2Lane::default();
     let mut seed = (0.0, 0.0);
     let mut n = 0;
@@ -97,7 +98,9 @@ fn stream(fs: f64, observed: bool) -> io::Result<()> {
             harness.guide.check_epoch(n + 1, seed);
             super::write_sample(&mut out, s, Some(o))?;
             let v = o.velocity();
-            let [h, a, l, mid] = factory.taps(&harness.coeff, v, 0.5);
+            let [h, a, l, tap] = factory.taps(&harness.coeff, v, 0.5);
+            let mid = factory_return.tick(&harness.coeff, v, 0.5).unwrap();
+            assert_eq!(mid.to_bits(), tap.to_bits(), "factory return at {n}");
             let high = full.tick(&harness.coeff, v, 1.0).unwrap();
             let [_, _, z1, z2] = factory.state();
             for x in [h, a, l, off, mid, high, z1, z2] {

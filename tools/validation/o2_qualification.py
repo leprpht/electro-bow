@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from itertools import product
@@ -60,7 +61,7 @@ def ratio_db(num, den):
 
 
 def strongest(f, target, native_bin=1.0):
-    return (
+    return bool(
         f is not None
         and f > 0
         and (abs(f - target) <= 2 * native_bin or abs(1200 * np.log2(f / target)) <= 15)
@@ -83,7 +84,7 @@ def strongest_hz(x, fs):
 
 
 def summary(x, fs, f):
-    spec = obs.harmonic_report(x, fs, f) if len(x) >= 3 else None
+    spec = obs.harmonic_report(x, fs, f) if len(x) >= 3 and f is not None else None
     return {
         "rms": obs.rms(x),
         "ac_rms": x.std(),
@@ -141,35 +142,106 @@ class WetTrace:
     settings: tuple
     depth: float
 
+    source: str
+    window: tuple
+    end_tick: int
+    count: int
+    m5_hash: str
+    off_hash: str
+
     def alignment(self):
-        return self.rate, self.pitch, self.start_tick, self.epoch, self.settings
+        return (
+            self.rate,
+            self.pitch,
+            self.start_tick,
+            self.end_tick,
+            self.count,
+            self.epoch,
+            self.source,
+            self.settings,
+            self.window,
+            self.m5_hash,
+            self.off_hash,
+        )
+
+
+def reference_trace(m5, off, fs, f, source, epoch, settings, start=0):
+    def digest(x):
+        return sha256(np.ascontiguousarray(x, dtype="<f8").tobytes()).hexdigest()
+
+    end = start + len(m5)
+    return WetTrace(
+        off,
+        fs,
+        f,
+        start,
+        epoch,
+        settings,
+        0,
+        source,
+        (end - fs, end),
+        end,
+        len(m5),
+        digest(m5),
+        digest(off),
+    )
 
 
 def v17_row(
-    q, neutral, h, loaded, m5, v, nut, fs, f, noise, corrected=None, corrected_off=None
+    q,
+    neutral,
+    h,
+    loaded,
+    m5,
+    v,
+    nut,
+    fs,
+    f,
+    noise,
+    *,
+    operation,
+    corrected=None,
+    corrected_off=None,
+    clock=None,
 ):
-    # Analyze a whole three-second physical render; final one-second window throughout.
     tail = slice(-fs, None)
 
     def level(num, den):
         return ratio_db(num[tail], den[tail])
 
-    if noise == 0.5 and corrected is not None:
+    if operation == "neutral":
+        require(corrected is None and corrected_off is None, "unexpected colored wet")
+        wet, off = q, neutral
+    elif operation == "corrected":
         require(
-            isinstance(corrected, WetTrace) and isinstance(corrected_off, WetTrace),
+            isinstance(clock, WetTrace)
+            and isinstance(corrected, WetTrace)
+            and isinstance(corrected_off, WetTrace),
             "paired final wet traces required",
         )
-        require(
-            corrected.alignment() == corrected_off.alignment()
-            and corrected.rate == fs
-            and corrected.pitch == f
-            and corrected.depth == noise
-            and corrected_off.depth == 0,
-            "final wet alignment/settings differ",
+        ref = reference_trace(
+            m5,
+            neutral,
+            fs,
+            f,
+            clock.source,
+            clock.epoch,
+            clock.settings,
+            clock.start_tick,
         )
-        corrected, corrected_off = corrected.samples, corrected_off.samples
-    wet = q if corrected is None else corrected
-
+        require(
+            ref.alignment()
+            == clock.alignment()
+            == corrected.alignment()
+            == corrected_off.alignment()
+            and corrected.depth == noise
+            and corrected_off.depth == 0
+            and corrected.samples.shape == corrected_off.samples.shape == m5.shape,
+            "final wet alignment/settings/reference differ",
+        )
+        wet, off = corrected.samples, corrected_off.samples
+    else:
+        raise ValueError("unknown wet operation")
     require(
         all(x.shape == q.shape for x in (neutral, h, loaded, m5, v, nut, wet)),
         "unaligned V17 streams",
@@ -187,7 +259,6 @@ def v17_row(
     rms_db = level(wet, m5)
     local_residual = level(q - neutral, neutral)
     # Both wet arrays originate from the same epoch and coloration settings.
-    off = neutral if corrected is None else corrected_off
     if noise == 0.5:
         require(
             off is not None and off.shape == wet.shape,
@@ -196,6 +267,7 @@ def v17_row(
     residual = level(wet - off, off) if noise == 0.5 else None
     color_db = level(wet, q)
     return {
+        "failure_reason": None if anchor else "ineligible M5 bridge anchor",
         "peak_FS": float(max(abs(wet))),
         "rms_FS": obs.rms(wet[tail]),
         "same_source_difference_rms_FS": obs.rms((q - neutral)[tail]),
@@ -332,7 +404,7 @@ def listening(clips):
     return key
 
 
-def acoustic():
+def acoustic(make_audio=True):
     rows, high, onset, clips, inputs = UniqueRows(), {}, {}, {}, {}
     witness = {}
     for fs, f, speed, r in (
@@ -353,13 +425,28 @@ def acoustic():
             q = raw[:, 25 + DEPTHS.index(noise)]
             verify_taps(h, raw[:, 23], loaded, q, ROOT2 * q, noise)
             rows[f"{key}/{noise}"] = v17_row(
-                q, off, h, loaded, m5, v, raw[:, 3], fs, f, noise
+                q, off, h, loaded, m5, v, raw[:, 3], fs, f, noise, operation="neutral"
             )
         if f < 1000 and speed == 0.1 and r == 1.8:
             for ident, corrected in corrections(off, fs, f).items():
                 if ident != "neutral":
+                    clock = reference_trace(m5, off, fs, f, key, "launch-1", (ident,))
+                    colored = replace(clock, samples=corrected)
                     rows[f"stress/{f}/{ident}"] = v17_row(
-                        off, off, h, loaded, m5, v, raw[:, 3], fs, f, 0, corrected
+                        off,
+                        off,
+                        h,
+                        loaded,
+                        m5,
+                        v,
+                        raw[:, 3],
+                        fs,
+                        f,
+                        0,
+                        operation="corrected",
+                        corrected=colored,
+                        corrected_off=colored,
+                        clock=clock,
                     )
         if speed == 0.16:
             peak = float(np.max(abs(off)))
@@ -382,7 +469,7 @@ def acoustic():
                 }
         if f == 1318.51:
             f0 = strongest_hz(m5[-fs:], fs)
-            require(strongest(f0, f), "high-note bridge anchor")
+            anchor_ok = strongest(f0, f)
             for name, x in [
                 ("raw", v),
                 ("blocked", h),
@@ -390,6 +477,13 @@ def acoustic():
                 ("factory", raw[:, 26] * ROOT2 / 0.85),
                 ("full", raw[:, 27] * ROOT2 / 0.85),
             ]:
+                if not anchor_ok:
+                    high[f"{fs}/{name}"] = {
+                        "failure_reason": "ineligible high-note bridge anchor",
+                        "f0": f0,
+                        "eta": None,
+                    }
+                    continue
                 divisor = math.gcd(fs, 32000)
                 y = signal.resample_poly(
                     x, 32000 // divisor, fs // divisor, window=("kaiser", 10)
@@ -407,6 +501,13 @@ def acoustic():
                 )
     for key, data in high.items():
         ref = high["192000/" + key.split("/")[1]]
+        if "failure_reason" in ref or "failure_reason" in data:
+            data.update(
+                centroid_minus_ref_hz=None,
+                H1_to_H10_delta_dB=None,
+                high_fraction_minus_ref=None,
+            )
+            continue
         data["centroid_minus_ref_hz"] = data["centroid_hz"] - ref["centroid_hz"]
         data["H1_to_H10_delta_dB"] = obs.relative_db(
             np.array(data["amplitudes_m_s"]),
@@ -419,7 +520,7 @@ def acoustic():
         raw, inputs[f"lift/{f}"] = trace(fs, f, kind="lift")
         h, loaded, off = raw[:, 22], raw[:, 24], raw[:, 25]
         f0 = strongest_hz(raw[:fs, 11], fs)
-        require(strongest(f0, f), "lift bridge anchor")
+        anchor_ok = strongest(f0, f)
         for noise in (0, 0.5, 1):
             q = raw[:, 25 + DEPTHS.index(noise)]
             for start, end in [
@@ -435,7 +536,9 @@ def acoustic():
                 (6, 7),
             ]:
                 window = slice(round(start * fs), round(end * fs))
-                d = summary(q[window], fs, f0)
+                d = summary(q[window], fs, f0 if anchor_ok else None)
+                if not anchor_ok:
+                    d["failure_reason"] = "ineligible lift bridge anchor"
                 d.update(
                     detail_difference_rms=obs.rms((q - off)[window]),
                     load_minus_input_rms=obs.rms((loaded - 0.85 * h / ROOT2)[window]),
@@ -449,7 +552,7 @@ def acoustic():
         "onset_release": onset,
         "witness": witness,
         "inputs": inputs,
-        "listening": listening(clips),
+        "listening": listening(clips) if make_audio else None,
     }
 
 
@@ -628,6 +731,7 @@ def negative_controls():
         fs,
         196,
         0.5,
+        operation="neutral",
     )
     require(
         missing["final_over_M5"] is None
@@ -650,7 +754,7 @@ def negative_controls():
     def grade_pitch(row):
         require(row["passes"]["fundamental"], "strongest fundamental")
 
-    changed = v17_row(2 * m5, m5, m5, m5, m5, m5, m5, fs, 196, 0)
+    changed = v17_row(2 * m5, m5, m5, m5, m5, m5, m5, fs, 196, 0, operation="neutral")
     reject(
         "wrong denominator self-reference",
         lambda: check_transfer(
@@ -660,11 +764,13 @@ def negative_controls():
     reject("double wet level", lambda: grade_level(changed["final_over_M5"]))
     reject(
         "dominant H2",
-        lambda: grade_pitch(v17_row(upper, m5, m5, m5, m5, m5, m5, fs, 196, 0)),
+        lambda: grade_pitch(
+            v17_row(upper, m5, m5, m5, m5, m5, m5, fs, 196, 0, operation="neutral")
+        ),
     )
     require(guide.db(0) == guide.db(1e-20) == -240, "amplitude ratio floor")
     nyquist = 0.5 * m5 + 0.6 * (-1.0) ** np.arange(fs)
-    nyq_row = v17_row(nyquist, m5, m5, m5, m5, m5, m5, fs, 196, 0)
+    nyq_row = v17_row(nyquist, m5, m5, m5, m5, m5, m5, fs, 196, 0, operation="neutral")
     require(nyq_row["strongest_hz"] == fs / 2, "Nyquist endpoint")
     reject("dominant Nyquist", lambda: grade_pitch(nyq_row))
     flat = np.sin(2 * np.pi * 440 * 2 ** (-15.04 / 1200) * t)
@@ -672,20 +778,32 @@ def negative_controls():
     reject(
         "15.04 cents flat",
         lambda: grade_pitch(
-            v17_row(flat, anchor, anchor, anchor, anchor, anchor, anchor, fs, 440, 0)
+            v17_row(
+                flat,
+                anchor,
+                anchor,
+                anchor,
+                anchor,
+                anchor,
+                anchor,
+                fs,
+                440,
+                0,
+                operation="neutral",
+            )
         ),
     )
     reject(
         "invalid bridge anchor",
-        lambda: grade_pitch(v17_row(m5, m5, m5, m5, upper, m5, m5, fs, 196, 0)),
+        lambda: grade_pitch(
+            v17_row(m5, m5, m5, m5, upper, m5, m5, fs, 196, 0, operation="neutral")
+        ),
     )
     colored = m5 + 0.1 * np.sin(2 * np.pi * 6151 * t)
-    off = WetTrace(
-        m5, fs, 196, 0, "injected 196 Hz sine", ("injected coloration", 1.0, 1), 0.0
-    )
+    off = reference_trace(m5, m5, fs, 196, "injected DI", "epoch-1", ("unity",))
     factory = replace(off, samples=colored, depth=0.5)
 
-    def paired(off_trace):
+    def paired(off_trace, on=factory):
         return v17_row(
             m5,
             m5,
@@ -697,15 +815,27 @@ def negative_controls():
             fs,
             196,
             0.5,
-            corrected=factory,
+            operation="corrected",
+            corrected=on,
             corrected_off=off_trace,
+            clock=off,
         )
 
     row = paired(off)
-    reject("unaligned wet pair", lambda: paired(replace(off, start_tick=1)))
-    reject(
-        "unmatched wet settings", lambda: paired(replace(off, settings=("other gain",)))
-    )
+    reject("off only", lambda: paired(off, None))
+    reject("factory only", lambda: paired(None))
+    for label, edit in [
+        ("unaligned wet pair", {"start_tick": 1}),
+        ("unmatched wet settings", {"settings": ("other gain",)}),
+        ("wrong epoch", {"epoch": "epoch-2"}),
+        ("wrong reference", {"m5_hash": off.m5_hash[::-1]}),
+        ("wrong measurement window", {"window": (1, fs)}),
+        ("joint shift", {"start_tick": 1, "end_tick": fs + 1, "window": (1, fs + 1)}),
+    ]:
+        reject(
+            label,
+            lambda edit=edit: paired(replace(off, **edit), replace(factory, **edit)),
+        )
     require(
         abs(row["factory_difference_over_off"] + 20) < 1e-9
         and row["local_q_difference_over_off"] == -240,
@@ -723,11 +853,33 @@ def negative_controls():
     return rejected
 
 
-def main():
-    OUT.mkdir(exist_ok=True, parents=True)
+def tool_hashes():
+    paths = [
+        *sorted(Path(__file__).parent.glob("o2_*.py")),
+        *sorted(Path(__file__).parent.glob("o2_*.rs")),
+        Path(__file__).with_name("guide_render.rs"),
+        Path(__file__).with_name("guide_epoch.rs"),
+        Path(__file__).with_name("guide_audit_build.py"),
+        Path(__file__).with_name("acoustic_identity.py"),
+        Path(obs.__file__),
+        Path(o1.__file__),
+        Path(guide.__file__),
+        *(
+            Path("rust/dsp/src/instrument") / (name + ".rs")
+            for name in ("o2", "waveguide", "friction", "ring")
+        ),
+        FIX / "o1_sha256.tsv",
+        FIX / "o2_sha256.tsv",
+        FIX / "o2_corner_peaks.tsv",
+        FIX / "acoustic/SHA256SUMS",
+    ]
+    return {p.name: guide.digest(p) for p in paths}
+
+
+def qualify(result):
     build(BINARY, o2=True)
-    qualify_audio()
-    result = {"electrical": UniqueRows(), "lifecycle": UniqueRows()}
+    result["replay"] = qualify_audio()
+    result.update(electrical=UniqueRows(), lifecycle=UniqueRows())
     for fs in RATES_EXTENDED:
         result["electrical"][str(fs)] = check_rate(fs)
     for fs in (32000, 48000, 192000):
@@ -745,8 +897,8 @@ def main():
         "sha256_f32le": sha256(nominal.tobytes()).hexdigest(),
     }
     data = acoustic()
+    result.update(data)
     result.update(
-        data,
         corners=corners(),
         sweep=sweep(48000),
         negatives=negative_controls(),
@@ -757,39 +909,51 @@ def main():
         for k, row in data["v17"].items()
         if False in row["passes"].values()
     }
-    try:
-        grade(result)
-        result["negatives"].update(coverage_negatives(result))
-        grade_controls(result["negatives"])
-    except ValueError as err:
-        result["neutral_candidate_passed"] = False
-        result["error"] = str(err)
-        write_json("results.json", result)
-        raise
-    result["neutral_candidate_passed"] = True
     result["all_tested_vectors_passed"] = not result["failed_predicates"]
-    result["stage"] = "isolated Rust submission awaiting independent Review 7"
+    result["stage"] = "acceptance tooling awaiting independent Review 8"
     result["head"] = guide.git("rev-parse", "HEAD")
-    result["tool_hashes"] = {
-        path.name: guide.digest(path)
-        for path in [
-            *sorted(Path(__file__).parent.glob("o2_*.py")),
-            *sorted(Path(__file__).parent.glob("o2_*.rs")),
-            Path("rust/dsp/src/instrument/o2.rs"),
-            Path(__file__).with_name("guide_render.rs"),
-            Path(__file__).with_name("guide_audit_build.py"),
-            Path(obs.__file__),
-            Path(o1.__file__),
-            Path(guide.__file__),
-            FIX / "o1_sha256.tsv",
-            FIX / "o2_sha256.tsv",
-            FIX / "o2_corner_peaks.tsv",
-            FIX / "acoustic/SHA256SUMS",
-        ]
-    }
-    write_json("results.json", result)
-    print("Review 5 witness", data["witness"])
+    result["tool_hashes"] = tool_hashes()
+    result["renderer_sha256"] = guide.digest(BINARY)
+    grade(result)
+    result["negatives"].update(coverage_negatives(result))
+    grade_controls(result["negatives"])
+    result["neutral_candidate_passed"] = True
     print("Retained downstream failures", result["failed_predicates"])
+
+
+def main():
+    OUT.mkdir(exist_ok=True, parents=True)
+    result = {"neutral_candidate_passed": False}
+    write_json(
+        "results.json",
+        {"neutral_candidate_passed": False, "error": "qualification incomplete"},
+    )
+    try:
+        qualify(result)
+        json.dumps(result, allow_nan=False)
+    except Exception as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+        result["neutral_candidate_passed"] = False
+        from o2_coverage import REQUIRED
+
+        result["missing_sections"] = sorted(REQUIRED - result.keys())
+        raise
+    finally:
+        # Preserve partial evidence, including the location of invalid numbers.
+        def clean(value):
+            if isinstance(value, dict):
+                return {k: clean(v) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                return [clean(v) for v in value]
+            if isinstance(value, np.generic):
+                return clean(value.item())
+            if isinstance(value, float) and not math.isfinite(value):
+                return None
+            return value
+
+        path = OUT / "results.tmp"
+        path.write_text(json.dumps(clean(result), allow_nan=False, indent=2) + "\n")
+        os.replace(path, OUT / "results.json")
 
 
 if __name__ == "__main__":
