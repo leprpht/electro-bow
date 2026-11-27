@@ -47,16 +47,26 @@ def summarize(rows, e, f0):
     harmonics = research.partials(tail[:, -1], fs, f0)
     center = research.partials(tail[:, 17], fs, f0)
     outgoing = research.partials(tail[:, 3], fs, f0)
+    valid = research.eligible_partials(harmonics, tail[:, -1])
+    center_valid = research.eligible_partials(center, tail[:, 17])
+    outgoing_valid = research.eligible_partials(outgoing, tail[:, 3])
     stats = {
         "rms_m_s": research.rms(x),
         "steady_rms_m_s": research.rms(x[-fs:]),
         "peak_m_s": float(abs(x).max()),
         "projection_Hz": f0,
         "harmonic_peak_m_s": abs(harmonics).tolist(),
-        "harmonic_phase_deg": np.angle(harmonics, deg=True).tolist(),
-        "envelope_dBr": research.db(abs(harmonics / harmonics[0])).tolist(),
-        "center_over_N_dB": research.db(abs(center / outgoing)).tolist(),
-        "aperture_over_center_dB": research.db(abs(harmonics / center)).tolist(),
+        "harmonic_phase_deg": [
+            float(np.angle(z, deg=True)) if ok else None
+            for z, ok in zip(harmonics, valid)
+        ],
+        "envelope_dBr": research.relative_db(harmonics, harmonics[0], valid & valid[0]),
+        "center_over_N_dB": research.relative_db(
+            center, outgoing, center_valid & outgoing_valid
+        ),
+        "aperture_over_center_dB": research.relative_db(
+            harmonics, center, valid & center_valid
+        ),
     }
     if kind in ("bend", "vibrato"):
         stats["auxiliary_motion"] = research.tracking(rows[:, -1], fs, e["hz"], kind)
@@ -74,10 +84,16 @@ def summarize(rows, e, f0):
             x, 32000 // divisor, fs // divisor, window=("kaiser", 10)
         )[-32000:]
         power = abs(np.fft.rfft((y - y.mean()) * np.hanning(len(y)))) ** 2
-        stats["common_32k_centroid_Hz"] = float(
-            power @ np.arange(len(power)) / power.sum()
+        stats["common_32k_centroid_Hz"] = (
+            float(power @ np.arange(len(power)) / power.sum())
+            if y.std() > research.SPECTRAL_FLOOR
+            else None
         )
-        stats["common_32k_above_6k_fraction"] = float(power[6000:].sum() / power.sum())
+        stats["common_32k_above_6k_fraction"] = (
+            float(power[6000:].sum() / power.sum())
+            if y.std() > research.SPECTRAL_FLOOR
+            else None
+        )
     return stats
 
 

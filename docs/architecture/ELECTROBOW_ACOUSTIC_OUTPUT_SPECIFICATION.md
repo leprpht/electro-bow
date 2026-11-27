@@ -27,6 +27,8 @@ Use Simpson weights (1,4,1)/6 at s=(.162,.174,.186). For each d=m+u, I=(1−u)N[
 
 ## O2. Loading, detail and unit conversion
 
+Review 5 qualified O1. The [Stage 06 O2 contract](ELECTROBOW_O2_PICKUP_RESPONSE_SPECIFICATION.md) freezes the proposed per-lane filter, units, lifecycle and post-commit fault behavior for Review 6. Its [acceptance matrix](../implementation/O2_ACCEPTANCE_MATRIX.md) retains the original V17 denominator. Owner calibration and Noise semantics remain open.
+
 The sign of the coil and connection is a convention. Choose positive sensed velocity for positive DI orientation, apply captured sign once at the end. Without flux sensitivity or recorded voltage calibration use .85 FS/(m/s) for the common-gain data. Use a further fixed 1/√2 nominal gain for delivered pickup (equal-power two-wave convention and headroom, independent of note). Equal power of the two rays is an approximation. Publish the common-gain result before this scalar as well. No automatic normalization.
 
 For vₚ initialise previous input and DC state to zero at silent launch. With c=exp(−2π20/fs), h[n]=c(h[n−1]+vₚ[n]−vₚ[n−1]). Set a=.85h/√2. Electrical response is a damped two-pole low pass L(s)=ω₀²/(s²+ω₀s/Q+ω₀²), nominal fₑ=3200 Hz, Q=1/√2. A coil inductance and shunt capacitance can produce ω₀≈1/√(LC), with winding and external loads setting damping. These constants describe a smooth loaded surrogate. No measured guitar electronics or radiation impulse is embedded. At fs prewarp g=tan(πfₑ/fs), D=1+g/Q+g², b=(g²,2g²,g²)/D, a₁=2(g²−1)/D, a₂=(1−g/Q+g²)/D. Define DFII-transposed l=b₀a+z₁, z₁←b₁a−a₁l+z₂, z₂←b₂a−a₂l using the old z₂. Zero states on reset/launch. Both poles strictly inside the unit circle by bilinear mapping of the LHP. Pass DC in L, reject DC in the preceding blocker.
@@ -86,10 +88,11 @@ for each host frame in order:
     finish any due feature job; publish only if its lane/gesture is still supported
     snapshot next due identity frame; schedule its bounded budget across next hop
     advance voice E, pitch, V,R; run launch or lift if commanded
-    tick qualified Guide once: same reads, solver, guards, commits, M5 diagnostic
-    on live success: read shifted nut taps; DC, load, detail, complex filters, source gains, σG
+    call Guide::tick_observed once, receiving M5 and O1 on live success
+    on live success: use returned O1 velocity for proposed DC, load, detail, then held I1 and σG
     mix (1−Character·E)d + Character·(Ew); cache last finite E and Ew per lane
-    on fault: invalidate offending lane; use M6 cached E and Ew on detection tick
+    on physical error: guide already invalidated before commit, begin M6 cached fade
+    on post-commit output fault: invalidate lane, reset output state, begin same detection-tick fade
     finish both lanes, existing linked Out, host bypass; zero frames advance nothing
 ```
 
@@ -97,8 +100,8 @@ Publish a completed analysis job on the **next identity hop** before taking the 
 
 | Rust location | Contract after independent approval |
 |---|---|
-| Existing `friction.rs`, `ring.rs`, `waveguide.rs` | Preserve feedback sources/behavior. Add only `Guide::observed_velocity(&self, period:f64)->Result<f64,Fault>` reading committed nut history after successful tick. A test oracle includes the emission sample and eager prefix. Keep M5 diagnostic and existing tests. |
-| New `instrument/acoustic.rs` | `AcousticLane::prepare(fs), reset(), tick(v,noise,gains)->Result<f64,Fault>`; DC pair, two load states, 24 complex states and twelve current/target gains. No wet crossover or empirical formants. Polarity/G live in Voice. |
+| Existing `friction.rs`, `ring.rs`, `waveguide.rs` | Qualified `Guide::tick_observed` delivers owned M5/O1 samples from the same successful tick. O1 uses the shared ring interpolator. A valid cleared tick has no observation. |
+| Proposed `instrument/o2.rs` | Stage 06 specifies four per-lane f64 scalars and the q output in FS. I1 and its complex states require a separate design decision. |
 | New `instrument/identity.rs` | `Identity::prepare(fs), push(hp), observe(frame,gesture), advance()->Option<GainFrame>, reset()`; preallocated FIR/histories, twelve dB states, support stamps, one projection job. `GainFrame{gesture,end,g:[f64;12]}`. No heaps in launch, hop or reset. |
 | Future `analysis.rs`, `pitch.rs`, `voice.rs` | A1/A2 frame contains end, Hz/Q, fast/slow/brightness. Inject it for S4a. Voice owns ramps, E, timers, support/epoch, pending and current color, polarity and cached finite product. |
 | `instrument/mod.rs`, `filter_bank/mod.rs`, `attack/mod.rs`, `output/mod.rs` | Stream owns scratch and both lanes, existing input splitter, linked direct swell and protector. Keep `body.rs` on the existing unsupported-rate fallback. Existing Out 0…2, 10 ms full-range trim slew, .98 FS ceiling and 50 ms linked recovery. No ABI field, runtime library, C++ processing or host state additions. |

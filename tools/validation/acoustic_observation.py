@@ -97,6 +97,38 @@ def partials(x, fs, f, count=12):
     )
 
 
+SPECTRAL_FLOOR = 1e-12
+
+
+def eligible_partials(values, window):
+    """Peak amplitudes and AC RMS use the signal's own FS or m/s units."""
+    return (window.std() > SPECTRAL_FLOOR) & (abs(values) > SPECTRAL_FLOOR)
+
+
+def relative_db(num, den, eligible):
+    # Mask before division, including exact-zero denominators.
+    num, den = np.broadcast_arrays(num, den)
+    return [
+        float(db(abs(a / b))) if ok and abs(b) > SPECTRAL_FLOOR else None
+        for a, b, ok in zip(num, den, eligible)
+    ]
+
+
+def harmonic_report(window, fs, f):
+    h = partials(window, fs, f)
+    valid = eligible_partials(h, window) & (len(window) * f >= 2 * fs)
+    return {
+        "peak_FS": abs(h).tolist(),
+        "dBr": relative_db(h, h[0], valid & valid[0]),
+        "phase_deg": [
+            float(np.angle(z * np.exp(-1j * k * np.angle(h[0])), deg=True))
+            if ok and valid[0]
+            else None
+            for k, (z, ok) in enumerate(zip(h, valid), 1)
+        ],
+    }
+
+
 def stats(x, fs, f, data, kind):
     tail = x[-fs:]
     power = abs(np.fft.rfft((tail - tail.mean()) * np.hanning(fs), 8 * fs)) ** 2
@@ -109,17 +141,9 @@ def stats(x, fs, f, data, kind):
     )
     total = power[1:].sum()
 
-    def harmonics(window):
-        h = partials(window, fs, f)
-        return {
-            "peak_FS": abs(h).tolist(),
-            "dBr": db(abs(h) / abs(h[0])).tolist(),
-            "phase_deg": np.angle(
-                h * np.exp(-1j * np.arange(1, len(h) + 1) * np.angle(h[0])), deg=True
-            ).tolist(),
-        }
-
-    h = harmonics(tail)
+    h = harmonic_report(tail, fs, f)
+    voiced = tail.std() > SPECTRAL_FLOOR
+    eligible_seven = all(value is not None for value in h["dBr"][:7])
     cycles = np.flatnonzero((data[1:, 10] != 0) & (data[:-1, 10] == 0)) + 1
     cycles = cycles[cycles >= len(x) - fs]
     warps = [
@@ -139,21 +163,27 @@ def stats(x, fs, f, data, kind):
         "above_ceiling": int(np.sum(abs(x) > 0.98)),
         "required_reduction_db": max(0.0, db(peak / 0.98)),
         "clipped": int(np.sum(abs(x) >= 1)),
-        "centroid_Hz": np.dot(freq, power) / total,
-        "hf_fraction": power[freq >= 6000].sum() / total,
-        "residual_fraction": power[~mask & (freq > 0)].sum() / total,
-        "saw7_db": rms(np.array(h["dBr"][:7]) + db(np.arange(1, 8))),
-        "tilt_db_oct": np.polyfit(np.log2(np.arange(1, 8)), h["dBr"][:7], 1)[0],
+        "centroid_Hz": np.dot(freq, power) / total if voiced else None,
+        "hf_fraction": power[freq >= 6000].sum() / total if voiced else None,
+        "residual_fraction": power[~mask & (freq > 0)].sum() / total
+        if voiced
+        else None,
+        "saw7_db": rms(np.array(h["dBr"][:7]) + db(np.arange(1, 8)))
+        if eligible_seven
+        else None,
+        "tilt_db_oct": np.polyfit(np.log2(np.arange(1, 8)), h["dBr"][:7], 1)[0]
+        if eligible_seven
+        else None,
         "harmonics": h,
-        "attack50": harmonics(x[: fs // 20]),
+        "attack50": harmonic_report(x[: fs // 20], fs, f),
         "cycle_residual": rms(warps - np.mean(warps, axis=0))
         / np.std(np.mean(warps, axis=0))
-        if warps
+        if warps and voiced and np.std(np.mean(warps, axis=0)) > SPECTRAL_FLOOR
         else None,
     }
     if kind == "lift":
         values["lift_windows"] = [
-            harmonics(x[n : n + fs // 20])
+            harmonic_report(x[n : n + fs // 20], fs, f)
             for n in (fs - fs // 20, fs, fs + fs // 10, 2 * fs)
         ]
     return values
