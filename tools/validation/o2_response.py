@@ -44,10 +44,10 @@ def apply_load(x, coeff, initial=(0.0, 0.0, 0.0, 0.0)):
         h = c * (h + v - previous)
         previous = v
         a = 0.85 * h / ROOT2
-        loaded = b0 * a + z1
-        z1 = (b1 * a - a1 * loaded) + z2
-        z2 = b2 * a - a2 * loaded
-        blocked[i], loaded[i] = h, loaded
+        sample = b0 * a + z1
+        z1 = (b1 * a - a1 * sample) + z2
+        z2 = b2 * a - a2 * sample
+        blocked[i], loaded[i] = h, sample
     require(
         np.isfinite(blocked).all()
         and np.isfinite(loaded).all()
