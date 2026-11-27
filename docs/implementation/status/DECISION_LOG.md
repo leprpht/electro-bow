@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-27 · Proposed O2 electrical and gain contract, pending Review 6
+
+Keep the single 20 Hz/3200 Hz surrogate with common .85 conversion and fixed delivery trim 1/√2 for offline comparison. A published loaded Stratocaster has an electrical resonance in this band. It supplies no absolute velocity calibration. Grade the original delivered wet against converted M5 at fixed gain, count actual linked limiter gain on the nominal pluck at S6R, and preserve post-commit invalidation and the cached M6 fade. The owner has yet to accept reference voicing, gain intent or intrinsic carrier detail as Noise. Independent Review 6 and listening are pending. [Stage 06](STAGE_06_O2_SPECIFICATION.md) · [Measurement matrix](../O2_ACCEPTANCE_MATRIX.md)
+
 ## 2026-11-27 · Bind isolated O1 reads to the successful guide transaction
 
 Return an owned three-station velocity snapshot from a single private observed-tick call. Its period comes directly from the committed guide transaction. Shift the integer lag by one while preserving the original fraction, and evaluate missing history with the launch seed. A valid cleared tick has no sample. The bounded reads introduce no additional fault after commit. The isolated implementation and measurements await independent Review 5. Any change to acoustic transfer, identity, gesture or production routing requires its separate review. [Contract, measurements and ownership](STAGE_05_O1_OBSERVATION_IMPLEMENTATION.md)

@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-27 · Stage 06 submitted for independent Review 6
+
+The O2 specification and executable offline matrix use qualified Rust O1. All eleven electrical rate cases passed. At 48 kHz/440 Hz the common and trimmed peaks were 1.005419/.710938 FS, implying 6.155 dB demand at maximum G and Out. Nine injected identity cases failed level or strongest-fundamental criteria. Original M5 remains the V17 denominator. Physical and shipping regressions passed. The compact owner listening package, linked nominal-use test and proposed post-commit O2 fault behavior have separate owners. Rust O2, I1, amended gesture, live wet routing, integration and release remain held. Baseline S4a retains its independent scope. [Stage 06 handoff and commands](STAGE_06_O2_SPECIFICATION.md) · [O2 specification](../../architecture/ELECTROBOW_O2_PICKUP_RESPONSE_SPECIFICATION.md)
+
 ## 2026-11-27 · Review 5 qualifies isolated Rust O1 and preserves diagnostic parity
 
 **Qualified at `cc43f9f`.** Retain S2a contact, S2a ring and S2b guide. The private observed tick reconstructs the two-ray, three-station total velocity from the same successful commit and period. Review 5 independently matched all 2,066,150 frozen-grid ticks within 1.837e−12 m/s against recorded history and an independently evolving eager guide, with a further 272,290 explicit 4-octave/s ticks. Compiled and independent controls rejected wrong signs, times, seed, aperture and epoch. All 46,242,000 original guide/M5 rows, 12 newly encoded M5 WAVs and 13,820 private-state rows matched bitwise. Zero sample-path heap operations, local partition invariance and Cargo, native and packaged regressions passed. No production code changed during review. [Review and reproduction](REVIEW_05_O1_OBSERVATION.md)
