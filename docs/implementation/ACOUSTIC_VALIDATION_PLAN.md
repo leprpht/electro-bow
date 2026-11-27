@@ -2,6 +2,8 @@
 
 The signed-off V01–V22 matrix remains in force. The [Stage 06 matrix](O2_ACCEPTANCE_MATRIX.md) fixes intermediate diagnostics and preserves the converted-M5-to-final wet denominator. It defines strict JSON nulls for ineligible O1 phase and partial ratios, including lift tails below the 1e−12 m/s diagnostic floor. A physics pass, source-feature discrimination, acoustic reference match and a human preference are different deliverables. [Existing qualification criteria](DSP_VALIDATION_PLAN.md) · [Proposed specification](../architecture/ELECTROBOW_ACOUSTIC_OUTPUT_SPECIFICATION.md)
 
+The Stage 07 renderer compares actual Rust intermediate taps to independent convolution and grades the same-tick returned audio with the Review 6 scorer. The frozen corpus includes physical/M5 parity, explicit injected identity failures and original-gain and matched listening files. [Stage 07 reproduction](status/STAGE_07_O2_IMPLEMENTATION.md#reproduction)
+
 ## Replay and corpus
 
 Run from the repository root with the pinned Rust toolchain on PATH and Python with NumPy/SciPy. The saved reference WAVs and hashes below allow an offline replay. No network, ignored Review 3 script, host or pitch selector is required. The qualification writes approximately 4.5 GB to the ignored build directory.

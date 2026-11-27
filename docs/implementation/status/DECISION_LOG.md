@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-28 · Keep the physical commit and electrical fault distinct
+
+The isolated harness consumes the owned observation once. An output fault preserves evidence of that physical commit and disposes the epoch once. A guide fault resets the electrical lane after the guide performs its own invalidation. Use the converted M5 denominator for V17, the returned zero-depth signal for local subtraction and paired final wet traces for downstream subtraction. The fixed gain, trim, load and detail remain provisional pending independent Review 7 and the owner's listening and calibration decisions. [Stage 07 submission](STAGE_07_O2_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Approve provisional O2 only at the isolated Rust boundary
 
 Use one same-tick qualified O1 velocity input, the fixed 20 Hz blocker, prewarped 3200 Hz Butterworth, .85 FS/(m/s) conversion, 1/√2 delivery trim and bounded injected detail depth. Require corrected coverage, strongest-component and sweep scoring at isolated exit. Preserve original converted M5 as the authoritative V17 denominator and use actual final wet for the downstream factory residual. The caller owns post-commit invalidation and the M6 fade of cached E and E·w. Preserve exact linked nominal-use accounting at S6R. Electrical calibration, product gain and Noise semantics, listening and integrated V08/V17/V20 retain their gates. Existing S2a/S2b/O1 qualification and independent baseline S4a authorization stand. I1, final A2, amended gesture/S4b, supported S5, production and release remain held. [Review 6](REVIEW_06_O2_SPECIFICATION.md)
