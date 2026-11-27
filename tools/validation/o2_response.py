@@ -3,11 +3,9 @@
 import math
 
 import numpy as np
-from scipy import signal, optimize
-
 from acoustic_observation import SPECTRAL_FLOOR
 from guide_qualification import RATES
-
+from scipy import optimize, signal
 
 ROOT2 = math.sqrt(2)
 RATES_EXTENDED = sorted(
@@ -46,10 +44,10 @@ def apply_load(x, coeff, initial=(0.0, 0.0, 0.0, 0.0)):
         h = c * (h + v - previous)
         previous = v
         a = 0.85 * h / ROOT2
-        l = b0 * a + z1
-        z1 = (b1 * a - a1 * l) + z2
-        z2 = b2 * a - a2 * l
-        blocked[i], loaded[i] = h, l
+        loaded = b0 * a + z1
+        z1 = (b1 * a - a1 * loaded) + z2
+        z2 = b2 * a - a2 * loaded
+        blocked[i], loaded[i] = h, loaded
     require(
         np.isfinite(blocked).all()
         and np.isfinite(loaded).all()
@@ -88,13 +86,13 @@ def check_rate(fs):
     n = 2 ** math.ceil(math.log2(0.5 * fs))
     x = np.zeros(n)
     x[0] = 1
-    h, l, state = apply_load(x, coeff)
+    h, loaded, state = apply_load(x, coeff)
     freq = np.fft.rfftfreq(n, 1 / fs)
     errors = {}
     for noise in (0, 0.5, 1):
-        measured = np.fft.rfft(blend(h, l, noise)) * ROOT2 / 0.85
+        measured = np.fft.rfft(blend(h, loaded, noise)) * ROOT2 / 0.85
         errors[str(noise)] = check_transfer(measured, reference(fs, freq, noise))
-    tail = max(abs(l[-1]), *map(abs, state))
+    tail = max(abs(loaded[-1]), *map(abs, state))
     require(tail < TAIL_TOL, "impulse tail")
 
     def lp_at(hz):
@@ -104,7 +102,7 @@ def check_rate(fs):
     require(abs(cutoff - 3200) < 1e-6, "cutoff")
     # One second scalar step, followed by 59 more seconds of the same step.
     # Hold v exactly 1. In h'=c*(h+1-1) roundoff reaches a fixed point.
-    step_h, step_l, end = apply_load(np.ones(math.ceil(fs)), coeff)
+    _step_h, step_l, end = apply_load(np.ones(math.ceil(fs)), coeff)
     remaining = math.ceil(60 * fs) - len(step_l)
     final_h = c * (end[1] + 1 - 1)
     require(final_h == end[1], "step blocker failed to settle")
@@ -131,7 +129,7 @@ def check_rate(fs):
             if eligible
             else None
         )
-        transform = np.exp(-2j * np.pi * f * times) * l * ROOT2 / 0.85
+        transform = np.exp(-2j * np.pi * f * times) * loaded * ROOT2 / 0.85
         observed = transform.sum()
         check_transfer(observed, val)
         measured_delay = (
@@ -140,34 +138,34 @@ def check_rate(fs):
         if eligible:
             require(abs(measured_delay - delay) < 1e-8, "group delay seconds")
         response.append(
-            dict(
-                hz=f,
-                re=float(observed.real),
-                im=float(observed.imag),
-                lp_abs=abs(lp_at(f)),
-                phase_deg=np.angle(observed, deg=True) if eligible else None,
-                delay_ms=1000 * measured_delay if eligible else None,
-            )
+            {
+                "hz": f,
+                "re": float(observed.real),
+                "im": float(observed.imag),
+                "lp_abs": abs(lp_at(f)),
+                "phase_deg": np.angle(observed, deg=True) if eligible else None,
+                "delay_ms": 1000 * measured_delay if eligible else None,
+            }
         )
-    return dict(
-        rate=fs,
-        coefficients=coeff,
-        dc_pole=c,
-        lp_pole_radii=poles.tolist(),
-        cutoff_hz=cutoff,
-        impulse_end=tail,
-        impulse_frames=n,
-        max_complex_error=errors,
-        response=response,
-        step_peak_FS=float(max(abs(step_l))),
-        step_first_FS=step_l[0],
-        nyquist_abs={
-            str(noise): abs(np.fft.rfft(blend(h, l, noise))[-1]) * ROOT2 / 0.85
+    return {
+        "rate": fs,
+        "coefficients": coeff,
+        "dc_pole": c,
+        "lp_pole_radii": poles.tolist(),
+        "cutoff_hz": cutoff,
+        "impulse_end": tail,
+        "impulse_frames": n,
+        "max_complex_error": errors,
+        "response": response,
+        "step_peak_FS": float(max(abs(step_l))),
+        "step_first_FS": step_l[0],
+        "nyquist_abs": {
+            str(noise): abs(np.fft.rfft(blend(h, loaded, noise))[-1]) * ROOT2 / 0.85
             for noise in (0, 0.5, 1)
         },
-        step_final_state=[1.0, final_h, *final_z],
-        long_step_frames=len(step_l) + remaining,
-    )
+        "step_final_state": [1.0, final_h, *final_z],
+        "long_step_frames": len(step_l) + remaining,
+    }
 
 
 def verify_taps(h, a, loaded, detail, common, noise):

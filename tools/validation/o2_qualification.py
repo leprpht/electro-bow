@@ -6,20 +6,17 @@ import subprocess
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
-from zipfile import ZipFile, ZipInfo, ZIP_DEFLATED
-
-import numpy as np
-from scipy import signal
-from scipy.io import wavfile
+from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import acoustic_observation as obs
-from acoustic_identity import resonant_bands
 import guide_qualification as guide
-from guide_audit_build import build
+import numpy as np
 import o1_qualification as o1
+from acoustic_identity import resonant_bands
+from guide_audit_build import build
 from o2_response import (
-    ROOT2,
     RATES_EXTENDED,
+    ROOT2,
     apply_load,
     blend,
     check_rate,
@@ -29,6 +26,8 @@ from o2_response import (
     require,
     verify_taps,
 )
+from scipy import signal
+from scipy.io import wavfile
 
 OUT = Path("build/stage-06")
 FIX = Path(__file__).with_name("fixtures")
@@ -90,13 +89,13 @@ def strongest(f, target):
 
 def summary(x, fs, f):
     spec = obs.harmonic_report(x, fs, f) if len(x) >= 3 else None
-    return dict(
-        rms=obs.rms(x),
-        ac_rms=x.std(),
-        peak=float(np.max(abs(x))),
-        mean=float(x.mean()),
-        harmonic_FS=spec,
-    )
+    return {
+        "rms": obs.rms(x),
+        "ac_rms": x.std(),
+        "peak": float(np.max(abs(x))),
+        "mean": float(x.mean()),
+        "harmonic_FS": spec,
+    }
 
 
 def fft_metrics(x, fs, f, ceiling=None):
@@ -112,13 +111,13 @@ def fft_metrics(x, fs, f, ceiling=None):
     total = power[in_band].sum()
     eta = power[in_band & harmonic].sum() / total
     hf = power[in_band & (hz >= 6000)].sum() / total
-    return dict(
-        centroid_hz=(hz[in_band] @ power[in_band]) / total,
-        eta=eta,
-        residual=1 - eta,
-        high_fraction=hf,
-        high_flag=bool(hf > HFBAND_FLAG),
-    )
+    return {
+        "centroid_hz": (hz[in_band] @ power[in_band]) / total,
+        "eta": eta,
+        "residual": 1 - eta,
+        "high_fraction": hf,
+        "high_flag": bool(hf > HFBAND_FLAG),
+    }
 
 
 def pluck(fs, f, n):
@@ -136,7 +135,7 @@ def pluck(fs, f, n):
     return 0.35 * x / max(abs(x))
 
 
-def v17_row(q, neutral, h, l, m5, v, nut, fs, f, noise, corrected=None):
+def v17_row(q, neutral, h, loaded, m5, v, nut, fs, f, noise, corrected=None):
     # Analyze a whole three-second physical render; final one-second window throughout.
     tail = slice(-fs, None)
 
@@ -150,32 +149,32 @@ def v17_row(q, neutral, h, l, m5, v, nut, fs, f, noise, corrected=None):
     rms_db = level(wet, m5)
     residual = level(q - neutral, neutral)
     color_db = level(wet, q)
-    return dict(
-        peak_FS=float(max(abs(wet))),
-        rms_FS=obs.rms(wet[tail]),
-        same_source_difference_rms_FS=obs.rms((q - neutral)[tail]),
-        harmonics=obs.harmonic_report(wet[tail], fs, measured_f),
-        spatial_over_N=level(v, nut),
-        load_over_blocked=level(l, 0.85 * h / ROOT2),
-        detail_over_neutral=level(q, neutral),
-        common_over_M5=level(ROOT2 * q, m5),
-        corrected_over_neutral=color_db,
-        final_over_M5=rms_db,
-        factory_difference_over_off=residual if noise == 0.5 else None,
-        measured_f0=measured_f,
-        strongest_hz=peak_f,
-        spectral=spectral,
-        passes=dict(
-            level=abs(rms_db) <= 3,
-            coloration=abs(color_db) <= 3,
-            fundamental=bool(strongest(peak_f, f)),
-            high_note_eta=bool(spectral["eta"] >= 0.85)
+    return {
+        "peak_FS": float(max(abs(wet))),
+        "rms_FS": obs.rms(wet[tail]),
+        "same_source_difference_rms_FS": obs.rms((q - neutral)[tail]),
+        "harmonics": obs.harmonic_report(wet[tail], fs, measured_f),
+        "spatial_over_N": level(v, nut),
+        "load_over_blocked": level(loaded, 0.85 * h / ROOT2),
+        "detail_over_neutral": level(q, neutral),
+        "common_over_M5": level(ROOT2 * q, m5),
+        "corrected_over_neutral": color_db,
+        "final_over_M5": rms_db,
+        "factory_difference_over_off": residual if noise == 0.5 else None,
+        "measured_f0": measured_f,
+        "strongest_hz": peak_f,
+        "spectral": spectral,
+        "passes": {
+            "level": abs(rms_db) <= 3,
+            "coloration": abs(color_db) <= 3,
+            "fundamental": bool(strongest(peak_f, f)),
+            "high_note_eta": bool(spectral["eta"] >= 0.85)
             if fs == 32000 and f == 1318.51 and noise == 0
             else None,
-            factory_eta=bool(spectral["eta"] >= 0.85) if noise == 0.5 else None,
-            factory_residual=residual <= -28 if noise == 0.5 else None,
-        ),
-    )
+            "factory_eta": bool(spectral["eta"] >= 0.85) if noise == 0.5 else None,
+            "factory_residual": residual <= -28 if noise == 0.5 else None,
+        },
+    }
 
 
 def corrections(q, fs, f):
@@ -191,28 +190,33 @@ def corners():
     result = []
     for speed, r in product((0.06, 0.16), (1.2, 2.4)):
         raw, digest = trace(fs, f, speed, r)
-        h, l, _ = apply_load(raw[:, -1], coefficients(fs))
-        check_transfer(blend(h, l, 1) - l, 2 * (blend(h, l, 0.5) - l))
-        require(obs.rms((blend(h, l, 0.5) - l)[-fs:]) > FLOOR, "absent carrier detail")
+        h, loaded, _ = apply_load(raw[:, -1], coefficients(fs))
+        check_transfer(
+            blend(h, loaded, 1) - loaded, 2 * (blend(h, loaded, 0.5) - loaded)
+        )
+        require(
+            obs.rms((blend(h, loaded, 0.5) - loaded)[-fs:]) > FLOOR,
+            "absent carrier detail",
+        )
         for noise in (0, 0.5, 1):
-            q = blend(h, l, noise)
+            q = blend(h, loaded, noise)
             for ident, wet in corrections(q, fs, f).items():
                 for g, char, out in product((0.08, 1.4), (0.0, 1.0), (0.0, 2.0)):
                     pre = out * ((1 - char) * direct + char * g * wet)
                     peak = float(np.max(abs(pre)))
                     result.append(
-                        dict(
-                            V=speed,
-                            R=r,
-                            noise=noise,
-                            vector=ident,
-                            G=g,
-                            character=char,
-                            internal_Out=out,
-                            peak=peak,
-                            demand_dB=max(0.0, guide.db(peak / 0.98)),
-                            trace=digest,
-                        )
+                        {
+                            "V": speed,
+                            "R": r,
+                            "noise": noise,
+                            "vector": ident,
+                            "G": g,
+                            "character": char,
+                            "internal_Out": out,
+                            "peak": peak,
+                            "demand_dB": max(0.0, guide.db(peak / 0.98)),
+                            "trace": digest,
+                        }
                     )
     return result
 
@@ -253,7 +257,7 @@ def listening(clips):
                     file.parent.mkdir(exist_ok=True)
                     wavfile.write(file, 48000, (sources[name] * scale).astype("f4"))
                     archive_entry(pack, file.relative_to(OUT), file.read_bytes())
-                key[anon] = dict(source=name, listening_gain=gain)
+                key[anon] = {"source": name, "listening_gain": gain}
         ref = FIX / "acoustic/vaisvil-low-e-stroke.wav"
         archive_entry(pack, "reference/" + ref.name, ref.read_bytes())
         archive_entry(
@@ -288,46 +292,53 @@ def acoustic():
         key = f"{fs}/{f}/{speed}/{r}"
         raw, inputs[key] = trace(fs, f, speed, r)
         v, m5 = raw[:, -1], raw[:, 11]
-        h, l, _ = apply_load(v, coefficients(fs))
-        check_transfer(blend(h, l, 1) - l, 2 * (blend(h, l, 0.5) - l))
-        require(obs.rms((blend(h, l, 0.5) - l)[-fs:]) > FLOOR, "absent carrier detail")
+        h, loaded, _ = apply_load(v, coefficients(fs))
+        check_transfer(
+            blend(h, loaded, 1) - loaded, 2 * (blend(h, loaded, 0.5) - loaded)
+        )
+        require(
+            obs.rms((blend(h, loaded, 0.5) - loaded)[-fs:]) > FLOOR,
+            "absent carrier detail",
+        )
         for noise in (0, 0.5, 1):
-            q = blend(h, l, noise)
-            verify_taps(h, 0.85 * h / ROOT2, l, q, ROOT2 * q, noise)
-            rows[f"{key}/{noise}"] = v17_row(q, l, h, l, m5, v, raw[:, 3], fs, f, noise)
+            q = blend(h, loaded, noise)
+            verify_taps(h, 0.85 * h / ROOT2, loaded, q, ROOT2 * q, noise)
+            rows[f"{key}/{noise}"] = v17_row(
+                q, loaded, h, loaded, m5, v, raw[:, 3], fs, f, noise
+            )
         if f < 1000 and speed == 0.1 and r == 1.8:
-            for ident, corrected in corrections(l, fs, f).items():
+            for ident, corrected in corrections(loaded, fs, f).items():
                 if ident != "neutral":
                     rows[f"stress/{f}/{ident}"] = v17_row(
-                        l, l, h, l, m5, v, raw[:, 3], fs, f, 0, corrected
+                        loaded, loaded, h, loaded, m5, v, raw[:, 3], fs, f, 0, corrected
                     )
         if speed == 0.16:
-            peak = float(np.max(abs(l)))
-            witness = dict(
-                common=ROOT2 * peak,
-                trimmed=peak,
-                implied=peak * 1.4 * 2,
-                demand_db=guide.db(peak * 1.4 * 2 / 0.98),
-            )
+            peak = float(np.max(abs(loaded)))
+            witness = {
+                "common": ROOT2 * peak,
+                "trimmed": peak,
+                "implied": peak * 1.4 * 2,
+                "demand_db": guide.db(peak * 1.4 * 2 / 0.98),
+            }
             for a, b in zip(witness.values(), (1.005419, 0.710938, 1.990628, 6.155)):
                 require(
                     abs(a - b) < (0.0005 if b == 6.155 else 1e-6), "Review 5 witness"
                 )
         elif f < 1000 and r == 1.8:
-            clips[f"{f:g}Hz"] = {"M5": m5[:fs], "O2": ROOT2 * l[:fs]}
+            clips[f"{f:g}Hz"] = {"M5": m5[:fs], "O2": ROOT2 * loaded[:fs]}
             if f == 440:
                 clips["detail"] = {
-                    "off": ROOT2 * l[:fs],
-                    "factory": ROOT2 * blend(h, l, 0.5)[:fs],
+                    "off": ROOT2 * loaded[:fs],
+                    "factory": ROOT2 * blend(h, loaded, 0.5)[:fs],
                 }
         if f == 1318.51:
             f0 = guide.spectrum(m5[-fs:], fs, f)["hz"]
             for name, x in [
                 ("raw", v),
                 ("blocked", h),
-                ("loaded", l * ROOT2 / 0.85),
-                ("factory", blend(h, l, 0.5) * ROOT2 / 0.85),
-                ("full", blend(h, l, 1) * ROOT2 / 0.85),
+                ("loaded", loaded * ROOT2 / 0.85),
+                ("factory", blend(h, loaded, 0.5) * ROOT2 / 0.85),
+                ("full", blend(h, loaded, 1) * ROOT2 / 0.85),
             ]:
                 divisor = math.gcd(fs, 32000)
                 y = signal.resample_poly(
@@ -356,10 +367,10 @@ def acoustic():
     for f in (82.41, 440):
         fs = 48000
         raw, inputs[f"lift/{f}"] = trace(fs, f, kind="lift")
-        h, l, _ = apply_load(raw[:, -1], coefficients(fs))
+        h, loaded, _ = apply_load(raw[:, -1], coefficients(fs))
         f0 = guide.spectrum(raw[:fs, 11], fs, f)["hz"]
         for noise in (0, 0.5, 1):
-            q = blend(h, l, noise)
+            q = blend(h, loaded, noise)
             for start, end in [
                 (0, 1 / fs),
                 (0, 0.01),
@@ -375,20 +386,20 @@ def acoustic():
                 window = slice(round(start * fs), round(end * fs))
                 d = summary(q[window], fs, f0)
                 d.update(
-                    detail_difference_rms=obs.rms((q - l)[window]),
-                    load_minus_input_rms=obs.rms((l - 0.85 * h / ROOT2)[window]),
+                    detail_difference_rms=obs.rms((q - loaded)[window]),
+                    load_minus_input_rms=obs.rms((loaded - 0.85 * h / ROOT2)[window]),
                 )
                 onset[f"{f}/{noise}/{start}-{end}"] = d
             if f == 82.41 and noise == 0.5:
                 clips["lift"] = {"O2": ROOT2 * q[: 2 * fs]}
-    return dict(
-        v17=rows,
-        high_band=high,
-        onset_release=onset,
-        witness=witness,
-        inputs=inputs,
-        listening=listening(clips),
-    )
+    return {
+        "v17": rows,
+        "high_band": high,
+        "onset_release": onset,
+        "witness": witness,
+        "inputs": inputs,
+        "listening": listening(clips),
+    }
 
 
 def sweep(fs):
@@ -398,13 +409,15 @@ def sweep(fs):
     x = np.r_[
         0.1 * signal.chirp(t, 65, 3, 4000, method="logarithmic"), np.zeros(fs // 2)
     ]
-    h, l, _ = apply_load(x, coefficients(fs))
+    h, loaded, _ = apply_load(x, coefficients(fs))
     freq = np.fft.rfftfreq(len(x), 1 / fs)
     den = np.fft.rfft(x)
     valid = (freq >= 65) & (freq <= 4000) & (abs(den) / len(x) > FLOOR)
     rows = {}
     for noise in (0, 0.5, 1):
-        measured = np.fft.rfft(blend(h, l, noise))[valid] * ROOT2 / (0.85 * den[valid])
+        measured = (
+            np.fft.rfft(blend(h, loaded, noise))[valid] * ROOT2 / (0.85 * den[valid])
+        )
         error = check_transfer(measured, reference(fs, freq[valid], noise))
         magnitude = abs(measured)
         maxima = signal.find_peaks(magnitude)[0]
@@ -418,13 +431,13 @@ def sweep(fs):
             if len(left) and len(right):
                 width = grid[peak + right[0]] - grid[left[-1]]
             flagged.append(
-                dict(hz=grid[peak], dB=guide.db(magnitude[peak]), width_hz=width)
+                {"hz": grid[peak], "dB": guide.db(magnitude[peak]), "width_hz": width}
             )
-        rows[str(noise)] = dict(
-            maximum_dB=guide.db(max(magnitude)),
-            peaks_above_6dB=flagged,
-            complex_error=error,
-        )
+        rows[str(noise)] = {
+            "maximum_dB": guide.db(max(magnitude)),
+            "peaks_above_6dB": flagged,
+            "complex_error": error,
+        }
     return rows
 
 
@@ -442,7 +455,7 @@ def negative_controls():
     fs = 48000
     coeff = coefficients(fs)
     x = np.r_[1.0, np.zeros(fs // 2 - 1)]
-    h, l, _ = apply_load(x, coeff)
+    h, loaded, _ = apply_load(x, coeff)
     hz = np.fft.rfftfreq(len(x), 1 / fs)
     ref = reference(fs, hz)
 
@@ -472,7 +485,7 @@ def negative_controls():
     reject(
         "single rate fixed cutoff",
         lambda: check_transfer(
-            np.fft.rfft(l) * ROOT2 / 0.85,
+            np.fft.rfft(loaded) * ROOT2 / 0.85,
             reference(32000, np.fft.rfftfreq(len(x), 1 / 32000)),
         ),
     )
@@ -487,21 +500,21 @@ def negative_controls():
         lambda: transfer_check(apply_load(x, coeff, (0.0, 0.0, 0.1, -0.1))[1]),
     )
     a = 0.85 * h / ROOT2
-    q = blend(h, l, 0.5)
+    q = blend(h, loaded, 0.5)
     for name, taps in [
-        ("gain after filter input", (h, h, l, q, ROOT2 * q, 0.5)),
-        ("duplicate conversion", (h, a * 0.85, l, q, ROOT2 * q, 0.5)),
-        ("duplicate trim", (h, a / ROOT2, l, q, ROOT2 * q, 0.5)),
-        ("excess detail", (h, a, l, l + 0.1 * (a - l), ROOT2 * q, 0.5)),
-        ("per-render normalization", (h, a, l, q, q / max(abs(q)), 0.5)),
+        ("gain after filter input", (h, h, loaded, q, ROOT2 * q, 0.5)),
+        ("duplicate conversion", (h, a * 0.85, loaded, q, ROOT2 * q, 0.5)),
+        ("duplicate trim", (h, a / ROOT2, loaded, q, ROOT2 * q, 0.5)),
+        ("excess detail", (h, a, loaded, loaded + 0.1 * (a - loaded), ROOT2 * q, 0.5)),
+        ("per-render normalization", (h, a, loaded, q, q / max(abs(q)), 0.5)),
     ]:
-        reject(name, lambda: verify_taps(*taps))
+        reject(name, lambda taps=taps: verify_taps(*taps))
 
     def silent(y):
         require(np.count_nonzero(y) == 0, "silence feedthrough")
 
     z = np.zeros(256)
-    zh, zl, state = apply_load(z, coeff)
+    zh, zl, _state = apply_load(z, coeff)
     for noise in (0, 0.5, 1):
         silent(blend(zh, zl, noise))
     reject("silent offset", lambda: silent(zl + 1e-16))
@@ -519,7 +532,7 @@ def negative_controls():
 
     t = np.arange(fs) / fs
     raw = np.zeros((fs, 22))
-    entry = dict(rate=fs, trajectory="steady", seconds=1, hz=196)
+    entry = {"rate": fs, "trajectory": "steady", "seconds": 1, "hz": 196}
     for scale in (0.0, 1e-22):
         raw[:, -1] = scale * np.sin(2 * np.pi * 196 * t)
         report = o1.summarize(raw, entry, 196)
@@ -564,7 +577,7 @@ def negative_controls():
 def main():
     OUT.mkdir(exist_ok=True, parents=True)
     build(OUT / "observed-render")
-    result = dict(electrical={}, errors={})
+    result = {"electrical": {}, "errors": {}}
     for fs in RATES_EXTENDED:
         try:
             result["electrical"][str(fs)] = check_rate(fs)
@@ -572,13 +585,13 @@ def main():
             result["errors"][str(fs)] = str(exc)
     pluck_frames = pluck(48000, 196, 144000)
     nominal = np.pad(pluck_frames.astype("<f4"), (4800, 62400))
-    result["nominal_mono_input"] = dict(
-        fs=48000,
-        frames=len(nominal),
-        eligible_frames=len(pluck_frames),
-        peak_FS=float(max(abs(nominal))),
-        sha256_f32le=sha256(nominal.tobytes()).hexdigest(),
-    )
+    result["nominal_mono_input"] = {
+        "fs": 48000,
+        "frames": len(nominal),
+        "eligible_frames": len(pluck_frames),
+        "peak_FS": float(max(abs(nominal))),
+        "sha256_f32le": sha256(nominal.tobytes()).hexdigest(),
+    }
     data = acoustic()
     result.update(
         data,
