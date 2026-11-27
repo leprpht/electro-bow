@@ -1,5 +1,13 @@
 # Decision log
 
+## 2026-11-27 · Preserve the oldest tap through commit and measure absolute arrival
+
+Use M2's exact capacity and expose the oldest committed sample at integer D=C. At fractional delays below C, retain both neighbors through every read. Separating validation from infallible writes lets the future lane owner discard a complete prospective tick if either arm or any other M6 check fails. M4 epoch invalidation and relaunch operate in constant time.
+
+Measure the first nonzero cut-loop impulse arrival and the phase of its compact residual support. This fixes the cycle ambiguity of the fundamental-only principal phase probe. The actual individual Rust responses and the offline reference circuit passed their respective gates. Actual Rust circuit delay and closed-loop seed parity remain S2b obligations.
+
+For V02, use target-prepared coefficient bits, search for an actual stored coincidence in the bounded fold neighborhood, and adjudicate the floor on the independently selected intersection using the specified binary64 operation order inside the four-ULP band. Independent enumeration, exact-mode grading, slip tolerances and contact arithmetic are preserved. Awaiting independent Review 2. [Evidence and changed files](STAGE_02_RING_IMPLEMENTATION.md)
+
 ## 2026-11-26 · Admit every representably increasing M3b load span
 
 Review 00.1 identified a width-dependent loss of the upper root. From Slide(+) at d=.12026541114915246 and k=.12029965498642688 m/s the old search and its oracle fell back to Stick. The two stored loads are distinct and enclose d, so their linear interpolant has a sliding intersection. V02 now compares selected mode and slip independently of force balance.

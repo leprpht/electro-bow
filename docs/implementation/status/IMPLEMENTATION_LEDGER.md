@@ -1,5 +1,13 @@
 # Implementation ledger
 
+## 2026-11-27 · S2a ring awaits independent Review 2
+
+Clean entry at `02f9a27`. The isolated Rust ring at `98d5ac1` passed all seven ring tests. Its 100 ms retune fixtures compared 576,688 individual taps against chronological histories across eight rates. The 42 measured arm impulses had maximum phase-delay error .001066610 samples rounded up. The allocator counted zero operations during sample processing and epoch changes. All six ring mutations failed the intended tests.
+
+The offline cut-loop impulse measured worst absolute delay error .001770988 samples across 21 pairs. Zero delay, either one-sample error and reversed bridge weights failed the .003-sample gate. S2b still owns the actual Rust passive circuit, the complete evolving eager/lazy waves and pickup during retune, and lane-wide M6 commits. Review 2 precedes S2b implementation.
+
+The Review 1 floor and tie corrections passed 84,874 original and 12 added Rust/graph comparisons on arm64 macOS and x86-64 macOS under Rosetta. The qualified contact arithmetic is unchanged. Native debug and release passed 71 unit and 3 integration tests each, CTest passed 4/4, and the rebuilt ABI/VST3 fixed-input payloads matched baseline. [Stage evidence, integration contract and replay](STAGE_02_RING_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Review 1 qualifies isolated S2a nonlinear contact
 
 **S2a contact complete at `e112274782bbd53148239345b691f7801bdac8aa`.** The independent review reproduced the signed near-fold failure on the parent and verified the corrected upper root on the actual Rust solver. It reran 80,500 nonzero-incident-wave Rust V02 cases, all 84,874 exact-mismatch V02 and fold comparisons, and an additional 43,580 Decimal-enumerated cases. Mode and slip passed on the reviewed stack. The maximum lookup was nine segment probes and the isolated solver allocator recorded zero operations. Three compiled Rust branch mutations failed the differential comparison while passing their physical residuals.
