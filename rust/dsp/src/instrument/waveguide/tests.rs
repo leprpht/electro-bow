@@ -337,7 +337,8 @@ fn expired_seed_cannot_reexcite_the_guide() {
     g.edit_proposal = None;
     for n in 0..3 * g.bridge.storage().len() {
         let hz = if n % 2 == 0 { 65.0 } else { 1320.0 };
-        let s = g.tick(hz, 0.0, 0.0).unwrap().unwrap();
+        let (s, observation) = g.tick_observed(hz, 0.0, 0.0).unwrap().unwrap();
+        assert_eq!(observation.velocity(), 0.0);
         assert_eq!(
             [
                 s.from_nut,
@@ -351,3 +352,6 @@ fn expired_seed_cannot_reexcite_the_guide() {
         );
     }
 }
+
+#[path = "o1_tests.rs"]
+mod o1;

@@ -1,5 +1,27 @@
 # Decision log
 
+## 2026-11-27 · Approve provisional O2 only at the isolated Rust boundary
+
+Use one same-tick qualified O1 velocity input, the fixed 20 Hz blocker, prewarped 3200 Hz Butterworth, .85 FS/(m/s) conversion, 1/√2 delivery trim and bounded injected detail depth. Require corrected coverage, strongest-component and sweep scoring at isolated exit. Preserve original converted M5 as the authoritative V17 denominator and use actual final wet for the downstream factory residual. The caller owns post-commit invalidation and the M6 fade of cached E and E·w. Preserve exact linked nominal-use accounting at S6R. Electrical calibration, product gain and Noise semantics, listening and integrated V08/V17/V20 retain their gates. Existing S2a/S2b/O1 qualification and independent baseline S4a authorization stand. I1, final A2, amended gesture/S4b, supported S5, production and release remain held. [Review 6](REVIEW_06_O2_SPECIFICATION.md)
+
+## 2026-11-27 · Proposed O2 electrical and gain contract, pending Review 6
+
+Keep the single 20 Hz/3200 Hz surrogate with common .85 conversion and fixed delivery trim 1/√2 for offline comparison. A published loaded Stratocaster has an electrical resonance in this band. It supplies no absolute velocity calibration. Grade the original delivered wet against converted M5 at fixed gain, count actual linked limiter gain on the nominal pluck at S6R, and preserve post-commit invalidation and the cached M6 fade. The owner has yet to accept reference voicing, gain intent or intrinsic carrier detail as Noise. Independent Review 6 and listening are pending. [Stage 06](STAGE_06_O2_SPECIFICATION.md) · [Measurement matrix](../O2_ACCEPTANCE_MATRIX.md)
+
+## 2026-11-27 · Bind isolated O1 reads to the successful guide transaction
+
+Return an owned three-station velocity snapshot from a single private observed-tick call. Its period comes directly from the committed guide transaction. Shift the integer lag by one while preserving the original fraction, and evaluate missing history with the launch seed. A valid cleared tick has no sample. The bounded reads introduce no additional fault after commit. The isolated implementation and measurements await independent Review 5. Any change to acoustic transfer, identity, gesture or production routing requires its separate review. [Contract, measurements and ownership](STAGE_05_O1_OBSERVATION_IMPLEMENTATION.md)
+
+## 2026-11-27 · Qualify the pickup observation in isolation and retain the acoustic gates
+
+Independent Review 4 confirms the recorded pickup-led target and approves the two-ray, post-commit nut-arm observer for isolated Rust work. Keep the M5 diagnostic, contact, fractional-delay ring, recurrence, M4 history, M6 contract and shipping fallback. The observer uses committed emission and original launch history. Treat the aperture as an effective reference geometry. Do not make the proposed acoustic specification authoritative for the wet path.
+
+The 3.2 kHz load and nominal trim remain conditional on gain and reference evidence. Hold the I1 transfer until the V17 fundamental-ordering failure, capture ownership and held-source repeatability are resolved. Hold the proposed gesture and supported control changes until measured DI behavior and compact owner listening provide a decision. The A2 final selector remains independently blocked. Existing injected S4a may proceed within Review 3 scope. S4b, supported S5 wet, S6 and S7 remain held. The original V17–V22 thresholds and stage owners remain authoritative. [Review 4 decision table](REVIEW_04_ACOUSTIC_RESEARCH.md#g-implementation-authorization)
+
+## 2026-11-27 · Approve the reference direction; propose the acoustic algorithms
+
+**Owner decision.** Use a pickup-led bowed electric guitar retaining incoming DI character. **Proposed for independent review.** Use nut-arm spatial total velocity, a finite-aperture loaded pickup, bounded twelve-partial source transfer and a seeded virtual stroke with evolving speed/force. Retain S2a/S2b and the shipping fallback. The geometry, electrical constants, control semantics and perceptual gate have no production approval. Stage 04 also maintains the actual lifecycle, optimization and ratio-floor checks in validation tooling. [Evidence and per-stage decisions](STAGE_04_ACOUSTIC_RESEARCH.md) · [Proposed amendments](../ACOUSTIC_MIGRATION_PLAN.md#proposed-reconciliation-for-independent-sign-off)
+
 ## 2026-11-27 · Commit both guide arms, loss, branch and DC as one sample
 
 The private guide receives prescribed Hz, V and normalized k. M4 installs the seed under zero wet gain. Each tick observes the actual midpoint pickup before solving, stages both writes and commits scalar state only when both tokens exist. The M5 DC result is available at unity captured gain for the future controller. A fault returns on the detection tick after invalidating both histories. The future controller owns the cached gain and wet fade.

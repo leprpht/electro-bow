@@ -22,6 +22,44 @@ pub(super) struct Sample {
     pub audio: f64,
 }
 
+/// Both taps carry signed velocity in the outgoing nut-wave convention.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Station {
+    pub direct: f64,
+    pub reflected_history: f64,
+}
+
+impl Station {
+    fn read(nut: &DelayRing, period: f64, position: f64) -> Self {
+        Self {
+            direct: nut.read_committed((position - BETA) * period / 2.0),
+            reflected_history: nut.read_committed((2.0 - position - BETA) * period / 2.0),
+        }
+    }
+
+    pub fn velocity(self) -> f64 {
+        self.direct - self.reflected_history
+    }
+}
+
+/// O1 observation in m/s at the same physical time as the returned M5 sample.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Observation {
+    pub stations: [Station; 3],
+}
+
+impl Observation {
+    fn read(nut: &DelayRing, period: f64) -> Self {
+        let stations = [0.162, 0.174, 0.186].map(|s| Station::read(nut, period, s));
+        Self { stations }
+    }
+
+    pub fn velocity(self) -> f64 {
+        let [left, center, right] = self.stations.map(Station::velocity);
+        (left + 4.0 * center + right) / 6.0
+    }
+}
+
 pub(super) struct Guide {
     rate: f64,
     bridge: DelayRing,
@@ -120,6 +158,23 @@ impl Guide {
     /// Ok(None) is a silent cleared lane. Err(Fault) starts controller recovery
     /// on this very sample. A lifted live lane continues to propagate.
     pub fn tick(&mut self, hz: f64, speed: f64, k: f64) -> Result<Option<Sample>, Fault> {
+        Ok(self.advance(hz, speed, k)?.map(|(sample, _)| sample))
+    }
+
+    /// Advance once and capture O1 from this commit's nut history and period.
+    /// Cleared and faulted ticks carry no observation.
+    pub fn tick_observed(
+        &mut self,
+        hz: f64,
+        speed: f64,
+        k: f64,
+    ) -> Result<Option<(Sample, Observation)>, Fault> {
+        Ok(self
+            .advance(hz, speed, k)?
+            .map(|(sample, period)| (sample, Observation::read(&self.nut, period))))
+    }
+
+    fn advance(&mut self, hz: f64, speed: f64, k: f64) -> Result<Option<(Sample, f64)>, Fault> {
         let result = self.transaction(hz, speed, k);
         if result.is_err() {
             self.fault();
@@ -127,7 +182,7 @@ impl Guide {
         result
     }
 
-    fn transaction(&mut self, hz: f64, speed: f64, k: f64) -> Result<Option<Sample>, Fault> {
+    fn transaction(&mut self, hz: f64, speed: f64, k: f64) -> Result<Option<(Sample, f64)>, Fault> {
         if !(65.0..=1320.0).contains(&hz) || !(0.0..=0.16).contains(&speed) {
             return Err(Fault);
         }
@@ -212,7 +267,7 @@ impl Guide {
         self.mode = sample.contact.mode;
         self.previous_pickup = sample.pickup;
         self.previous_dc = dc;
-        Ok(Some(sample))
+        Ok(Some((sample, period)))
     }
 }
 

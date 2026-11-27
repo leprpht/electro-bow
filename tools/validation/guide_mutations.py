@@ -1,5 +1,8 @@
 """Compile each defective guide in an isolated workspace. Require its nominated numerical failure."""
 
+if not __debug__:
+    raise RuntimeError("guide mutations require enabled Python assertions")
+
 from pathlib import Path
 from shutil import copy2, copytree
 from subprocess import run, PIPE, STDOUT
