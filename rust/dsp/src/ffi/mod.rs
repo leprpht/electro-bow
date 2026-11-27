@@ -370,3 +370,6 @@ pub unsafe extern "C" fn eb_bow_process_panel(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) use tests::heap_operations;

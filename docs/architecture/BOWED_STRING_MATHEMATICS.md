@@ -45,14 +45,18 @@ Z is constant in this normalized virtual instrument. Use Z=1 N·s/m as a scale c
 **M3b. Bounded numerical solution.** Store previous mode as Stick or Slide(sign). Define h=abs(d), s=sign(d) and hᵢ=qᵢ+kμᵢ. The piecewise-linear function q+kμ(q) is convex, tends to infinity, and can initially decrease. The descending portion has negative incremental load-line slope; use the upper, increasing slip branch. If the previous mode was Stick or the slip sign changed, choose static whenever admissible. Otherwise follow the upper slip branch as long as it exists. This implements hysteresis at multiple intersections. A transition to the opposite sign can still require slipping when the static force limit is exceeded. [Desvages, Fig. 4.9](https://www.acoustics.ed.ac.uk/wp-content/uploads/Theses/Desvages_Charlotte__PhDThesis_UniversityOfEdinburgh_2018.pdf)
 
 ```text
+if d or k is nonfinite, k < 0, or required curve/load arithmetic is nonfinite: return Fault
 if k == 0: return (0, Stick)
 if d == 0 or (previous != Slide(s) and h <= k*mu0): return (d, Stick)
-if h >= h9: q = h − k*mu9
+if h == h9: q = q9
+else if h > h9: q = h − k*mu9
 else:
     search i = 8 down to 0, at most 9 segments
-    choose first with h[i+1] − h[i] > 1e−12 m/s and h[i] <= abs(d) <= h[i+1]
-    if found:
-        q = q[i] + (q[i+1]−q[i])*(abs(d)−h[i])/(h[i+1]−h[i])
+    choose first with h[i] <= h <= h[i+1]
+    if found and h == h[i+1]: q = q[i+1]      # includes coincident endpoints
+    else if found:
+        u = (h−h[i])/(h[i+1]−h[i])            # 0 <= u < 1 before rounding
+        q = q[i] + (q[i+1]−q[i])*u
     else:
         if h <= k*mu0 + 1e−12: return (clamp(d,−k*mu0,k*mu0), Stick)
         otherwise raise numerical fault
@@ -60,9 +64,24 @@ if q <= 1e−12 m/s: return (d, Stick)
 return (d − s*q, Slide(s))
 ```
 
-Here h[i] and q[i] denote tabulated knot loads and slip speeds. The solve is exact to roundoff for the chosen linear segments, even if successive samples cross multiple knots. No convergence tolerance or iteration count depends on pitch or pressure. A flat segment at the fold has an adjacent upper branch; choose its upper endpoint by scanning in reverse. The analytic tail avoids running beyond the table. Verify finite inputs and outputs, residual |q+kμ(q)−h|≤1e−10 m/s for normal test values and |j|≤kμ₀+1e−10. An impossible branch or nonfinite state triggers the voice fault procedure in M6.
+Each hᵢ is the stored binary64 sum of qᵢ and the separately rounded product kμᵢ. Use ordinary f64 multiply, add, subtract and divide in the order shown. An enclosing pair with distinct increasing loads is admissible at **any representable width**. Descending pairs cannot satisfy the ordered enclosure. A coincident pair intersects only at its common load and contributes its upper slip endpoint. Searching from high q selects the maximum admissible intersection, including ties with neighboring segments and the constant tail. The enclosed numerator bounds the interpolation fraction in [0,1]. There is one division on the selected interior segment and at most nine probes.
+
+The rejected width cutoff of 1e−12 m/s lost a root at k=.12029965498642688 and h=.12026541114915246. The stored loads span 5.000028169277471e−13 m/s. From Slide(+) they give q=.030000277554192455 m/s by the f64 operations above. Forming the endpoint loads in exact arithmetic from the same prepared knots gives approximately .03000064466 m/s. The inverse slope amplifies endpoint rounding near a fold. V02 compares against intersections of the stored graph. [Review counterexample](../implementation/status/REVIEW_00_1_SPECIFICATION.md) · [Implementation replay](../implementation/status/STAGE_01_CONTACT_IMPLEMENTATION.md)
+
+V02 uses the signed load-line residual |r+j−d|<1e−10 m/s on every finite result. With k=0 the returned Stick tag clears branch memory, j=0 and physical r=d. With k>0 on Stick the graph at r=0 is the static interval: require |r|<1e−10, |j−d|<1e−10 and |j|≤kμ₀+1e−10 m/s. On Slide require q>1e−12, sign(r)=sign(d)=stored sign, |q+kμ(q)−h|<1e−10 and the same force bound. Check the chosen upper root independently of these residuals. The 1e−12 static fallback margin applies only after exhausting the search. The separate 1e−12 slip floor applies only after selecting q. Fault is a distinct solver result with no usable wave or branch to commit. M6 owns the audible response.
 
 **Worked branch check.** At Z=1, k=.10 m/s and d=.14 m/s, the static limit is .165 m/s. From Stick, j=.14, r=0 and F=.280 N. From Slide(+), the same inputs intersect the increasing segment between q=.08 and .16 at r=.08552224 m/s. Then j=.05447776 m/s and F=.10895552 N. Both choices satisfy the load line. This case catches a solver that always chooses the static root, reverses the slip sign, or uses the full force as a velocity correction.
+
+Additional unit-test vectors at Z=1 follow. Branch signs refer to the previous and resulting samples. Force is 2j.
+
+| d (m/s) | k (m/s) | Previous | New mode | j (m/s) | r (m/s) |
+|---:|---:|---|---|---:|---:|
+| −.14 | .10 | Slide(+) | Stick | −.14 | 0 |
+| −.20 | .10 | Slide(+) | Slide(−) | −.0447478545412210 | −.155252145458779 |
+| .14 | 0 | Slide(+) | Stick (cleared) | 0 | .14 |
+| .2726217499930773 | .3486472674315129 | Slide(+) | Slide(+) | .1926217499930773 | .08 |
+
+The last vector records the reference stack. For a target-prepared exact-tie fixture, start at k=(.08−.04)/(μ(.04)−μ(.08)) and search up to 64 adjacent binary64 values each way for equal stored endpoint loads. Use their common h and both signed adjacent queries. Choose its upper endpoint on the adjacent increasing branch. At h₉ the constant-tail and last-segment roots coincide. A signed zero mismatch gives j=r=0; nonfinite d even with k=0, negative/nonfinite k, invalid intermediates, or exhaustion without an admissible static interval produce Fault. The positive .14 Stick example has sliding-curve discrepancy .025 m/s because static force can take any value inside the interval.
 
 ## M4. Launch from a physically consistent history
 
@@ -87,9 +106,9 @@ Feed the resulting u through a separate causal four-band splitter with the exist
 
 ## M6. Energy, release and floating-point limits
 
-The net wave power leaving the junction is Z[(a+j)²+(b+j)²−a²−b²]=2Zj(a+b+j)=Fv. Work from an external virtual bow is FV; F(V−v)=Fr≥0 is frictional dissipation. A stationary bow cannot supply positive net energy in this point model. Periodic steady state requires positive cycle-average string work equal to reflection/interpolation losses, a return near one string period, and a contact regime that alternately sticks and slips. Force bounds alone cannot guarantee that regime. In free decay the loop magnitude at fixed frequency is at most g per circuit. At 65 Hz ideal amplitude T60≈ln(.001)/(65 ln(.98))=5.26 s; interpolation shortens the decay of high harmonics. The musical release uses a shorter output envelope.
+The net wave power leaving the junction is Z[(a+j)²+(b+j)²−a²−b²]=2Zj(a+b+j)=Fv. For V02 verify |net flux−Fv|<1e−10 W and |F|≤F_N μ₀+2e−10 N at Z=1. Work from an external virtual bow is FV; F(V−v)=Fr≥0 is frictional dissipation. A stationary bow cannot supply positive net energy in this point model. Periodic steady state requires positive cycle-average string work equal to reflection/interpolation losses, a return near one string period, and a contact regime that alternately sticks and slips. Force bounds alone cannot guarantee that regime. In free decay the loop magnitude at fixed frequency is at most g per circuit. At 65 Hz ideal amplitude T60≈ln(.001)/(65 ln(.98))=5.26 s; interpolation shortens the decay of high harmonics. The musical release uses a shorter output envelope.
 
-At fixed bounded controls the interpolation and FIR are convex averages and the nut has unit reflection magnitude. If |j|≤J, sup norms satisfy |N|≤g sup|B|+J and |B|≤sup|N|+J after including initial histories. Thus an invariant bound exists, e.g. B_bound≥2J/(1−g), N_bound=gB_bound+J with both bounds also covering the seed and preloaded FIR. This loose bound even applies to valid time-varying reads; it makes no assertion of musical output. Keep a stricter **fault threshold** of 4 m/s absolute for either outgoing wave, pickup or loss state. If a value is nonfinite, exceeds this guard or the solve fails, discard the wave epoch, output a 5 ms linear ramp from the last finite emitted wet value to zero, then require new acquisition. Keep a diagnostic counter in test builds. Never use regular clipping of the internal waveform to pass a stability test. A nominal note must generate zero faults, sample-peak limiting should seldom engage.
+At fixed bounded controls the interpolation and FIR are convex averages and the nut has unit reflection magnitude. If |j|≤J, sup norms satisfy |N|≤g sup|B|+J and |B|≤sup|N|+J after including initial histories. Thus an invariant bound exists, e.g. B_bound≥2J/(1−g), N_bound=gB_bound+J with both bounds also covering the seed and preloaded FIR. This loose bound even applies to valid time-varying reads; it makes no assertion of musical output. Keep a stricter **fault threshold** of 4 m/s absolute for either outgoing wave, pickup or loss state. If a value is nonfinite, exceeds this guard or the solve fails, invalidate the affected wave epoch immediately, before storing waves or rendering that tick. For a fault at host sample n₀ take the last finite lane wet product E·w and its E from n₀−1 (zero from reset). For i=0…N−1 output both cached values scaled by (N−1−i)/N, N=max(1,floor(.005fs+.5)). The first decrement occurs at n₀, the first forced zero at n₀+N−1. Use the cached product directly in A4. Never extend the fault fade on a repeated fault. The unaffected lane advances normally and linked output protection still processes the final mix. Require fresh acquisition for the invalidated lane. Keep a diagnostic counter in test builds. Never use regular clipping of the internal waveform to pass a stability test. A nominal note must generate zero faults, sample-peak limiting should seldom engage.
 
 On loss of control confidence freeze the last pitch for the finite hold specified in the architecture. At release lift the bow (k=0) and fade the rendered wave to zero before invalidation. With silence from reset there is no launch, no stored wave, and exact zero wet output. Use finite checks on control ingress and ring accesses only after bounded indexing, f64 states, f32 I/O, the existing host denormal guard and explicit zeroing of very small inactive states (<1e−30). The DC blocker and meters are outside the feedback loop.
 

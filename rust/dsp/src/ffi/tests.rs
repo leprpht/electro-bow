@@ -204,3 +204,12 @@ fn instrument_callback_and_reset_have_no_heap_activity() {
         eb_instrument_destroy(handle);
     }
 }
+
+/// Use the same per-thread allocator probe for isolated DSP tests.
+pub(crate) fn heap_operations(run: impl FnOnce()) -> usize {
+    HEAP_OPERATIONS.with(|count| count.set(0));
+    TRACK.with(|track| track.set(true));
+    run();
+    TRACK.with(|track| track.set(false));
+    HEAP_OPERATIONS.with(Cell::get)
+}

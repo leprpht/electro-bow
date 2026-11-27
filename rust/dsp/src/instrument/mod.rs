@@ -2,6 +2,13 @@
 #![forbid(unsafe_code)]
 
 mod body;
+// Prepared physical model is private until controller integration.
+#[cfg_attr(not(test), allow(dead_code))]
+mod friction;
+#[cfg_attr(not(test), allow(dead_code))]
+mod ring;
+#[cfg_attr(not(test), allow(dead_code))]
+mod waveguide;
 
 use crate::{attack::Attack, filter_bank::BandSplit, output::Output};
 use body::Body;
