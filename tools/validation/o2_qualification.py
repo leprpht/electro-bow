@@ -18,7 +18,7 @@ from o2_audio import physical_key
 from o2_audio import qualify as qualify_audio
 from o2_audio import rows as audio_rows
 from o2_bench import BINARY, DEPTHS, OUT, check_rate, replay, run, timing
-from o2_coverage import UniqueRows, coverage_negatives, grade
+from o2_coverage import UniqueRows, coverage_negatives, grade, grade_controls
 from o2_response import (
     RATES_EXTENDED,
     ROOT2,
@@ -757,9 +757,10 @@ def main():
         for k, row in data["v17"].items()
         if False in row["passes"].values()
     }
-    result["negatives"].update(coverage_negatives(result))
     try:
         grade(result)
+        result["negatives"].update(coverage_negatives(result))
+        grade_controls(result["negatives"])
     except ValueError as err:
         result["neutral_candidate_passed"] = False
         result["error"] = str(err)

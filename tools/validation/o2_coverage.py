@@ -361,9 +361,12 @@ def grade(result):
             < (0.0005 if k == "demand_db" else 1e-6),
             "gain " + k,
         )
-    keys(result["negatives"], NEGATIVES, "negative controls")
+
+
+def grade_controls(controls):
+    keys(controls, NEGATIVES, "negative controls")
     require(
-        all(isinstance(msg, str) and msg for msg in result["negatives"].values()),
+        all(isinstance(msg, str) and msg for msg in controls.values()),
         "missing rejection",
     )
 
@@ -371,10 +374,16 @@ def grade(result):
 def coverage_negatives(result):
     controls = {}
 
-    def reject(name, fn, data):
+    # Start with an accepted, complete report. Send each defective copy
+    # through the same aggregate that determines the maintained runner's exit.
+    grade(result)
+
+    def reject(name, section, data, expected):
         try:
-            fn(data)
+            grade({**result, section: data})
         except ValueError as err:
+            if expected not in str(err):
+                raise
             controls[name] = str(err)
         else:
             raise ValueError("escaped " + name)
@@ -382,12 +391,17 @@ def coverage_negatives(result):
     key = "48000/196/0.1/1.8/0.5"
     missing = dict(result["v17"])
     del missing[key]
-    reject("omitted required row", stationary, missing)
+    reject("omitted required row", "v17", missing, "V17 inventory")
     sweep = deepcopy(result["sweep"])
     defect = {"hz": 3000.0, "dB": 8.0, "width_hz": 17.0}
     sweep["0"].update(maximum=defect, maximum_dB=8.0, peaks_above_6dB=[defect])
-    reject("reported sweep peak", sweeps, sweep)
-    reject("duplicate corner", corners, result["corners"] + [result["corners"][0]])
+    reject("reported sweep peak", "sweep", sweep, "sweep above +6 dB")
+    reject(
+        "duplicate corner",
+        "corners",
+        result["corners"] + [result["corners"][0]],
+        "corners inventory",
+    )
     for name in ("missing predicate", "null measurement", "nonfinite measurement"):
         rows = dict(result["v17"])
         rows[key] = deepcopy(rows[key])
@@ -397,5 +411,10 @@ def coverage_negatives(result):
             rows[key]["factory_difference_over_off"] = (
                 None if name == "null measurement" else math.nan
             )
-        reject(name, stationary, rows)
+        reject(
+            name,
+            "v17",
+            rows,
+            "inventory" if name == "missing predicate" else "missing/nonfinite",
+        )
     return controls
