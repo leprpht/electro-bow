@@ -174,12 +174,47 @@ fn stored_fold_loads_retain_the_upper_root() {
             assert!(verify(&curve, input(right.next_up(), k), Slide(Positive)).slip >= Q[i + 1]);
         }
     }
-    let k = (Q[5] - Q[4]) / (curve.mu[4] - curve.mu[5]);
+    let mu = curve.prepared_coefficients();
+    // Preserve the two named Review 1 inputs on their original stored graph.
+    if mu[3..=5].iter().map(|v| v.to_bits()).eq([
+        0x3fea_abbc_5655_f763,
+        0x3fe5_59cd_a364_61a3,
+        0x3fe1_adf1_3325_a650,
+    ]) {
+        for (h, k, slip) in [
+            (
+                0.12026541114915246,
+                0.12029965498642688,
+                0.030000277554192455,
+            ),
+            (0.2726217499930773, 0.3486472674315129, 0.08),
+        ] {
+            for (s, direction) in [(1.0, Positive), (-1.0, Negative)] {
+                assert_eq!(
+                    verify(&curve, input(s * h, k), Slide(direction)).slip,
+                    s * slip
+                );
+            }
+        }
+    }
+    let center = (Q[5] - Q[4]) / (mu[4] - mu[5]);
+    // An algebraic fold may have distinct rounded loads. Find a stored tie.
+    let k = (center.to_bits() - 64..=center.to_bits() + 64)
+        .map(f64::from_bits)
+        .find(|k| Q[4] + k * mu[4] == Q[5] + k * mu[5])
+        .expect("no coincident load within 64 ULP of the fold");
     let h = Q[5] + k * curve.mu[5];
     assert_eq!(Q[4] + k * curve.mu[4], h);
     for s in [-1.0, 1.0] {
         let mode = Slide(if s > 0.0 { Positive } else { Negative });
+        assert_eq!(
+            verify(&curve, input(s * h.next_down(), k), mode).mode,
+            Stick
+        );
         assert_eq!(verify(&curve, input(s * h, k), mode).slip, s * Q[5]);
+        let above = verify(&curve, input(s * h.next_up(), k), mode);
+        assert_eq!(above.mode, mode);
+        assert!(above.slip.abs() >= Q[5]);
     }
 }
 

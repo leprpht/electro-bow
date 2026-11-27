@@ -8,6 +8,12 @@ use std::io::{self, BufRead, BufWriter, Write};
 fn main() -> io::Result<()> {
     let curve = FrictionCurve::prepare();
     let mut out = BufWriter::new(io::stdout().lock());
+    if std::env::args().nth(1).as_deref() == Some("--coefficients") {
+        for mu in curve.prepared_coefficients() {
+            writeln!(out, "{:016x}", mu.to_bits())?;
+        }
+        return out.flush();
+    }
     for line in io::stdin().lock().lines() {
         let line = line?;
         let mut fields = line.split_whitespace();

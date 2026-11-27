@@ -56,6 +56,11 @@ impl FrictionCurve {
         }
     }
 
+    /// Stored M3a graph for bit-sensitive offline replay.
+    pub fn prepared_coefficients(&self) -> &[f64; Q.len()] {
+        &self.mu
+    }
+
     /// Evaluate M3 scattering without writing voice, FIR or ring state.
     pub fn solve(
         &self,

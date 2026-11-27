@@ -71,7 +71,7 @@ S1 is the audited shipping processor. S2a is isolated contact/ring, S2b the driv
 | V01 bypass, IDs, v1–v5 | S1 then S6H, controls/state/bypass | Native host regression | Bypass ramp, original finite host input, historical states, six IDs | Host integration |
 | V02 branch, residual, force sign/bound, power, fold, finite/fault result, probe count | S2a contact | Independent stored-graph intersections vs isolated Rust j, signed slip, mode, fault and lookup count | Signed grid, sweeps, knot and static bounds, narrow and flat folds, nonfinite and lift per M3 | Contact only, then driven guide |
 | V03 tap weights, indexing and wraps | S2a ring | Isolated DSP impulse at ring output | D=1,3.25,capacity−2, moving integer boundaries | Ring |
-| V03 one-circuit phase | S2b passive guide with ring, nut and bridge FIR | Isolated DSP returning wave, unwrapped relative to P | Contact lifted, three V03 frequencies | Passive guide |
+| V03 one-circuit phase | S2b passive guide with ring, nut and bridge FIR | Isolated DSP returning wave, absolute delay from the timed impulse or phase continuous from DC | Contact lifted, three V03 frequencies | Passive guide |
 | V03 startup history and lengthening delay | S2b ring/FIR/seed | Eager/lazy wave and pickup sample diff | M4 launch, 100 ms incl. downward retune and wrap | Driven guide |
 | V04 active pitch, harmonic orders, η, RMS/stationarity, duty, slip count and octave/seed failures | S2b contact/guide | Isolated bridge and branch trace before gain/DC | Seeded 3 s grid, nominal 196 Hz regime | Driven guide |
 | V05 paired removal of work; V06 pressure; V07 velocity and cleared lift | S2b contact/guide | Isolated p, force and spectrum | 7 s lifted/driven twin; 440 Hz pressure/speed series; cleared 2 s | Driven guide |

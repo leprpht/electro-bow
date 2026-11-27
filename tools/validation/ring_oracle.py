@@ -1,3 +1,5 @@
+"""Offline M2 cut-loop impulse and M4 chronological-history checks."""
+
 from cmath import exp as cexp, phase
 from itertools import product
 from math import atan2, ceil, cos, exp, floor, pi, sin
@@ -13,29 +15,60 @@ print(
 )
 
 
-# Phase after one full circuit, measured on the returning wave at the cut.
-# The complex FIR retains the minus sign of the bridge reflection; the nut also inverts.
-def tap_response(delay, z):
-    lag = floor(delay)
-    u = delay - lag
-    return z**lag * (1 - u + u * z)
+def tap_impulse(delay, reverse=False):
+    m = floor(delay)
+    u = delay - m
+    weights = (u, 1 - u) if reverse else (1 - u, u)
+    return {m + i: value for i, value in enumerate(weights) if value}
+
+
+def convolve(first, second):
+    response = {}
+    for t, a in first.items():
+        for s, b in second.items():
+            response[t + s] = response.get(t + s, 0.0) + a * b
+    return response
+
+
+def circuit(period, reverse_bridge=False):
+    bridge = convolve(tap_impulse(0.127 * period - 1, reverse_bridge),
+                      {0: -0.98 * 0.125, 1: -0.98 * 0.75, 2: -0.98 * 0.125})
+    nut = {n: -v for n, v in tap_impulse((1 - 0.127) * period).items()}
+    return convolve(bridge, nut)
+
+
+def absolute_delay(impulse, omega):
+    # Anchor at the observed first arrival. The remaining positive taps lie
+    # in one open half-plane from DC to omega, so their phase has no wrap.
+    first = min(impulse)
+    assert min(impulse.values()) > 0 and (max(impulse) - first) * omega < pi
+    residual = sum(gain * cexp(-1j * omega * (n - first)) for n, gain in impulse.items())
+    return first - phase(residual) / omega
 
 
 worst = 0.0
+mutant_errors = {}
 for fs, fundamental in product(
     (32000, 44100, 48000, 88200, 96000, 176400, 192000), (65.41, 440, 1318.51)
 ):
     period = fs / fundamental
     omega0 = 2 * pi / period
-    z = cexp(-1j * omega0)
-    bridge = (
-        -0.98 * (0.125 + 0.75 * z + 0.125 * z * z) * tap_response(0.127 * period - 1, z)
-    )
-    nut = -tap_response((1 - 0.127) * period, z)
-    error = abs(phase(bridge * nut * cexp(1j * omega0 * period)) / omega0)
+    impulse = circuit(period)
+    error = abs(absolute_delay(impulse, omega0) - period)
+    assert error <= 0.003, (fs, fundamental, error)
     worst = max(worst, error)
-assert worst <= 0.003
-print("one-circuit max delay error, samples", worst)
+    for name, wrong in (
+        ("zero delay", {0: 0.98}),
+        ("omitted sample", {n - 1: v for n, v in impulse.items()}),
+        ("extra sample", {n + 1: v for n, v in impulse.items()}),
+        ("reversed bridge weights", circuit(period, reverse_bridge=True)),
+    ):
+        error = abs(absolute_delay(wrong, omega0) - period)
+        mutant_errors[name] = max(mutant_errors.get(name, 0.0), error)
+print("absolute one-circuit max delay error, samples", worst)
+for name, error in mutant_errors.items():
+    assert error > 0.003, name
+    print("absolute delay rejects", name, "max error, samples", error)
 # Inject an impulse after each complete read. Exercise taps through repeated wraps.
 for delay in (1, 3.25, 14):
     ring = [0.0] * 16
@@ -59,7 +92,9 @@ size = ceil(fs / 65) + 4
 def check_history(neck):
 
     def seed(t):
-        phase = t / (fs / 440) + ((1 - beta) if neck else 0)
+        phase = t / (fs / 440)
+        if neck:
+            phase = phase + 1 - beta
         return (-1 if neck else 1) * (0.1 / beta) * (phase - floor(phase) - 0.5)
 
     eager = [seed(t) for t in range(-size, 0)]
@@ -72,12 +107,12 @@ def check_history(neck):
         for lag in (m, m + 1):
             age = min(n, size)
             a = lazy[(n - lag) % size] if lag <= age else seed(age - lag)
-            reads.append((a, eager[(n - lag) % size]))
+            reads.append((a, eager[size + n - lag]))
         assert (1 - u) * reads[0][0] + u * reads[1][0] == (1 - u) * reads[0][
             1
         ] + u * reads[1][1]
 
-    for n in range(3 * size):
+    for n in range(fs // 10):
         P = fs / (440 if n < 100 else 65)
         check(n, (1 - beta) * P if neck else beta * P - 1)
         if not neck:
@@ -85,9 +120,11 @@ def check_history(neck):
             if n == 0:
                 check(n, beta * P - 1 + 1)
                 check(n, beta * P - 1 + 2)
-        eager[n % size] = lazy[n % size] = sin(0.731 * n)
+        wave = sin(0.731 * n)
+        eager.append(wave)
+        lazy[n % size] = wave
 
 
 for neck in (False, True):
     check_history(neck)
-print("lazy taps agree", size)
+print("lazy taps agree", size, "slots,", fs // 10, "ticks per arm")

@@ -81,7 +81,7 @@ Additional unit-test vectors at Z=1 follow. Branch signs refer to the previous a
 | .14 | 0 | Slide(+) | Stick (cleared) | 0 | .14 |
 | .2726217499930773 | .3486472674315129 | Slide(+) | Slide(+) | .1926217499930773 | .08 |
 
-For the last vector construct k=(.08−.04)/(μ(.04)−μ(.08)) and h=.08+kμ(.08) in f64 before the call. This makes the .04… .08 segment flat to roundoff. Choose its upper endpoint on the adjacent increasing branch. At h₉ the constant-tail and last-segment roots coincide. A signed zero mismatch gives j=r=0; nonfinite d even with k=0, negative/nonfinite k, invalid intermediates, or exhaustion without an admissible static interval produce Fault. The positive .14 Stick example has sliding-curve discrepancy .025 m/s because static force can take any value inside the interval.
+The last vector records the reference stack. For a target-prepared exact-tie fixture, start at k=(.08−.04)/(μ(.04)−μ(.08)) and search up to 64 adjacent binary64 values each way for equal stored endpoint loads. Use their common h and both signed adjacent queries. Choose its upper endpoint on the adjacent increasing branch. At h₉ the constant-tail and last-segment roots coincide. A signed zero mismatch gives j=r=0; nonfinite d even with k=0, negative/nonfinite k, invalid intermediates, or exhaustion without an admissible static interval produce Fault. The positive .14 Stick example has sliding-curve discrepancy .025 m/s because static force can take any value inside the interval.
 
 ## M4. Launch from a physically consistent history
 

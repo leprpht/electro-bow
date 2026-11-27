@@ -3,13 +3,35 @@
 import argparse
 import subprocess
 from bisect import bisect_right
+from decimal import Decimal, localcontext
 from fractions import Fraction
 from itertools import product
 from math import copysign, exp, floor, inf, isfinite, nan, nextafter, ulp
+from struct import unpack
 from sys import float_info
 
 Q = (0.0, 0.005, 0.01, 0.02, 0.04, 0.08, 0.16, 0.32, 0.64, 1.28)
 MU = tuple(0.35 + 0.85 * exp(-q / 0.01) + 0.45 * exp(-q / 0.1) for q in Q)
+
+
+def prepared_coefficients(binary):
+    words = subprocess.check_output([binary, "--coefficients"], text=True).split()
+    assert len(words) == len(Q) and all(len(word) == 16 for word in words)
+    actual = tuple(unpack(">d", bytes.fromhex(word))[0] for word in words)
+    assert actual[0] == 1.65
+    # Independent M3a preparation check. Bracket each high-precision exp by
+    # one representable neighbor each way, then propagate through the f64 sums.
+    with localcontext() as ctx:
+        ctx.prec = 80
+        for q, mu in zip(Q, actual):
+            e1, e2 = (float(Decimal.from_float(-q / t).exp()) for t in (0.01, 0.1))
+            bounds = [
+                0.35 + 0.85 * nextafter(e1, end) + 0.45 * nextafter(e2, end)
+                for end in (0.0, inf)
+            ]
+            assert bounds[0] <= mu <= bounds[1], (q, mu, bounds)
+    print("Rust M3a coefficient bits", *words)
+    return actual
 
 
 def intersections(h, k):
@@ -20,16 +42,35 @@ def intersections(h, k):
         if min(left, right) <= h <= max(left, right):
             if left == right:
                 # The full interval intersects. Its endpoints suffice for extrema.
-                roots.extend((q, "flat") for q in Q[i : i + 2])
+                roots.extend((q, "flat", i) for q in Q[i : i + 2])
             else:
                 # Exact barycentric interpolation of stored f64 endpoints;
                 # this also works for the descending intersection.
                 lo, hi, x = map(Fraction, (left, right, h))
                 q = ((hi - x) * Fraction(Q[i]) + (x - lo) * Fraction(Q[i + 1])) / (hi - lo)
-                roots.append((float(q), "rising" if left < right else "falling"))
+                roots.append((float(q), "rising" if left < right else "falling", i))
     if h >= loads[-1]:
-        roots.append((Q[-1] if h == loads[-1] else h - k * MU[-1], "tail"))
+        roots.append((Q[-1] if h == loads[-1] else h - k * MU[-1], "tail", len(Q) - 1))
     return roots
+
+
+def above_slip_floor(root, h, k):
+    q, slope, i = root
+    if abs(q - 1e-12) > 4 * ulp(q):
+        return q > 1e-12
+    # The graph already selected the intersection. Only its threshold decision
+    # uses the normative evaluation order inside the interpolation error band.
+    left = Q[i] + k * MU[i]
+    if slope == "tail":
+        rounded = Q[i] if h == left else h - k * MU[i]
+    else:
+        right = Q[i + 1] + k * MU[i + 1]
+        if h == right:
+            rounded = Q[i + 1]
+        else:
+            fraction = (h - left) / (right - left)
+            rounded = Q[i] + (Q[i + 1] - Q[i]) * fraction
+    return rounded > 1e-12
 
 
 def graph(d, k, previous):
@@ -44,10 +85,11 @@ def graph(d, k, previous):
     sign = 1 if d > 0 else -1
     j, slip, mode = d, 0.0, 0
     if d != 0 and (previous == sign or h > limit):
-        admissible = [q for q, slope in intersections(h, k) if slope != "falling"]
+        admissible = [root for root in intersections(h, k) if root[1] != "falling"]
         if admissible:
-            q = max(admissible)
-            if q > 1e-12:
+            root = max(admissible, key=lambda entry: entry[0])
+            q = root[0]
+            if above_slip_floor(root, h, k):
                 slip, mode = sign * q, sign
                 j = d - slip
         elif h <= limit + 1e-12:
@@ -57,7 +99,7 @@ def graph(d, k, previous):
     return (j, slip, mode) if isfinite(2 * j) else None
 
 
-def verify_physics(d, k, solution):
+def verify_physics(d, k, solution, *, exact_reference=False):
     j, r, mode = solution
     v_bow, a, z = 0.1, 0.13, 1.0
     b = v_bow - a - d
@@ -77,13 +119,14 @@ def verify_physics(d, k, solution):
         mu = MU[i]
         if i + 1 < len(Q):
             mu += (MU[i + 1] - mu) * (q - Q[i]) / (Q[i + 1] - Q[i])
-        assert q > 1e-12 and mode == copysign(1, r) and r * d > 0
+        assert (q > 1e-12 or (exact_reference and abs(q - 1e-12) <= 4 * ulp(q)))
+        assert mode == copysign(1, r) and r * d > 0
         assert abs(q + k * mu - abs(d)) < 1e-10 and abs(j - copysign(k * mu, r)) < 1e-10
     return mode
 
 
 def verify(d, k, prev):
-    return verify_physics(d, k, graph(d, k, prev))
+    return verify_physics(d, k, graph(d, k, prev), exact_reference=True)
 
 
 def sweep():
@@ -154,7 +197,7 @@ def negative_controls():
     cases = [("old cutoff", d, k, (d, 0.0, 0))]
     d, k = 0.14, 0.10
     cases.append(("always static when admissible", d, k, (d, 0.0, 0)))
-    lower = min(q for q, _ in intersections(d, k))
+    lower = min(q for q, _, _ in intersections(d, k))
     cases.append(("lower sliding intersection", d, k, (d - lower, lower, 1)))
     for name, d, k, wrong in cases:
         verify_physics(d, k, wrong)
@@ -193,14 +236,40 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rust", help="compiled tools/validation/contact_replay.rs")
     args = parser.parse_args()
+    if args.rust:
+        MU = prepared_coefficients(args.rust)
     standard = list(sweep())
     assert len(standard) == 80500
     folds = list(fold_cases())
-    for d, k, prev in standard + folds:
+    assert len(folds) == 4374
+    review_h, review_k = 1.7431847738615466e-12, 4.5041501448100105e-13
+    floor_cases = [
+        (s * h, review_k, s)
+        for s in (-1, 1)
+        for h in (nextafter(review_h, 0.0), review_h, nextafter(review_h, inf))
+    ]
+    # Target-prepared exact coincidence plus both adjacent queries, signed.
+    center = (Q[5] - Q[4]) / (MU[4] - MU[5])
+    neighbors = [center]
+    lo = hi = center
+    for _ in range(64):
+        lo, hi = nextafter(lo, 0.0), nextafter(hi, inf)
+        neighbors.extend((lo, hi))
+    tie = next(k for k in neighbors if Q[4] + k * MU[4] == Q[5] + k * MU[5])
+    h = Q[5] + tie * MU[5]
+    ties = [
+        (s * x, tie, s)
+        for s in (-1, 1)
+        for x in (nextafter(h, 0.0), h, nextafter(h, inf))
+    ]
+    for s in (-1, 1):
+        assert graph(s * h, tie, s)[1:] == (s * Q[5], s)
+    cases = standard + folds + floor_cases + ties
+    for d, k, prev in cases:
         verify(d, k, prev)
     negative_controls()
     if args.rust:
-        check_rust(args.rust, standard + folds)
+        check_rust(args.rust, cases)
     vectors = [
         (0.14, 0.1, 0, 0.14, 0.0, 0),
         (0.14, 0.1, 1, 0.05447776066490598, 0.08552223933509404, 1),
@@ -216,11 +285,7 @@ if __name__ == "__main__":
             and mode == expected_mode
         )
         print("d,k,previous =", d, k, prev, " j,r,mode =", j, r, mode)
-    # Exactly horizontal segment (0.04,0.08), both endpoints meet the upper branch.
-    k = (Q[5] - Q[4]) / (MU[4] - MU[5])
-    h = Q[5] + k * MU[5]
-    assert abs(graph(h, k, 1)[1] - 0.08) < 1e-10
-    print("flat fold", k, h, graph(h, k, 1))
+    print("stored flat fold", tie, Q[5] + tie * MU[5])
     for d, k in (
         (nan, 0.0),
         (inf, 0.1),
