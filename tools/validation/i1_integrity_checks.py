@@ -5,10 +5,10 @@ import json
 import numpy as np
 from acoustic_identity import audio
 from guide_qualification import digest
-from i1_motion import OUT
+from i1_motion import OUT, bank, witness
 from i1_recordings import PROTOCOL, decoded
 from i1_repeatability import qualify
-from i1_safety import drive, nonnegative
+from i1_safety import check_trajectory, drive, nonnegative
 from o2_response import require
 from scipy.io import wavfile
 
@@ -118,6 +118,42 @@ def main():
         except ValueError:
             continue
         raise ValueError("invalid moment accepted")
+    with np.load(OUT / "motion/steady-48000.npz") as data:
+        q, f = data["q"], data["pitch"]
+    raw = np.memmap(OUT / "motion/steady-48000.f64le", mode="r", dtype="<f8").reshape(
+        -1, 30
+    )
+    d = bank(q, fs, f, np.full(12, 10**0.25 - 1))
+    _, scale, _ = drive(q[:, :3], d[:, :3], raw[:, 11], fs, f)
+    tick = 2 * fs + int(np.argmax(abs(d[2 * fs : 3 * fs, 0])))
+    jump = scale[tick] * d[tick, 0]
+    require(abs(jump + 0.16903128689) < 1e-6, "historical abrupt neutralization")
+    scale[tick:] = 0
+    try:
+        check_trajectory(scale, round(0.005 * fs))
+    except ValueError as err:
+        results["abrupt_neutralization"] = {
+            "tick": tick,
+            "jump_FS": float(jump),
+            "rejection": str(err),
+        }
+    else:
+        raise ValueError("bypassed slew")
+    reference = 0.0066
+    for name in ("always-neutral", "infinitesimal", "single-cell", "stationary-ends"):
+        correction = np.zeros(3 * fs)
+        if name == "infinitesimal":
+            correction[:] = reference * 1e-6
+        if name == "single-cell":
+            correction[fs : fs + fs // 50] = reference
+        if name == "stationary-ends":
+            correction[: fs // 2] = correction[5 * fs // 2 :] = reference
+        row = witness(correction, fs, reference)
+        require(not row["passed"], name)
+        results[name] = {
+            "active_cells": row["active"],
+            "longest_gap_ms": row["longest_gap_ms"],
+        }
     results["neutral"] = {
         "signed_zero": True,
         "neutral_retune": True,
