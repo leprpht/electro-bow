@@ -1,4 +1,4 @@
-"""Stage 08.1 host-time moving projection, four actual Rust electrical returns."""
+"""Stage 08.2 chronological host-time projection, four actual Rust electrical returns."""
 
 import json
 import os
@@ -16,7 +16,7 @@ from o2_qualification import v17_row
 from o2_records import publish
 from o2_response import require
 
-OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-1/qualified/i1"))
+OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-2/i1"))
 ALT = np.tile([-5.0, 5.0], 6)
 STRESS = ("fast-retune", "max-retune", "bow-controls", "veto", "lift", "held")
 
@@ -157,6 +157,27 @@ def defect_rows(raw, fs):
     require(
         all(not row["passed"] for row in rows.values()), "escaped neutral prerequisite"
     )
+    from i1_stream import render
+
+    for label, receipt in rows.items():
+        y = (
+            np.repeat((scale * signals[label])[:, None], 4, axis=1)
+            if label in signals
+            else np.column_stack((q, q[:, 1]))
+        )
+        anchor = {"invalid-anchor": scale * h2, "ineligible": np.zeros(len(n))}.get(
+            label, raw[:, 11]
+        )
+        wet, permission, _, correction = render(
+            y, anchor, fs, 196.0, np.expm1(np.log(10) * ALT / 20), receipt["passed"]
+        )
+        require(
+            np.any(correction)
+            and not np.any(permission)
+            and np.array_equal(wet.view("u8"), y.view("u8")),
+            "failed prerequisite colored " + label,
+        )
+        receipt["exact_neutral"] = True
     counter = np.repeat((scale * signals["199Hz"])[:, None], 3, axis=1)
     counter = np.column_stack((counter, counter[:, 1]))
     d = bank(
@@ -201,7 +222,18 @@ def measure(fs, kind, ref, trusted, directory):
         ref = rms(old[-fs:, 0] - q[-fs:, 0])
         neutral = prerequisite(raw, fs, 196)
         trusted = neutral["passed"]
-    wet, a, logs = drive(q, d, raw[:, 11], fs, f, outage, moving=True, trusted=trusted)
+    from i1_stream import render
+
+    wet, a, logs, actual_d = render(q, raw[:, 11], fs, f, g, trusted, outage)
+    require(
+        np.allclose(actual_d, d, atol=2e-11, rtol=0), "independent four-bank correction"
+    )
+    d = actual_d
+    if kind in ("steady", "held"):
+        require(
+            np.array_equal(wet[:, 3].view("u8"), wet[:, 1].view("u8")),
+            "factory final wet parity",
+        )
     trace = directory / (name + ".npz")
     np.savez(
         trace,
@@ -242,10 +274,17 @@ def measure(fs, kind, ref, trusted, directory):
     if kind == "vibrato":
         result.update(
             witness=witness(correction[:, 0], fs, ref),
+            delivery_witness=witness(correction[:, 3], fs, ref),
+            delivery_tracking=tracking(wet[:, 3], fs, 196, kind),
             old_witness=witness(old[:, 0] - q[:, 0], fs, ref),
         )
     if outage:
         stop = outage[0][1]
+        require(
+            rms(correction[5 * fs // 2 :, 3]) > 1e-4
+            and np.any(a[outage[0][0] : stop] == 0),
+            "delivery recovery",
+        )
         result["recovery_samples"] = int(np.flatnonzero(a[stop:] > 0)[0])
     if kind == "lift":
         e = np.clip(1 - (np.arange(len(q)) - fs + 1) / round(0.1 * fs), 0, 1)

@@ -7,9 +7,10 @@ import numpy as np
 from acoustic_identity import FIXTURES, audio, distances
 from acoustic_observation import rms
 from i1_acceptance import grade_depths, stationary_inventory
-from i1_motion import OUT, bank, prerequisite
+from i1_motion import OUT, prerequisite
 from i1_repeatability import representation
-from i1_safety import drive, smooth_targets, transfer
+from i1_safety import smooth_targets, transfer
+from i1_stream import render
 from i1_study import (
     VECTORS,
     carrier,
@@ -33,9 +34,8 @@ def grade_case(raw, fs, f, update, name, upstream, q):
         if isinstance(update, np.ndarray)
         else smooth_targets(len(raw), fs, update)
     )
-    d = bank(q, fs, np.full(len(q), f), gains)
-    wet, a, log = drive(
-        q, d, raw[:, 11], fs, f, moving=True, trusted=upstream["passed"]
+    wet, a, log, d = render(
+        q, raw[:, 11], fs, f, gains, upstream["passed"], settings=(name,)
     )
     rows = inspect_row(raw, wet, fs, f, name)
     failures = [
@@ -108,9 +108,8 @@ def main():
             sources[name] = row
             continue
         gains = smooth_targets(len(q), fs, updates)
-        d = bank(q, fs, np.full(len(q), f), gains)
-        wet, _, _ = drive(
-            q, d, raw[:, 11], fs, f, moving=True, trusted=upstream["passed"]
+        wet, _, _, _ = render(
+            q, raw[:, 11], fs, f, gains, upstream["passed"], settings=(name,)
         )
         require(sample_hash(wet) == row["wet"], "source wet reconstruction")
         sources[name] = {

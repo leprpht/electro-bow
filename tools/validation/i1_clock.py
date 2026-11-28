@@ -8,10 +8,10 @@ from enum import Enum
 from pathlib import Path
 
 import numpy as np
-from acoustic_identity import analysis_stream, feature
+from i1_capture import Projection, Source
 from o2_response import require
 
-OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-1/qualified/i1"))
+OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-2/i1"))
 
 
 class Gesture(Enum):
@@ -43,6 +43,47 @@ class Launch:
 class Dispose:
     epoch: int
     energy: float
+
+
+@dataclass(frozen=True)
+class EventFrame:
+    generation: int
+    events: tuple
+
+
+def decode(frame, generation):
+    # Tuple fixtures inject directly at the current generation. External frames carry a stamp.
+    if isinstance(frame, EventFrame):
+        if frame.generation != generation:
+            return (), True
+        frame = frame.events
+    if not isinstance(frame, tuple):
+        return (), True
+    seen = set()
+    for event in frame:
+        kind = event if isinstance(event, Gesture) else type(event)
+        if kind in seen or not isinstance(event, (Gesture, Confirm, Dispose, Launch)):
+            return (), True
+        seen.add(kind)
+        if isinstance(event, (Confirm, Launch)):
+            token = event.token
+            if (
+                not isinstance(token, tuple)
+                or len(token) != 2
+                or any(type(v) is not int or v < 0 for v in token)
+                or token[0] != generation
+            ):
+                return (), True
+        if isinstance(event, (Dispose, Launch)) and (
+            type(event.epoch) is not int
+            or event.epoch < 1
+            or type(event.energy) not in (int, float)
+            or not math.isfinite(event.energy)
+        ):
+            return (), True
+        if isinstance(event, Confirm) and type(event.valid_through) is not int:
+            return (), True
+    return frame, False
 
 
 PRIORITY = tuple(Gesture)
@@ -78,9 +119,17 @@ class Frame:
 
 
 def clock_ticks(
-    x, fs, frames, events, partitions=(127,), defect=None, *, identity_stamps
+    x,
+    fs,
+    frames,
+    events,
+    partitions=(127,),
+    defect=None,
+    *,
+    identity_stamps,
+    energy=None,
 ):
-    """Restart FIR phase at reset. Vectorized causal FIR is indexed only through n."""
+    """Restart FIR phase at reset. Advance the source ring and bounded projection through the current input only."""
     d = int(fs // 16000)
     fa = fs / d
     hop = d * rounded(0.005 * fa)
@@ -88,7 +137,7 @@ def clock_ticks(
     ha = da * rounded(0.005 * fs / da)
     budget = math.ceil((math.ceil(4 * fa / 65) + 1) / hop)
     origin = 0
-    z, _ = analysis_stream(x, fs)
+    source = Source(fs)
     generation = serial = 0
     owner = live = confirmed = epoch = None
     last_epoch = 0
@@ -111,15 +160,9 @@ def clock_ticks(
         end = min(n + partitions[block % len(partitions)], len(x))
         block += 1
         for tick in range(n, end):
-            actions = events.get(tick, ())
+            actions, malformed = decode(events.get(tick, ()), generation)
             if tick < blocked_until and Gesture.RESET not in actions:
                 actions = ()
-            require(
-                all(
-                    isinstance(a, (Gesture, Confirm, Dispose, Launch)) for a in actions
-                ),
-                "untyped controller input",
-            )
 
             def single(kind, actions=actions):
                 values = [a for a in actions if isinstance(a, kind)]
@@ -127,14 +170,17 @@ def clock_ticks(
                 return next(iter(values), None)
 
             conf, disposal, launch = single(Confirm), single(Dispose), single(Launch)
+            if energy is not None and (disposal or launch) and energy[tick] != 0:
+                malformed = True
+                disposal = launch = None
             action = next((a.value for a in PRIORITY if a in actions), None)
-            note = []
+            note = ["invalid frame"] if malformed else []
             consumed = None
             if action == "reset":
                 blocked_until = -1
                 last_epoch = 0
                 origin = tick
-                z, _ = analysis_stream(x[tick:], fs)
+                source.reset()
                 generation += 1
                 owner = live = confirmed = epoch = job = None
                 published_end = None
@@ -162,25 +208,14 @@ def clock_ticks(
                 phase = "hold"
             elif action == "compatible" and owner and owner == live:
                 phase = "active"
-            if (
-                conf
-                and action not in ("reset", "fault", "mute", "release", "timeout")
-                and (
-                    owner
-                    and conf.token == owner
-                    and phase == "pending"
-                    and conf.valid_through >= tick
-                )
-            ):
-                confirmed, expiry = owner, conf.valid_through
-                phase = "confirmed"
-            if (phase == "pending" and tick - anchor >= math.ceil(0.120 * fs)) or (
+            if (phase == "pending" and tick - anchor >= math.ceil(3 * fs / 25)) or (
                 phase == "confirmed" and tick > expiry
             ):
                 owner = confirmed = job = published_end = None
                 published = ZERO.copy()
                 phase = "idle"
                 note.append("expired")
+            source.tick(x[tick])
             age = tick - origin
             if (age + 1) % ha == 0:
                 history[tick] = frames.get(tick, Frame(0, supported=False))
@@ -196,6 +231,28 @@ def clock_ticks(
                 history.pop(
                     tick - (math.ceil((4 / 65 + 0.035) * fs / ha) + 3) * ha, None
                 )
+            if conf and (conf.token != owner or conf.valid_through < tick):
+                note.append("invalid confirmation")
+            if disposal and (
+                epoch is None or disposal.epoch != epoch or disposal.energy != 0
+            ):
+                note.append("invalid disposal")
+                disposal = launch = None
+            if (
+                conf
+                and action not in ("reset", "fault", "mute", "release", "timeout")
+                and (
+                    owner
+                    and conf.token == owner
+                    and phase == "pending"
+                    and history
+                    and history[max(history)].good()
+                    and history[max(history)].owner == owner
+                    and conf.valid_through >= tick
+                )
+            ):
+                confirmed, expiry = owner, conf.valid_through
+                phase = "confirmed"
             if action == "fault" or (
                 disposal
                 and epoch is not None
@@ -208,6 +265,13 @@ def clock_ticks(
                     phase = "idle"
                 live = epoch = None
                 held = ZERO.copy()
+            if launch and (
+                launch.token != confirmed
+                or launch.energy != 0
+                or epoch is not None
+                or launch.epoch <= last_epoch
+            ):
+                note.append("invalid launch")
             if (
                 launch
                 and confirmed
@@ -224,9 +288,18 @@ def clock_ticks(
                     published = ZERO.copy()
                 held = published.copy()
                 consumed = live
-            if job and tick == job["done"]:
-                job["complete"] = True
-                note.append("complete")
+
+            def progress(job):
+                target = job["projection"].advance(budget)
+                if tick == job["done"]:
+                    job["complete"] = True
+                    job["target"] = target
+                    note.append(
+                        "complete" if target is not None else "feature rejected"
+                    )
+
+            if job and not job["complete"]:
+                progress(job)
             due = (age + 1) % hop == 0
             if due and (generation, tick) not in identity_stamps:
                 job = None
@@ -238,6 +311,7 @@ def clock_ticks(
                     job["owner"] == owner
                     and job["pub"] == tick
                     and job["complete"]
+                    and job["target"] is not None
                     and last >= 0
                     and history[last].good()
                     and abs(1200 * np.log2(history[last].hz / job["hz"])) <= 25
@@ -253,7 +327,12 @@ def clock_ticks(
                     note.append("discard")
                 job = None
             snapshot = None
-            if due and owner and phase in ("active", "confirmed") and history:
+            if (
+                due
+                and owner
+                and phase in ("active", "confirmed", "pending")
+                and history
+            ):
                 last = max(history)
                 frame = history[last]
                 if frame.good() and frame.owner == owner:
@@ -276,33 +355,32 @@ def clock_ticks(
                         )
                     )
                     if ok:
-                        j = (age + 1) // d
-                        target = feature(z[j - m : j], fa, frame.hz, frame.floor)
-                        if target is not None:
-                            done = tick + math.ceil(m / budget) - 1
-                            job = {
-                                "owner": owner,
-                                "pub": tick + hop,
-                                "done": done,
-                                "complete": done == tick,
-                                "target": target,
-                                "hz": frame.hz,
-                                "alpha": -math.expm1(
-                                    -hop / (fs * (0.060 - 0.040 * frame.movement))
-                                ),
-                            }
-                            snapshot = [
-                                raw_first,
-                                tick,
-                                center + tick - 16 * d,
-                                done,
-                                tick + hop,
-                            ]
-                            if defect == "wrong epoch":
-                                job["owner"] = (-1, -1)
-                            if defect == "late":
-                                job["pub"] += 1
-                            note.append("snapshot")
+                        done = tick + math.ceil(m / budget) - 1
+                        job = {
+                            "owner": owner,
+                            "pub": tick + hop,
+                            "done": done,
+                            "complete": done == tick,
+                            "projection": Projection(source, m, frame),
+                            "target": None,
+                            "hz": frame.hz,
+                            "alpha": -math.expm1(
+                                -hop / (fs * (0.060 - 0.040 * frame.movement))
+                            ),
+                        }
+                        progress(job)
+                        snapshot = [
+                            raw_first,
+                            tick,
+                            center + tick - 16 * d,
+                            done,
+                            tick + hop,
+                        ]
+                        if defect == "wrong epoch":
+                            job["owner"] = (-1, -1)
+                        if defect == "late":
+                            job["pub"] += 1
+                        note.append("snapshot")
             row = None
             if action or actions or due or note:
                 row = {

@@ -111,7 +111,8 @@ fn stream(fs: f64, observed: bool) -> io::Result<()> {
             let taps = factory.taps(&harness.coeff, v, d);
             let q = full.tick(&harness.coeff, v, d).unwrap();
             assert_eq!(q.to_bits(), taps[3].to_bits(), "return tap at {n}");
-            for x in taps.into_iter().chain(factory.state()) {
+            let [h, a, loaded, _] = taps;
+            for x in [h, a, loaded, q].into_iter().chain(factory.state()) {
                 out.write_all(&x.to_le_bytes())?;
             }
         }

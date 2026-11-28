@@ -11,7 +11,7 @@ from o2_coverage import UniqueRows
 from o2_response import ROOT2, check_transfer, reference, require
 from scipy import optimize, signal
 
-OUT = Path(os.environ.get("ELECTROBOW_O2_OUT", "build/stage-08-1/qualified/o2"))
+OUT = Path(os.environ.get("ELECTROBOW_O2_OUT", "build/stage-08-2/o2"))
 BINARY = OUT / "render"
 DEPTHS = (0, 0.5, 1)
 PROBES = (0, 20, 82.41, 196, 440, 1000, 3200, 6000, 12000)
@@ -186,14 +186,35 @@ def measured_timing(fs, run_id):
     from o2_coverage import timing_ratio
 
     path = OUT / f"timing-{fs}.tsv"
+
+    capture = BINARY.parent / "runs" / run_id / f"timing-{fs}.stdout"
+    raw = path.read_bytes()
+    require(raw == capture.read_bytes(), "executed timing stdout")
+    binary = capture.parent / "renderer.sha256"
+    require(binary.read_text() == digest(BINARY), "timing executable")
+    terminals = json.loads(
+        Path(__file__)
+        .with_name("fixtures")
+        .joinpath("o2_timing_terminals.json")
+        .read_text()
+    )[str(fs)]
     records = []
-    for line in path.read_text().splitlines():
+    for line in raw.decode("ascii").splitlines():
         invocation, rate, label, batch, frames, elapsed, h = line.split()
         require(
             invocation == run_id and int(rate) == fs and int(frames) == 30 * fs,
             "timing invocation/rate/count",
         )
         records.append([label, int(batch), int(elapsed) / int(frames), float(h)])
+    expected = [
+        (work, batch)
+        for work in ("silence", "near-denormal", "o2", "guide-o1", "guide-o1-o2")
+        for batch in range(1, 6)
+    ]
+    require([(r[0], r[1]) for r in records] == expected, "timing batch inventory")
+    require(
+        [r[3].hex() for r in records] == terminals, "deterministic workload terminal"
+    )
     return {
         "records": records,
         "near_denormal_ratio": timing_ratio(records),
@@ -206,9 +227,15 @@ def measured_timing(fs, run_id):
 def timing(run_id):
     widths = list(map(int, run("size", 48000).split()))
     require(widths == [48, 32], "Rust coefficient/lane size")
+    from guide_qualification import digest
+
+    owned = OUT / "runs" / run_id
+    owned.mkdir(parents=True, exist_ok=False)
+    (owned / "renderer.sha256").write_text(digest(BINARY))
     batches = {}
     for fs in (32000, 48000, 192000):
         raw = run("timing", fs, run_id)
+        (owned / f"timing-{fs}.stdout").write_bytes(raw.encode("ascii"))
         (OUT / f"timing-{fs}.tsv").write_text(raw)
         batches[str(fs)] = measured_timing(fs, run_id)
     return {"coefficient_bytes": widths[0], "lane_bytes": widths[1], "rates": batches}

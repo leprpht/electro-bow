@@ -445,6 +445,8 @@ EXTRA_CONTROLS = {
     "wrong source",
     "incorrect count",
     "self-attested shift",
+    "rolled wet valid tags",
+    "substituted original M5",
     "fabricated factory sweep",
     "cross-rate timing",
 }
@@ -694,6 +696,14 @@ def grade(result):
 def grade_measurements(result):
     grade(result)
     grade_controls(result["negatives"])
+    from o2_qualification import negative_controls, executed_controls
+
+    executed = {**negative_controls(), **coverage_negatives(result)}
+    require(
+        result["negatives"] == executed
+        and result.get("executions") == executed_controls(result, executed),
+        "executed negative-control predicates",
+    )
     require(
         result["all_tested_vectors_passed"] is (not bool(result["failed_predicates"])),
         "inconsistent qualification summary",
@@ -736,6 +746,22 @@ def grade_controls(controls):
     )
 
 
+def execute_control(name, invocation, expected):
+    # In-process predicate ABI. Build errors and unrelated runtime exceptions
+    # propagate. Both pass and rejection return an actual status to this caller.
+    def invoke():
+        try:
+            invocation()
+        except ValueError as error:
+            return 1, str(error)
+        return 0, None
+
+    code, detail = invoke()
+    require(code == 1, "escaped negative: " + name)
+    require(expected in detail, f"{name} unrelated predicate: {detail}")
+    return detail
+
+
 def coverage_negatives(result):
     controls = {}
 
@@ -744,14 +770,9 @@ def coverage_negatives(result):
     grade(result)
 
     def reject(name, section, data, expected):
-        try:
-            grade({**result, section: data})
-        except ValueError as err:
-            if expected not in str(err):
-                raise
-            controls[name] = str(err)
-        else:
-            raise ValueError("escaped " + name)
+        controls[name] = execute_control(
+            name, lambda: grade({**result, section: data}), expected
+        )
 
     key = "48000/196/0.1/1.8/0.5"
     missing = dict(result["v17"])
@@ -786,13 +807,7 @@ def coverage_negatives(result):
     def defect(name, alter, reason):
         copy = deepcopy(result)
         alter(copy)
-        try:
-            grade(copy)
-        except ValueError as err:
-            require(reason in str(err), name + ": " + str(err))
-            controls[name] = str(err)
-        else:
-            raise ValueError("escaped " + name)
+        controls[name] = execute_control(name, lambda: grade(copy), reason)
 
     for section in ("local_timing", "high_band", "onset_release", "inputs", "replay"):
         defect(

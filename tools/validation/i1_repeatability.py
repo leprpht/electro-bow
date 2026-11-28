@@ -9,7 +9,7 @@ import numpy as np
 from acoustic_observation import db, partials, rms
 from guide_qualification import digest
 from i1_clock import OUT
-from i1_safety import drive, smooth_targets
+from i1_safety import smooth_targets
 from i1_study import cues, harmonics, inspect_row, spectrum, updates_for
 from o2_response import require
 
@@ -231,10 +231,9 @@ def qualify(manifest):
     from o2_qualification import strongest_hz
 
     anchor = strongest_hz(raw[-fs:, 11], fs)
-    from i1_motion import bank, build_bank
+    from i1_stream import render
     from o2_bench import replay
 
-    build_bank()
     q = np.column_stack((raw[:, 25:28], replay(fs, raw[:, 21], 0.5)[:, 3]))
     wet = {}
     wet_rows = {}
@@ -245,9 +244,8 @@ def qualify(manifest):
         gains = smooth_targets(
             len(raw), fs, [(round(n * fs / rate), g) for n, g in updates]
         )
-        d = bank(q, fs, np.full(len(q), pitch), gains)
-        out, _, _ = drive(
-            q, d, raw[:, 11], fs, pitch, moving=True, trusted=upstream["passed"]
+        out, _, _, _ = render(
+            q, raw[:, 11], fs, pitch, gains, upstream["passed"], settings=(name,)
         )
         wet_rows[name] = inspect_row(raw, out, fs, pitch, name)
         failures.extend(

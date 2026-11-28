@@ -21,7 +21,7 @@ from o2_audio import qualify as qualify_audio
 from o2_audio import rows as audio_rows
 from o2_bench import BINARY, DEPTHS, OUT, check_rate, replay, run, timing
 from o2_coverage import UniqueRows, coverage_negatives, grade, grade_measurements
-from o2_records import check_pair, producer_clock, sample_hash
+from o2_records import delivered, check_pair, producer_clock, sample_hash
 from o2_response import (
     RATES_EXTENDED,
     ROOT2,
@@ -364,7 +364,9 @@ def acoustic(make_audio=True):
             for ident, corrected in corrections(off, fs, f).items():
                 if ident != "neutral":
                     clock, _ = producer_clock(m5, off, fs, f, (ident,))
-                    colored = replace(clock, samples=corrected)
+                    colored = replace(
+                        clock, samples=delivered(corrected[:, None], m5, (ident,))[:, 0]
+                    )
                     rows[f"stress/{f}/{ident}"] = v17_row(
                         off,
                         off,
@@ -557,15 +559,13 @@ def sweep(fs):
 
 
 def negative_controls():
+    expected = json.loads((FIX / "o2_negative_predicates.json").read_text())
     rejected = {}
 
     def reject(name, fn):
-        try:
-            fn()
-        except ValueError as exc:
-            rejected[name] = str(exc)
-        else:
-            raise ValueError("escaped negative: " + name)
+        from o2_coverage import execute_control
+
+        rejected[name] = execute_control(name, fn, expected[name])
 
     fs = 48000
     coeff = coefficients(fs)
@@ -747,7 +747,9 @@ def negative_controls():
     off, _ = producer_clock(m5, q, fs, 196, ("unity",))
     tone = np.sin(2 * np.pi * 6151 * np.arange(len(q)) / fs)
     colored = q + tone * (0.1 * obs.rms(q[-fs:]) / obs.rms(tone[-fs:]))
-    factory = replace(off, samples=colored, depth=0.5)
+    output = delivered(np.column_stack((q, colored)), m5, ("unity",))
+    off = replace(off, samples=output[:, 0])
+    factory = replace(off, samples=output[:, 1], depth=0.5)
 
     def paired(off_trace, on=factory, clock=off, factory_q=raw[:, 26]):
         return v17_row(
@@ -804,6 +806,29 @@ def negative_controls():
     reject(
         "self-attested shift", lambda: paired(moved, replace(moved, depth=0.5), moved)
     )
+    reject(
+        "rolled wet valid tags",
+        lambda: paired(
+            replace(off, samples=np.roll(off.samples, 1)),
+            replace(factory, samples=np.roll(factory.samples, 1)),
+        ),
+    )
+    # Keep the frozen carrier intact and change only the claimed denominator and sidecar.
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory(dir=OUT) as tmp:
+        directory = Path(tmp) / "traces"
+        directory.mkdir()
+        path = directory / Path(raw.filename).name
+        os.link(raw.filename, path)
+        receipt = json.loads(Path(raw.filename).with_suffix(".json").read_text())
+        receipt["taps"]["11"] = sample_hash(q)
+        path.with_suffix(".json").write_text(json.dumps(receipt))
+        bad = np.memmap(path, mode="r", dtype="<f8").reshape(-1, 30)
+        reject(
+            "substituted original M5",
+            lambda: producer_clock(bad[:, 25], bad[:, 25], fs, 196, ("unity",)),
+        )
     edge = sweep_peaks(np.arange(3.0), np.array([3.0, 1.0, 0.5]))[0]
     require(
         edge["hz"] == 0 and edge["width_hz"] is None and edge["dB"] > 6,
@@ -832,8 +857,28 @@ def tool_hashes():
         FIX / "o2_corner_peaks.tsv",
         FIX / "o2_replay_sha256.tsv",
         FIX / "acoustic/SHA256SUMS",
+        FIX / "o2_negative_predicates.json",
+        FIX / "o2_timing_terminals.json",
     ]
     return {p.name: guide.digest(p) for p in paths}
+
+
+def executed_controls(result, outcomes):
+    expected = json.loads((FIX / "o2_negative_predicates.json").read_text())
+    require(outcomes == expected, "executed negative-control predicates")
+    return {
+        k: {
+            "control": k,
+            "run_id": result["run_id"],
+            "entry": "o2_qualification.qualify",
+            "adapter": result["tool_hashes"]["o2_qualification.py"],
+            "expected": expected[k],
+            "actual": value,
+            "status": "behavioral rejection",
+            "predicate_exit": 1,
+        }
+        for k, value in outcomes.items()
+    }
 
 
 def qualify(result):
@@ -870,11 +915,12 @@ def qualify(result):
         if False in row["passes"].values()
     }
     result["all_tested_vectors_passed"] = not result["failed_predicates"]
-    result["stage"] = "awaiting independent Review 8.1"
+    result["stage"] = "awaiting independent Review 8.2"
     result["tool_hashes"] = tool_hashes()
     result["renderer_sha256"] = guide.digest(BINARY)
     grade(result)
     result["negatives"].update(coverage_negatives(result))
+    result["executions"] = executed_controls(result, result["negatives"])
     print("Retained downstream failures", result["failed_predicates"])
 
 

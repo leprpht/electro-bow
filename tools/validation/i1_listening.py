@@ -1,4 +1,4 @@
-"""Compact 8.1 audition. Engineering exports are unity-gain float32."""
+"""Compact 8.2 audition. Engineering exports are unity-gain float32."""
 
 import io
 import json
@@ -47,7 +47,7 @@ def main():
         clips[name] = x.astype(float)
         provenance[name] = "attributed original native-gain DI excerpt, attack aligned"
     gains = {}
-    with ZipFile(OUT / "stage-08-1-listening.zip", "w", ZIP_DEFLATED) as archive:
+    with ZipFile(OUT / "stage-08-2-listening.zip", "w", ZIP_DEFLATED) as archive:
         for name, x in clips.items():
             anchor = (
                 (round(0.06 * fs), round(0.22 * fs))

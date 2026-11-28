@@ -64,7 +64,8 @@ def containers(directory, altered=False):
                 "hz": 196,
                 "comparison": "pickup",
                 "protocol_revision": PROTOCOL,
-                "manifest_revision": 1,
+                "recording_mode": "separate-originals",
+                "manifest_revision": 2,
             },
             indent=2,
         )
@@ -80,10 +81,67 @@ def containers(directory, altered=False):
     return result
 
 
+def shifted_session(directory):
+    directory.mkdir(exist_ok=True, parents=True)
+    containers(directory)
+    manifest = directory / "manifest.json"
+    config = json.loads(manifest.read_text())
+    config["recording_mode"] = "shared-session"
+    rate, a = wavfile.read(directory / "A0.wav")
+    _, b = wavfile.read(directory / "B0.wav")
+    original = np.r_[a, np.zeros(rate, dtype=a.dtype), b]
+    original_path = directory / "session.wav"
+    wavfile.write(original_path, rate, original)
+    log = []
+    for label, start, pcm in (("A", 0, a), ("B", len(a) + rate, b)):
+        for i, take in enumerate(config["classes"][label]["takes"]):
+            offset = 5 * i
+            part = pcm[offset:]
+            path = directory / take["original"]
+            wavfile.write(path, rate, part)
+            _, y = audio(path)
+            interval = [start + offset, start + len(pcm)]
+            take.update(
+                interval=[0, len(part)],
+                session_interval=interval,
+                original_sha256=digest(path),
+                decoded_sha256=decoded(y),
+                segment_sha256=decoded(y),
+            )
+            log.append(
+                dict(
+                    order=take["order"],
+                    take_id=take["take_id"],
+                    interval=interval,
+                    attack=interval[0] + int(np.flatnonzero(abs(y) > 0.01)[0]),
+                    gain=1,
+                    pickup=label,
+                    gesture="injected",
+                )
+            )
+    logfile = directory / "attacks.json"
+    logfile.write_text(json.dumps(sorted(log, key=lambda r: r["order"])))
+    config["session"] = dict(
+        original=original_path.name,
+        sha256=digest(original_path),
+        attack_log=logfile.name,
+        attack_log_sha256=digest(logfile),
+    )
+    manifest.write_text(json.dumps(config))
+    result = qualify(manifest)
+    require(
+        "shared session chronological independent attack intervals"
+        in result["failures"]
+        and "wet" not in result,
+        "shifted original attacks",
+    )
+    return result
+
+
 def main():
     root = OUT / "recording-controls"
     root.mkdir(exist_ok=True, parents=True)
-    results = {}
+    results = {"shifted-session": shifted_session(root / "shared-session")}
     for label, altered in (("containers", False), ("segments", True)):
         d = root / label
         d.mkdir(exist_ok=True)

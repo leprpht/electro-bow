@@ -1,4 +1,4 @@
-"""Stage 08.1 controlled recording manifest preflight, prior to wet rendering."""
+"""Stage 08.2 controlled recording manifest preflight, prior to wet rendering."""
 
 from hashlib import sha256
 
@@ -7,7 +7,7 @@ from guide_qualification import digest
 from o2_response import require
 from scipy.io import wavfile
 
-PROTOCOL = "I1-repeatability-8.1"
+PROTOCOL = "I1-repeatability-8.2"
 
 
 def decoded(x):
@@ -28,11 +28,26 @@ def recorded_audio(path):
 def inventory(config, manifest):
     require(
         config.get("protocol_revision") == PROTOCOL
-        and config.get("manifest_revision") == 1,
+        and config.get("manifest_revision") == 2,
         "recording protocol/manifest revision",
     )
     originals, segments, ids, ranges = {}, {}, set(), {}
     records, inputs, failures = {}, {}, []
+    mode = config.get("recording_mode")
+    require(mode in ("shared-session", "separate-originals"), "recording mode")
+    ordered = []
+    if mode == "shared-session":
+        session = config["session"]
+        session_path = (manifest.parent / session["original"]).resolve()
+        rate, original_audio = recorded_audio(session_path)
+        require(digest(session_path) == session["sha256"], "shared original recording")
+        log_path = manifest.parent / session["attack_log"]
+        import json
+
+        require(digest(log_path) == session["attack_log_sha256"], "session attack log")
+        log = json.loads(log_path.read_text())
+        require(len(log) == 8, "attack log inventory")
+
     for c in ("A", "B"):
         takes = config["classes"][c]["takes"]
         require(len(takes) == 4, "four independent attacks per setting")
@@ -97,8 +112,46 @@ def inventory(config, manifest):
                     or not item["attack_record"].strip()
                 ):
                     errors.append("missing physical attack documentation")
+                if mode == "shared-session":
+                    begin, end = item["session_interval"]
+                    attack = begin + start
+                    require(
+                        type(begin) is int
+                        and type(end) is int
+                        and 0 <= begin < end <= len(original_audio)
+                        and rate == fs
+                        and decoded(original_audio[begin:end]) == decoded(y),
+                        "session sample coordinates",
+                    )
+                    order = item["order"]
+                    row = log[order - 1]
+                    label = config["classes"][c]
+                    require(
+                        row
+                        == dict(
+                            order=order,
+                            take_id=uid,
+                            attack=attack,
+                            interval=[begin, end],
+                            pickup=label["pickup"],
+                            gain=label["gain"],
+                            gesture=label["gesture"],
+                        ),
+                        "session attack log entry",
+                    )
+                    ordered.append((order, begin, end, attack))
                 inputs[name] = (fs, y[start:], capture)
             except (ValueError, TypeError, KeyError, OSError) as err:
                 errors.append(str(err))
             failures.extend(name + ": " + e for e in errors)
+    if mode == "shared-session":
+        for previous, current in zip(sorted(ordered), sorted(ordered)[1:]):
+            if current[1] < previous[2] or current[3] - previous[3] < round(
+                0.30 * rate
+            ):
+                failures.append(
+                    "shared session chronological independent attack intervals"
+                )
+    elif len(originals) != 8:
+        failures.append("separate originals require eight original recordings")
     return records, inputs, failures

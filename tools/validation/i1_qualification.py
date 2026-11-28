@@ -1,4 +1,4 @@
-"""Stage 08.1 complete offline exit. Reconstruct both measurements and artifacts on fresh paths."""
+"""Stage 08.2 complete offline exit. Reconstruct both measurements and artifacts on fresh paths."""
 
 import argparse
 import io
@@ -27,6 +27,8 @@ REPORTS = (
     "motion",
     "joined",
     "integrity",
+    "stream-checks",
+    "layout",
     "listening-manifest",
     "clock",
     "source-clock",
@@ -63,7 +65,7 @@ def relative_files():
         + ["joined/" + key + ".npz" for key in (*SITES, "reference", "uneven")]
         + [
             "listening.zip",
-            "stage-08-1-listening.zip",
+            "stage-08-2-listening.zip",
             "revised-held.npz",
             "bow-controls.f64le",
             "retune.f64le",
@@ -87,6 +89,8 @@ def render(root):
         "i1_stationary",
         "i1_joined",
         "i1_integrity_checks",
+        "i1_stream_checks",
+        "i1_layout",
         "i1_listening",
     ):
         args = ["--historical-measurements"] if name == "i1_study" else []
@@ -136,13 +140,15 @@ def grade(candidate, reference):
         )
         vib = motion["rows"][f"vibrato-{fs}"]
         require(
-            vib["witness"]["passed"] and not vib["old_witness"]["passed"],
+            vib["witness"]["passed"]
+            and vib["delivery_witness"]["passed"]
+            and not vib["old_witness"]["passed"],
             "moving identity witness",
         )
     for name, row in motion["rows"].items():
         for block in row["monitor"]:
-            if not (
-                block["available"] and block["realized_ok"] and block["neutral_ok"]
+            if block["selection_tick"] is not None and not (
+                block["available"] and block["realized_ok"]
             ):
                 require(block["veto"] and block["scale"] == 0, "missed veto " + name)
         if name.startswith(("vibrato-", "bend-")):
@@ -155,8 +161,17 @@ def grade(candidate, reference):
 
 
 def sample_checks(root):
+    from i1_stream_checks import motion_samples
+
+    report = json.loads((root / "motion.json").read_text())
     for case in CASES:
         fs = int(case.rsplit("-", 1)[1])
+        motion_samples(
+            root,
+            case,
+            report["rows"][f"steady-{fs}"]["reference"],
+            report["rows"][case]["monitor"],
+        )
         with np.load(root / "motion" / (case + ".npz")) as z:
             q, d, wet, a = z["q"], z["d"], z["wet"], z["scale"]
             n = (7 if case.startswith("lift-") else 3) * fs
@@ -278,7 +293,7 @@ def mutations(candidate, reference, root):
     return controls
 
 
-def run(existing=False):
+def run(existing=False, challenge_first=None):
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / "qualification.json"
     result = {
@@ -296,11 +311,30 @@ def run(existing=False):
 
     publish()
     try:
+        from i1_mutants import gate
+
+        groups = ("paths", "faults", "events", "lifecycle", "qr", "producer")
+        order = (
+            groups
+            if challenge_first is None
+            else (challenge_first, *(g for g in groups if g != challenge_first))
+        )
+        for group in order:
+            result["predicate_group"] = group
+            gate(group)
+        result.pop("predicate_group")
+        if challenge_first is not None:
+            raise RuntimeError("source mutation escaped all producer predicates")
         upstream = json.loads((ELECTRICAL / "results.json").read_text())
         grade_complete(upstream)
+        from i1_mutants import execute
+        from i1_receipt_checks import exercise
+
         result["o2_run"] = upstream["run_id"]
+        result["receipt_controls"] = exercise(upstream)
         if not existing:
             render(OUT)
+        result["behavioral_controls"] = execute()
         sample_checks(OUT)
         candidate = snapshot(OUT)
         with TemporaryDirectory(dir=OUT.parent) as scratch:
@@ -325,6 +359,7 @@ def run(existing=False):
     except BaseException as err:
         result.update(
             status="interrupted" if isinstance(err, KeyboardInterrupt) else "failed",
+            error_type=type(err).__name__,
             error=str(err),
         )
         raise
@@ -335,4 +370,10 @@ def run(existing=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--verify-existing", action="store_true")
-    run(parser.parse_args().verify_existing)
+    parser.add_argument(
+        "--challenge-first",
+        choices=("paths", "faults", "events", "lifecycle", "qr", "producer"),
+        help=argparse.SUPPRESS,
+    )
+    args = parser.parse_args()
+    run(args.verify_existing, args.challenge_first)

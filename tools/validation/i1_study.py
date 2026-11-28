@@ -121,6 +121,11 @@ def inspect_row(raw, wet, fs, f, setting):
     q = raw[:, 25:28]
     m5 = raw[:, 11]
     ref, _ = producer_clock(m5, q[:, 0], fs, f, (setting,))
+    if np.shares_memory(wet, raw):
+        from o2_records import delivered
+
+        require(np.array_equal(wet.view("u8"), q.view("u8")), "neutral producer bytes")
+        wet = delivered(q, m5, (setting,))
     off = replace(ref, samples=wet[:, 0])
     rows = []
     for i, d in enumerate((0, 0.5, 1)):
@@ -191,7 +196,9 @@ def study_case(raw, case):
     else:
         updates = updates_for(source(fs, f, name), fs, f)
         gains = smooth_targets(len(raw), fs, updates)
-    out, alpha, log = historical_run(raw[:, 25:28].T, raw[:, 11], fs, f, gains)
+    out, alpha, log = historical_run(
+        raw[:, 25:28].T, raw[:, 11], fs, f, gains, settings=(key(case),)
+    )
     final = gains if gains.ndim == 1 else gains[-1]
     spec = inspect_row(raw, out, fs, f, key(case))
     frequencies = np.arange(65.0, 4000.25, 0.25)
@@ -367,7 +374,9 @@ def real_sources(clips):
         require(bool(updates), "missing source capture " + name)
         times = [(round(t * fs / rate), g) for t, g in updates]
         coeff = smooth_targets(len(q), fs, times)
-        wet, alpha, log = historical_run(raw[:, 25:28].T, m5, fs, 196, coeff)
+        wet, alpha, log = historical_run(
+            raw[:, 25:28].T, m5, fs, 196, coeff, settings=(name,)
+        )
         unsafe = q + correction(q, fs, 196, coeff)
         di = x[round(0.08 * rate) : round(0.23 * rate)]
         pitchgrid = np.arange(193, 199.01, 0.025)

@@ -5,6 +5,7 @@ import json
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path
+from weakref import WeakValueDictionary
 
 import numpy as np
 from guide_qualification import digest
@@ -67,6 +68,11 @@ def producer_clock(m5, off, fs, pitch, settings):
     from o2_bench import BINARY
 
     n = len(m5)
+    canonical = np.memmap(path, dtype="<f8", mode="r").reshape(n, 30)
+    taps = {
+        str(i): sample_hash(canonical[:, i]) for i in (3, 11, 21, 22, 24, 25, 26, 27)
+    }
+    require(taps == record["taps"], "canonical Rust tap schema")
     require(
         record["fixture"] == path.stem
         and record["source"] == digest(path)
@@ -88,16 +94,16 @@ def producer_clock(m5, off, fs, pitch, settings):
         and record["taps"]["25"] == sample_hash(off),
         "physical clock/tap provenance",
     )
-    if path.parent.name == "traces":
-        with (
-            Path(__file__)
-            .with_name("fixtures")
-            .joinpath("o2_replay_sha256.tsv")
-            .open() as f
-        ):
-            frozen = {
-                r["case"]: r["retained_O2"] for r in csv.DictReader(f, delimiter="\t")
-            }
+    with (
+        Path(__file__)
+        .with_name("fixtures")
+        .joinpath("o2_replay_sha256.tsv")
+        .open() as f
+    ):
+        frozen = {
+            r["case"]: r["retained_O2"] for r in csv.DictReader(f, delimiter="\t")
+        }
+    if path.stem in frozen or path.parent.name == "traces":
         require(frozen[path.stem] == record["source"], "frozen carrier digest")
         kind, rate, hz, ratio, speed, seconds = path.stem.split("_")
         require(
@@ -139,7 +145,7 @@ def producer_clock(m5, off, fs, pitch, settings):
         sample_hash(m5),
         sample_hash(off),
         0,
-    ), record["taps"]
+    ), taps
 
 
 def check_pair(
@@ -157,3 +163,51 @@ def check_pair(
         and all(sample_hash(x) == taps[str(i)] for i, x in columns),
         "final wet alignment/settings/reference differ",
     )
+
+    record = getattr(corrected.samples, "record", None)
+    index = (0, 0.5, 1).index(noise)
+    require(
+        isinstance(record, OutputRecord)
+        and _captured.get(id(record)) is record
+        and record.settings == settings
+        and record == getattr(corrected_off.samples, "record", None)
+        and record.carrier == ref.source
+        and record.count == ref.count
+        and index < len(record.hashes)
+        and sample_hash(corrected.samples) == record.hashes[index]
+        and sample_hash(corrected_off.samples) == record.hashes[0],
+        "synchronized wet producer samples",
+    )
+
+
+@dataclass(frozen=True)
+class OutputRecord:
+    """Captured at the output of the producer, before the measurement consumer."""
+
+    carrier: str
+    count: int
+    hashes: tuple
+    settings: tuple
+
+
+_captured = WeakValueDictionary()
+
+
+class Delivered(np.ndarray):
+    def __array_finalize__(self, source):
+        self.record = getattr(source, "record", None)
+
+
+def delivered(samples, m5, settings=()):
+    output = np.asarray(samples).view(Delivered)
+    output.record = OutputRecord(
+        digest(Path(m5.filename).with_suffix(".json"))
+        if isinstance(m5, np.memmap)
+        and Path(m5.filename).with_suffix(".json").is_file()
+        else "",
+        len(samples),
+        tuple(sample_hash(col) for col in samples.T),
+        settings,
+    )
+    _captured[id(output.record)] = output.record
+    return output

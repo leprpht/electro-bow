@@ -1,6 +1,7 @@
 """Joined causal oracle. Only typed A3 decisions/energy and fault probes are injected."""
 
 import json
+from dataclasses import dataclass
 from functools import lru_cache
 
 import numpy as np
@@ -11,90 +12,64 @@ from i1_clock import (
     Gesture,
     Launch,
     clock_ticks,
+    decode,
     due_stamps,
     replay,
     rounded,
 )
 from i1_motion import OUT, physical, prerequisite
-from i1_safety import GRID, ORDERS, permission_block
+from i1_stream import Epoch, NumericalFault, Site
 from o2_bench import replay as electrical
 from o2_records import sample_hash
 from o2_response import require
 
 
-class WetEpoch:
-    def __init__(self, fs):
-        self.fs = fs
-        self.z = np.zeros((4, 12), complex)
-        self.zz = self.z.copy()
-        self.c = np.zeros(12)
-        self.a = self.dest = self.next = self.phase = 0.0
-        self.ready = self.count = 0
-        self.length = 2 * rounded(4 * fs / 196)
-        self.buffer = np.empty((self.length, 14))
-        self.ramp = rounded(0.005 * fs)
-        self.observed = True
-        self.veto = True
+@dataclass(frozen=True)
+class Eligibility:
+    generation: int
+    epoch: int
+    fs: int
+    issued: int
+    through: int
+    pitch_range: tuple = (65.0, 1320.0)
+    depth_range: tuple = (0.0, 1.0)
+    speed_range: tuple = (0.06, 0.16)
+    force_range: tuple = (0.0, 0.16 * 2.4 / 1.65)
 
-    def tick(self, q, m5, pitch, target, trusted, observation, fault):
-        # Fixed-size prospective state, published at the end of a valid tick.
-        if self.count == 17:
-            self.dest = self.next
-        a = self.a + np.clip(self.dest - self.a, -1 / self.ramp, 1 / self.ramp)
-        c = self.c + (-np.expm1(-1 / (0.015 * self.fs))) * (target - self.c)
-        if fault == "candidate":
-            c[0] = np.nan
-        require(np.isfinite(c).all(), "candidate")
-        r = np.exp(-2 * np.pi * 0.22 * pitch / self.fs)
-        poles = r * np.exp(2j * np.pi * pitch * ORDERS / self.fs)
-        z = poles * self.z + (1 - r) * q[:, None]
-        zz = poles * self.zz + (1 - r) * z
-        if fault == "bank":
-            zz[3, 0] = np.inf
-        require(np.isfinite(zz).all() and np.isfinite(z).all(), "bank")
-        taper = np.clip(
-            (0.28 * (self.fs / (self.fs // 16000)) - pitch * ORDERS)
-            / (0.03 * (self.fs / (self.fs // 16000))),
-            0,
-            1,
+    def permits(self, generation, epoch, rate, tick, controls, depth):
+        pitch, speed, force = controls
+        return (
+            (self.generation, self.epoch, self.fs)
+            == (
+                generation,
+                epoch,
+                rate,
+            )
+            and self.issued <= tick <= self.through
+            and self.pitch_range[0] <= pitch <= self.pitch_range[1]
+            and self.depth_range[0] <= depth <= self.depth_range[1]
+            and self.speed_range[0] <= speed <= self.speed_range[1]
+            and self.force_range[0] <= force <= self.force_range[1]
         )
-        d = 2 * zz.real @ (taper * c)
-        wet = q.copy() if a == 0 else q + a * d
-        if fault == "wet":
-            wet[3] = np.nan
-        require(np.isfinite(wet).all(), "wet")
-        row = np.r_[q, d, wet, m5, pitch]
-        if fault == "moment":
-            row[11] = np.nan
-        require(np.isfinite(row).all() and np.isfinite(row @ row), "moment")
-        terminal = float(wet[3]) if fault != "conversion" else np.finfo(float).max
-        require(abs(terminal) <= np.finfo(np.float32).max, "conversion")
-        self.buffer[self.count] = row
-        self.count += 1
-        self.observed &= observation
-        if self.count == self.length:
-            b = self.buffer
-            self.phase, mask, live, available, _, _ = permission_block(
-                b[:, :4],
-                b[:, 4:8],
-                b[:, 8:12],
-                b[:, 12],
-                self.fs,
-                b[:, 13],
-                True,
-                self.phase,
-                trusted,
-                self.observed,
-            )
-            self.ready = (
-                min(2, self.ready + 1) if live and available and mask[-1] else 0
-            )
-            self.veto = self.ready < 2
-            self.next = 0.0 if self.veto else float(GRID[np.flatnonzero(mask)[0]])
-            self.count = 0
-            self.observed = True
-        self.z, self.zz, self.c, self.a = z, zz, c, a
-        return terminal
+
+
+# Offline harness poisons native operands. Fault ownership comes from the checked
+# operation; an unexpected numerical fault follows exactly the same M6 branch.
+PROBES = {
+    "phase": 1,
+    "candidate": 2,
+    "bank": 3,
+    "trial": 4,
+    "moment": 5,
+    "normalization": 6,
+    "gram": 7,
+    "residual": 8,
+    "wet": 9,
+    "conversion": 10,
+    "increment": 11,
+    "bank-overflow": 13,
+    "trial-nan": 14,
+}
 
 
 def fixture(fs, n):
@@ -105,6 +80,8 @@ def fixture(fs, n):
 @lru_cache(None)
 def returns(fs, count, kind):
     ctl = np.tile([196.0, 0.1, 1.8 * 0.1 / 1.65], (count, 1))
+    if kind in ("lifted", "uneven", "replacement"):
+        ctl[:, 0] *= np.exp2(35 * np.sin(2 * np.pi * 5 * np.arange(count) / fs) / 1200)
     if kind == "lifted":
         ctl[8000:, 2] = 0
     depth = 0.5 + 0.45 * np.sin(2 * np.pi * 7 * np.arange(count) / fs)
@@ -112,11 +89,67 @@ def returns(fs, count, kind):
     directory.mkdir(parents=True, exist_ok=True)
     raw = physical(ctl, fs, f"{kind}-{fs}-{count}", directory)
     q = np.column_stack((raw[:, 25:28], electrical(fs, raw[:, 21], depth)[:, 3]))
-    return raw, q, depth
+    return raw, q, depth, ctl
+
+
+@dataclass
+class LaneSource:
+    events: dict
+    generator: object
 
 
 def lane_ticks(
-    fs, x, frames, events, envelope, carriers, faults, partitions, stamps, trusted
+    fs,
+    x,
+    frames,
+    events,
+    envelope,
+    carriers,
+    faults,
+    partitions,
+    stamps,
+    trusted,
+    *,
+    held_control=None,
+    outage=(6200, 7100),
+    receipt_updates=None,
+    signed_gain=1.0,
+):
+    schedule = dict(events)
+    work = _lane_samples(
+        fs,
+        x,
+        frames,
+        schedule,
+        envelope,
+        carriers,
+        faults,
+        partitions,
+        stamps,
+        dict(trusted),
+        held_control,
+        outage,
+        receipt_updates or {},
+        signed_gain,
+    )
+    return LaneSource(schedule, work)
+
+
+def _lane_samples(
+    fs,
+    x,
+    frames,
+    events,
+    envelope,
+    carriers,
+    faults,
+    partitions,
+    stamps,
+    trusted,
+    held_control,
+    outage,
+    receipt_updates,
+    signed_gain,
 ):
     # Arrays retain complete sample coverage. Sparse capture records hold until next event.
     n = len(x)
@@ -136,6 +169,13 @@ def lane_ticks(
         "cached_product",
         "fade_index",
         "veto",
+        "trial",
+        "window_closed",
+        "phase",
+        "target",
+        "off_wet",
+        "factory_wet",
+        "full_wet",
     )
     trace = np.zeros((n, len(columns)))
     vectors = np.zeros((n, 24))
@@ -147,14 +187,20 @@ def lane_ticks(
     cache = (0.0, 0.0)
     dest = np.zeros(12)
     nf = rounded(0.005 * fs)
-    clock = clock_ticks(x, fs, frames, events, partitions, identity_stamps=stamps)
+    clock = clock_ticks(
+        x, fs, frames, events, partitions, identity_stamps=stamps, energy=envelope
+    )
     post = False
     for tick in range(n):
         at, row = clock.send(post if tick else None)
         require(at == tick, "host clock")
         post = False
+        if tick in receipt_updates:
+            key, receipt = receipt_updates[tick]
+            trusted[key] = receipt
         site = faults.get(tick)
         if row:
+            generation = row["generation"]
             capture.append(row)
             if row["event"] == "fault" and state is not None:
                 site = "pre-guide"
@@ -170,7 +216,7 @@ def lane_ticks(
                         envelope[tick] == 0
                         and any(
                             isinstance(e, Dispose) and e.epoch == epoch
-                            for e in events.get(tick, ())
+                            for e in decode(events.get(tick, ()), generation)[0]
                         )
                     ),
                     "nonzero disposal",
@@ -180,9 +226,11 @@ def lane_ticks(
                 cache = (0.0, 0.0)
                 if epoch is not None:
                     require(fade < 0 and envelope[tick] == 0, "launch energy/fade")
-                    state = WetEpoch(fs)
+                    state = Epoch(fs)
                     pointer = 0
             dest = np.asarray(row["target"])
+            if held_control is not None and row["epoch"] is not None:
+                dest = held_control
         gc = oc = 0
         wet = qval = depth = a = 0.0
         index = -1
@@ -190,41 +238,55 @@ def lane_ticks(
         old_epoch = epoch
         veto = True
         if state is not None:
-            raw, q, depths = carriers[epoch]
+            raw, q, depths, controls = carriers[epoch]
             index = pointer
             try:
-                require(site != "pre-guide", "pre-guide")
+                if site == "pre-guide":
+                    raise NumericalFault(Site.PHYSICAL)
                 gc = 1
                 commit = raw[index]
                 pointer += 1
-                require(site != "post-o2", "post-o2")
+                if site == "post-o2":
+                    raise NumericalFault(Site.ELECTRICAL)
                 oc = 1
                 depth, qval = depths[index], q[index, 3]
                 live_q = q[index].copy()
                 if site == "delivery-state":
                     live_q[3] = np.nan
-                require(np.isfinite(live_q).all(), "delivery-state")
+                if not np.isfinite(live_q).all():
+                    raise NumericalFault(Site.ELECTRICAL)
+                permission = trusted.get(epoch)
+                eligible = permission is not None and permission.permits(
+                    generation, epoch, fs, tick, controls[index], depth
+                )
                 wet = state.tick(
                     live_q,
                     commit[11],
-                    196.0,
+                    controls[index, 0],
                     dest,
-                    trusted,
-                    not (6200 <= tick < 7100),
-                    site,
+                    eligible,
+                    not (outage[0] <= tick < outage[1]),
+                    PROBES.get(site, 0),
                 )
                 a, veto = state.a, state.veto
                 e = envelope[tick]
-                product = e * wet
-                require(np.isfinite(product), "cache")
+                product = float(e) * (float(signed_gain) * float(wet))
+                if not np.isfinite(product):
+                    raise NumericalFault(Site.CACHE)
+                mix = (1.0 - e) * x[tick] + product
+                if not (
+                    0 <= e <= 1
+                    and np.isfinite(mix)
+                    and abs(mix) <= np.finfo(np.float32).max
+                ):
+                    raise NumericalFault(Site.CONVERSION)
                 cache = (e, product)
-                vectors[tick] = np.r_[dest, state.c]
-            except ValueError as err:
-                require(str(err) == site, "unexpected transaction failure " + str(err))
+                vectors[tick, :12], vectors[tick, 12:] = dest, state.c
+            except NumericalFault as err:
                 transactions.append(
                     {
                         "tick": tick,
-                        "site": site,
+                        "site": err.site.name,
                         "epoch": epoch,
                         "physical_index": index,
                         "physical": raw[index, :22].tolist() if gc else None,
@@ -232,6 +294,8 @@ def lane_ticks(
                         "preceding_cache": cache,
                     }
                 )
+                wet = a = 0.0
+                veto = True
                 post = True
                 epoch = state = None
                 invalidations += 1
@@ -259,6 +323,11 @@ def lane_ticks(
             *cache,
             fade_index,
             veto,
+            *(
+                state.sample[0, [9, 10, 17, 18, 4, 5, 6]]
+                if state
+                else [-1, 0, 0, 0, 0, 0, 0]
+            ),
         ]
         yield tick
     return trace, vectors, capture, transactions, columns
@@ -266,12 +335,20 @@ def lane_ticks(
 
 def advance_lanes(*lanes):
     # One physical-cache transaction per lane before the next host sample.
-    tick = 0
+    tick = generation = 0
     while True:
+        if any(
+            Gesture.RESET in decode(lane.events[tick], generation)[0]
+            for lane in lanes
+            if tick in lane.events
+        ):
+            generation += 1
+            for lane in lanes:
+                lane.events[tick] = (Gesture.RESET,)
         finished = []
         for lane in lanes:
             try:
-                require(next(lane) == tick, "stereo clock")
+                require(next(lane.generator) == tick, "stereo clock")
             except StopIteration as end:
                 finished.append(end.value)
         if finished:
@@ -328,6 +405,9 @@ def capture_controls():
         8402: (Dispose(2, 0.0), Launch((0, 2), 2, 0.0)),
         8403: (Dispose(1, 0.0), Launch((0, 2), 2, 0.0)),
     }
+    stale = {r["tick"]: r for r in play(replacement)}
+    require(stale[8403]["epoch"] is None, "stale support confirmed replacement")
+    frames.update({t: Frame(196, owner=(0, 2)) for t in frames if t >= 7440})
     r = {r["tick"]: r for r in play(replacement)}
     require(
         all(r[t]["epoch"] == 1 and any(r[t]["held"]) for t in (8400, 8401, 8402))
@@ -381,7 +461,8 @@ def uneven_delivery():
     stamps = due_stamps(n, fs, [19])
     energy = np.clip((np.arange(n) - 2614) / rounded(0.008 * fs), 0, 1)
     carrier = returns(fs, 3 * fs, "uneven")
-    trusted = prerequisite(carrier[0], fs, 196)["passed"]
+    neutral = returns(fs, 3 * fs, "reference")
+    trusted = prerequisite(neutral[0], fs, 196)["passed"]
     require(trusted, "uneven reference prerequisite")
     summaries = {}
     arrays = {}
@@ -400,7 +481,7 @@ def uneven_delivery():
             {},
             (0, 1, 255, 19),
             received,
-            trusted,
+            {1: Eligibility(1, 1, fs, 2614, n)} if trusted else {},
         )
         tr, g, cap, _, _ = advance_lanes(gen)[0]
         launch = next(r for r in cap if r["tick"] == 2614)
@@ -487,7 +568,7 @@ def main():
             faults,
             parts,
             due_stamps(len(di), fs),
-            trusted,
+            {e: Eligibility(0, e, fs, 0, n) for e in carriers} if trusted else {},
         )
 
     def simulate(*args, **kwargs):
@@ -508,6 +589,8 @@ def main():
     }
     for parts in (
         (1,),
+        (n + 17,),
+        (first, replace - first, n - replace),
         (0, 17, 256, 1, 1024, 64),
         tuple(np.random.default_rng(81).integers(0, 700, 31)),
     ):
