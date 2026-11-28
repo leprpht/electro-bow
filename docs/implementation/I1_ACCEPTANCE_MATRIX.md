@@ -23,3 +23,22 @@ The independent exit inventory contains 36 stationary control/vector combination
 Movement=.5 for source trials. Weak-H1 uses the historical DI, dip/missing-six scale H6 of .12/k by .35/0, bright/dark scale H5–H12 by 2.5/.15. Real incoming levels retain their original gain. Opposed is (−5,+5) repeated six times. The 440 Hz operating point includes the actual physical low-order null; no gain computation divides by its magnitude. Source capture and held output are linked by the joined tick trace. The 12 s fixed-vector hold is an isolated load. The 7 s lift separately records a prescribed 100 ms release envelope and forced zero after disposal. A 20 ms 196→440 Hz retune, changing V/R ramps, and an unavailable monitor interval [1.35,1.55) s during a signed gain transition exercise time-dependent policy. Report whether local vetoes suppress all coloration.
 
 Independent keys and remeasurement checks cover the original converted M5, same-depth q, final factory/off wet, actual clock, phase eligibility, safety and synthetic differentiation. The matched/engineering asset check independently compares the reference DI and neutral WAV to their source samples. The artifact directory preserves strict machine-readable failures. The exact commands and measured exceptions are in the handoff. [Exit grader](../../tools/validation/i1_acceptance.py) · [Original O2 inventory](O2_ACCEPTANCE_MATRIX.md) · [Stage 08 handoff](status/STAGE_08_I1_SPECIFICATION.md)
+
+## Stage 08.1 motion witness registration
+
+Freeze before evaluating the revised monitor. Render the existing 196 Hz, 5 Hz,
+±35 cent vibrato, V=.1, R=1.8 and held alternating −5/+5 dB request on each
+of 32, 44.1, 48, 88.2, 96, 176.4 and 192 kHz. On the off-depth return measure
+the *actual* difference wet minus neutral. Reference its RMS to the previous
+stationary corrected off-depth difference on the same rate, controls and request
+over [2,3) seconds. Require finite reference RMS > 1e−4 FS and a qualified
+stationary neutral prerequisite. Score all 100 consecutive 20 ms cells of
+[0.5,2.5) seconds (round each absolute boundary to the nearest sample).
+A cell is active at ≥ half the stationary correction RMS, a 6.02 dB budget
+for motion-related loss. Require ≥75 active cells and at most three consecutive
+inactive cells. This demands sustained audible-scale transfer through multiple
+phases of ten vibrato periods and limits dropout to less than a third of one
+period. These are engineering usefulness criteria relative to the established
+stationary contribution. Perceptual thresholds require owner listening. Count
+every scheduled cell, including vetoes. A missing/ineligible case or a failure
+at any rate holds moving-identity implementation. Apply V17 separately.
