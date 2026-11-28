@@ -21,3 +21,6 @@ libloading = "=0.8.9"
 nalgebra = { version = "=0.34.1", default-features = false, features = ["std"] }
 csv = "=1.4.0"
 zip = { version = "=2.4.2", default-features = false, features = ["deflate-zlib"] }
+
+[build-dependencies]
+sha2 = "=0.10.9"

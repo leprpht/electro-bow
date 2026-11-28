@@ -55,6 +55,8 @@ pub fn run(
         .join(format!("runner{}", std::env::consts::EXE_SUFFIX));
     fs::copy(std::env::current_exe()?, &exe)?;
     let expected_hash = evidence::digest(&exe)?;
+    let revision = crate::process::check(Command::new("git").args(["rev-parse", "HEAD"]))?;
+    let revision = std::str::from_utf8(&revision.stdout)?.trim();
     let children = dir.canonicalize()?.join("children");
     let mut reports = BTreeMap::new();
     let cases = REGRESSION
@@ -75,7 +77,9 @@ pub fn run(
         )?;
         let receipt = publication::inspect(&children.join(suite), suite)?;
         ensure(
-            receipt["status"] == "passed" && receipt["executable_sha256"] == expected_hash,
+            receipt["status"] == "passed"
+                && receipt["executable_sha256"] == expected_hash
+                && receipt["revision"] == revision,
             "unsuccessful child receipt",
         )?;
         reports.insert(suite,json!({"id":receipt["run_id"],"executable":receipt["executable_sha256"],"revision":receipt["revision"],"elapsed_seconds":receipt["elapsed_seconds"],"evidence":receipt["artifacts"]["evidence.json"]}));

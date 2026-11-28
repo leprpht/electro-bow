@@ -15,6 +15,8 @@ mod qualification;
 mod recordings;
 mod replay;
 mod ring;
+#[path = "../source_identity.rs"]
+mod source_identity;
 use serde_json::{Value, json};
 use std::{
     env,
