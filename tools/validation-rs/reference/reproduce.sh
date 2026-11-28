@@ -43,6 +43,7 @@ for suite in contact_mutations ring_mutations guide_mutations guide_negative_con
 done
 measure guide-stress build/stage-03/guide-render --stress
 measure plugin "$py" tools/validation/plugin_baseline.py
+measure packaged-audition "$py" tools/render_guitar_comparisons.py "$root/build/ElectroBow_artefacts/Release/VST3/ElectroBow.vst3" "$ref/packaged-audition"
 measure pitch-build rustc --edition 2024 -O tools/validation/pitch_candidates.rs -o build/spec-signoff/pitch_candidates
 measure pitch "$py" tools/validation/pitch_study.py
 measure pitch-results "$py" tools/validation/check_pitch_results.py
