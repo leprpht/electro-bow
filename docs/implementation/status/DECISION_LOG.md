@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-28 · Propose the chronological I1 contract for independent Review 8.2
+
+Use pre-confirm expiry, typed event validation, two packed 984-byte blocks, scheduled retired-window trials and checked lane-local recovery. Require canonical producer samples, executed timing and behavioral mutant evidence. Review 8.1 continues to govern implementation authority, controlled identity and perception. [Stage 08.2 handoff](STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
+
 ## 2026-11-28 · Retain the offline guide-phase fit and require a joined qualification revision
 
 Accept the measured stationary V17 results and the preregistered moving witness under the retrospective host-time Gram contract. Keep the selected DI projection, frozen correction bank, independent physical/O1/O2 qualifications and original V17 denominator. Hold both acceptance-tooling sign-offs and isolated Rust I1 on corrected-wet and timing provenance, automated wet verification, exact expiry and lane-local fault handling.

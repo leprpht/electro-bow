@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Stage 08.2 bounded transaction awaits independent review
+
+The offline transaction now executes packed moving windows and one candidate per tick through source publication, automated fourth-path delivery and stereo M6 recovery. The submission retains 108 stationary rows and 700 active cells each on the sentinel and actual delivery. The proposed 61,376-byte analysis/control payload and 726,976-byte total await layout and callback measurement in a separately authorized implementation. [Stage 08.2 handoff](STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
+
 ## 2026-11-28 · Review 8.1 retains the carrier and holds isolated Rust I1
 
 Reviewed `ef0e631..6c10ca0` from a clean tree. S2a/S2b, M4/M6, M5, O1, isolated O2 and shipping remain qualified in scope. Both nominal complete offline exits passed. All 108 revised stationary rows met V17 and all 700 registered moving cells retained useful correction. An independent QR reconstruction verified the host-time Gram fit and realized decisions. Signed-zero neutral delivery, actual fourth electrical returns and cached stereo M6 decrement arithmetic reproduced.

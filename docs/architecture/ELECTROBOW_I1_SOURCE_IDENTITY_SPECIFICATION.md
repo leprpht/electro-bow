@@ -1,8 +1,8 @@
 # I1 · Source identity on the bowed electric-guitar carrier
 
-**Stage 08.1 proposal awaiting independent Review 8.1.** The selected design compresses observed DI harmonic contrasts, drives a complex correction bank with the actual returned O2 sample, and admits a common fraction of the requested correction from recent measurements of the physical carrier. A separate measurement of delivered coloration can withdraw that permission. The original converted M5 reference, O1 geometry and O2 electrical transaction retain their Review 7 meanings. [Physical and electrical boundary](../implementation/status/REVIEW_07_O2_IMPLEMENTATION.md) · [Engineering gates](../implementation/I1_ACCEPTANCE_MATRIX.md)
+**Stage 08.2 offline proposal awaiting independent Review 8.2.** The selected design compresses observed DI harmonic contrasts, drives a complex correction bank with the actual returned O2 sample, and admits a common fraction of the requested correction from recent measurements of the physical carrier. A separate measurement of delivered coloration can withdraw that permission. The original converted M5 reference, O1 geometry and O2 electrical transaction retain their Review 7 meanings. [Physical and electrical boundary](../implementation/status/REVIEW_07_O2_IMPLEMENTATION.md) · [Engineering gates](../implementation/I1_ACCEPTANCE_MATRIX.md)
 
-The **Stage 08.1 permission and transaction contract** below supersedes the historical fixed-bin admission, event interface and monitor storage estimate. The DI projection, feature smoothing, correction poles, transfer derivation, A3 and M6 retain their prior definitions.
+Use **Stage 08.2 chronological transaction** below for sample order, event ownership, arithmetic, scheduling and storage. The preceding stages preserve the derivations, historical comparators and preregistered acceptance thresholds. The DI projection, feature smoothing, correction poles, transfer derivation, A3 and M6 retain their prior definitions.
 
 ## What a held note preserves
 
@@ -247,3 +247,150 @@ The proposal keeps the previous 96 complex section updates and 48 weighted terms
 Reserve the original 2,048 bytes/lane for the two packed buffers and counters. Add **1,024 bytes/lane** to the prior layout for factor/solve staging (21+78 doubles), two diagnostic sums, phase/parity and typed token, event and fade bookkeeping (216 remaining bytes). Reuse the retired buffer in place for trial coefficients. Keep its group subblocks until the last trial. This leaves 64,656 of 65,536 stereo analysis/control bytes, 880 bytes slack. The full prepared estimate is 720,016 bytes before remaining stream overhead, under .8 MiB. These are allocation ceilings for a future layout check. The offline Python oracle retains sample arrays to enable independent grading.
 
 Every live tick has a phase advance and sin/cos pair, H2 from a double angle, at most 21 basis products, 78 projection updates and 21 energy updates, and bounded check/slew/event work. A close can coincide with one sample of both FIRs (385+769 terms), up to 84 projection order-indices, 12 feature finalizations/conversions, guide and four O2 updates, 96 bank sections and all 120 monitor accumulations **per lane**. Budget one 6×6 Cholesky (21 entries, inner loop ≤5), two six-row triangular substitutions for each of 13 RHS (≤390 multiply-subtracts and 156 divides, reciprocal reuse possible), and five realized/bridge checks on the close tick. Test one frozen λ per tick at offsets 0…16 of the next window. A trial has three 6×2 coefficient combinations, three dense six-coordinate fitted-energy quadratics, their two 2×2 group forms, and the level/pair forms. Both lanes may close and publish on the same single-sample callback. There is no data-dependent iteration count, dynamic allocation, inverse search or block-length amortization assumption. At 192 kHz stereo this adds up to 46.08 million statistic updates/s before closure work, alongside 36.864 million complex section updates/s. The 5.21 μs single-sample stereo deadline, exact layout, allocations, subnormal behavior and V18–V21 timings remain unmeasured for I1. Independent review owns the decision whether this bounded schedule merits an isolated Rust prototype.
+
+## Stage 08.2 chronological transaction
+
+This section governs the proposed private implementation. Use one epoch operation for any sequence of committed guide frequencies. The numerical reference calls that operation once per host sample, including within its contiguous-array adapter. The two-lane harness interleaves source and wet transactions. A prerecorded Rust row supplies exactly the next successful guide commit and observation. Its four electrical inputs are the returned off/factory/full q and the independent returned q on the same velocity with the current automated depth. The controller fixtures supply timestamped decisions. Full-window fits, time-series exports and the historical fixed-bin driver are offline comparators. [Stereo coordinator](../../tools/validation/i1_joined.py) · [Sample kernel](../../tools/validation/i1_stream.cpp) · [Capture job](../../tools/validation/i1_capture.py)
+
+### Ownership and types
+
+Proposed Rust field types follow. Use binary64 through analysis, banks, monitoring and cache. Use fixed-width unsigned counters with checked differences. A prepare or controlled stream reset precedes counter exhaustion. A lane borrow lasts for one sample. Prepared FIR halves, rates and O2 coefficients are shared by immutable reference. The lane owns its support, jobs, wave and all four electrical and correction histories. Borrow the current and retired blocks disjointly by their slot indices. A fault retires the whole mutable epoch. This permits writing tentative values in private epoch storage without a second copy of every bank.
+
+```rust
+struct Token { generation: u64, serial: u64 }
+struct PhysicalEpoch { generation: u64, id: u64 }
+struct Pending { source: Token, pick: u64 }
+struct Confirmed { source: Token, valid_through: u64 }
+enum Gesture { Reset, Fault, Pick, Mute, Change, Hold, Compatible, Release, Timeout }
+struct Confirm { source: Token, valid_through: u64 }
+struct Dispose { epoch: PhysicalEpoch, energy: f64 }
+struct Launch { epoch: PhysicalEpoch, source: Token, energy: f64 }
+struct EventFrame { generation: u64, gesture: Option<Gesture>, confirm: Option<Confirm>,
+                    dispose: Option<Dispose>, launch: Option<Launch> }
+enum Stamp<T> { NotDue, Missing, Present { generation: u64, end: u64, value: T } }
+struct CaptureJob { owner: Token, snapshot: u64, due: u64, first: u64, i: u32, m: u32,
+                    hz: f64, floor: f64, alpha: f64, sum_x: f64, sum_w: f64,
+                    xw: [Complex64;12], w: [Complex64;12] }
+struct Capture { pending: Option<Pending>, confirmed: Option<Confirmed>,
+                 active: Option<(PhysicalEpoch,Token)>, job: Option<CaptureJob>,
+                 published: [f64;12], published_end: Option<u64>, held: [f64;12] }
+struct PreparedI1<'a> { fs: f64, d: u32, hop: u32, budget: u32, hp: f64,
+                        fir_half: &'a [f64], gain_step: f64, slew_step: f64 }
+struct CorrectionBank { z: [Complex64;12], zz: [Complex64;12] }
+struct Moments { gram: [f64;21], projection: [[f64;6];13], qd: [[f64;3];4],
+                 yy: [f64;4], mm: f64, pair: [f64;3], pair_y: f64,
+                 delivery_pre: f64, delivery_qy: f64, delivery_dy: f64 }
+struct Retired { slot: u8, length: u32, conditioned: bool, available: bool, realized: bool }
+struct Trial { index: u8, largest_pass: Option<u8> }
+struct Permission { actual: f64, target: f64, selected: f64, pending: bool, clean: u8 }
+struct Delivery { depth: f64, q: [f64;4], signed_gain: f64, energy: f64 }
+struct WetCache { energy: f64, product: f64 }
+struct FaultFade { source: WetCache, index: u32, length: u32 }
+enum NumericSite { Phase, Coefficient, Bank, Trial, Moment, Normalize, Gram,
+                   Residual, Wet, Conversion, Cache }
+enum Fault { Physical, ElectricalAfterCommit, IdentityAfterCommit(NumericSite) }
+enum CaptureOutcome { NoChange, InvalidFrame, RejectedFeature, Published(Token) }
+enum MonitorOutcome { Partial, FiniteUnavailable, Veto, Admitted }
+enum LaneOutput { Idle, Live(WetCache), CachedFade(WetCache) }
+```
+
+The types describe the interface. Lay out optional commands and pending slots with explicit tag words and payload arrays in the arena below. The library's native enum layout is not a storage contract. Each lane receives its own trusted controller receipt carrying generation, epoch, rate, valid-from, inclusive valid-through and permitted control ranges (committed Hz, speed, force and depth). Only the acquisition/controller owner may issue or refresh one from already available qualified operating conditions. Revocation, wrong scope or a missing receipt requests zero on this tick, invalidates pending selection, and starts the usual bounded slew. Measured contradiction, including an unfit original M5, makes the observed window ineligible for recovery. Two complete eligible observations and a fresh matching disposition are needed to resume after revocation. A preset, a colored sample or a successful previous physical epoch cannot issue permission. The one-second neutral V17 score is a separate offline prerequisite prior to the run. The live issuer, operational coverage, revocation source and A2/A3 decision quality remain controller integration work. [Receipt and joined tests](../../tools/validation/i1_stream_checks.py)
+
+### One host sample
+
+1. Take the next sanitized direct inputs and timestamped shared controls once. Resolve stream reset before running either lane. Increment generation once, restart both FIR origins and clear both physical epochs, caches and fades. Retain immutable preparation. Advance the active control values at this timestamp before guide commit. In qualification the two lanes consume the injected values and E on this timestamp.
+2. Validate the event frame before applying commands. The external frame has a generation, at most one command of each structural kind, and a finite E on physical commands. Repeated copies of any gesture invalidate the frame. Multiple distinct gestures reduce to the existing A3 order in the gesture enum above. Reset consumes other commands. Fault, mute, release and timeout cancel acquisition and unpublished work. Pick/change replace its serial, anchor, pending feature, job and support stamps. Hold cancels refresh for the active owner. Compatible resumes capture without restarting the wave. During cached fade consume only stream reset. An invalid frame drops its commands and records the invalid input while ordinary sample processing continues. Source serials remain monotone across transport resets. Physical epoch numbering may restart in the new generation.
+3. Before confirmation, expire an unconfirmed acquisition when elapsed host samples reach `ceil(3 fs / 25)`. The half-open interval starts at the pick. At integer rates compute the ceiling by integer arithmetic. At prepare, express the finite binary64 rate as its exact integer ratio a/b and take ceiling(3a/(25b)) with integer division. Store the resulting host-tick count. At 32008.333333333336 Hz this gives 3842. Computing the product in binary64 first rounds it down to 3841. A previously confirmed token expires on the first tick strictly after its own inclusive deadline. Expiry retires the token, running/completed job and pending publication together.
+4. Advance causal HP and the current decimated emission from samples through this tick only. Record due A2 frames at the reset-relative endpoints. A missing frame, wrong owner, incompatible pitch or weak support cancels even completed work awaiting publication. Confirm only a matching pending token with current matching supported evidence. A timeout, reset or loss of support coincident with confirmation wins. A mismatched token or prior generation has no authority to promote. An explicit disposal checks the old physical epoch and zero actual E. Disposal precedes replacement launch. A matching confirmed token may launch at E=0 into a vacant lane with a strictly newer epoch. Preserve a different pending owner's work on ordinary disposal.
+5. Advance the outstanding projection by at most B chronological indices. Only one job can own the source accumulator. At completion retain its target until the exact due identity hop. At a missing hop cancel the slot. At the correct hop publish only a completed, supported matching result. Launch before publication can consume that tick's result. Launch after publication uses a matching snapshot at most two identity hops old. Pending capture and publication can run during an older audible hold. After publication start an eligible new snapshot and advance its first slice. The preceding job always finishes before this hop. For each slice accumulate unweighted sum x, Hann sum, and the complex sums of weighted phasor and weighted sample times phasor. Finalize as `2*(XW-mean(x)*W)/sum(Hann)` with the accepted reliability and centering law. Use the history ring and cursor throughout the job.
+6. Handle an already active M6 fade or idle state before the guide. Otherwise perform exactly one qualified physical transaction with the current controls. A precommit failure yields no physical sample. Read M5 and O1 from the successful commit. Tick four independent O2 lanes at 0, .5, 1 and current delivery depth. An O2 failure retains the successful physical commit. Smooth each coefficient from the current held target once, advance 48 pairs of complex sections from the four returned q values and compute four d values. An offline prescribed held-coefficient fixture can drive the same bank port directly.
+7. On the first tick of a new observation set the even window length from this commit's frequency. Advance phase before observing this sample. Consume a selection completed on a previous tick. Perform at most one trial on the retired block. Its result becomes eligible for the **following** sample. Apply the bounded slew to the already available target and form the four actual y values. Copy each q directly at zero permission, including signed zero.
+8. Accumulate the current sample into the prospective block. At closure retire the complete block, condition and factor it, solve the basis fits and evaluate original M5 and the four realized trajectories. Sample n has already been computed. Reduce phase modulo 2π at closure. Arm the first candidate for n+1. No retrospective decision alters sample n.
+9. Check finite conversion, signed wet, E, the product and the candidate A4 mix before publishing the cache. On success publish this epoch's finite state, E and P=E·σG·y_delivery. On a checked failure retain evidence of whichever physical/electrical operations succeeded, invalidate the affected epoch once and abandon its tentative I1 state. Snapshot the preceding finite pair and emit the first M6 decrement on this detection tick. Both lanes finish before the next host sample. Apply the existing shared output stage to their emitted products and direct inputs.
+
+Wrong confirmed token, stale launch, mismatched physical disposal and nonzero disposal cannot replace the live wave. A structurally valid frame may independently confirm an eligible acquisition even if its physical operation is ineligible. A malformed injected command is a harness/controller disposition. A finite feature rejection, a finite unobservable fit, and an ordinary veto retain the valid guide, bank and phase. A bad numerical operand in a checked computation is a lane fault. Broken array dimensions, an impossible cursor, unexpected exceptions or an invalid qualification inventory fail the run. The native kernel catches only its numerical fault type.
+
+### Packed binary64 arithmetic
+
+Offsets refer to a single contiguous block. Within each row use increasing order. Each word occupies eight bytes.
+
+| Offset | Field | Count |
+|---:|---|---:|
+| 0 | Lower triangle of basis Gram, row i entry j at i(i+1)/2+j | 21 |
+| 168 | Six basis projections for each of q,d,y by path, then original M5 | 78 |
+| 792 | q², qd, d² for each path | 12 |
+| 888 | Actual post-slew y² for each path | 4 |
+| 920 | Original M5² | 1 |
+| 928 | (q₁−q₀)², (q₁−q₀)(d₁−d₀), (d₁−d₀)² | 3 |
+| 952 | Actual (y₁−y₀)² | 1 |
+| 960 | Actual delivery (q₃+target·d₃)² before slew | 1 |
+| 968 | Actual delivery q₃y₃ and d₃y₃ | 2 |
+
+The exact block is **984 bytes**. The 24-byte difference from 960 retains the pre-slew power and both remaining delivery Gram cross terms. The realized diagonal already belongs to y². The native layout has two blocks at 0 and 984, first and second complex histories at 1968 and 2736, twelve complex poles at 3504, twelve tapers at 3696, then six f64 values beginning at 3792 (last pitch, radius, phase, scale, target, selection). Seven i32 fields at 3840 hold current slot, count, length, retired length, trial, consecutive passes and best index. Seven one-byte flags at 3868 hold observed, conditioned, bridge, available, realized, veto and pending. Five alignment bytes complete the 3880-byte epoch. Generation and physical owner reside in the enclosing lane. The exact proposed shared/lane field offsets and rate-dependent rings are produced by the layout calculator. [Arena layout](../../tools/validation/i1_layout.py)
+
+Use round-to-nearest binary64 with separate multiply and add, gradual underflow and explicit finite checks. Compute phase as previous plus `(2π*f)/fs` and generate 1, cosφ, sinφ, cos2φ, sin2φ and epoch parity. Each window is even, so its first parity is positive. Add each product in increasing host time. The retired normalization multiplies by the same precomputed 1/N. Gershgorin radii sum the absolute off-diagonals in increasing column order. Require the inclusive bounds [.25,2]. Finite rank loss produces ordinary unavailability. Cholesky uses ascending rows, ascending lower columns and ascending prior pivots. Solve each of the 13 RHS by increasing forward index and decreasing backward index, visiting remaining columns in ascending order. Replace retired projections in place with the fitted coefficients. A failed numerical pivot after an accepted conditioning screen faults the epoch.
+
+At grid weight w, form each fitted coefficient by a_q+w·a_d. Evaluate level as `(qq+2*w*qd)+(w*w)*dd`, and evaluate each component's energy as the ordered double sum of `(a_i*G_ij)*a_j`. The fitted energy uses all 36 terms. Residual is level minus fitted energy. For these nonnegative quantities clip only a finite negative inside `64*N*eps*sum(abs(terms))` to zero. Use |level|+|fit| for the residual. Material negatives and any nonfinite arithmetic fault. Compare H1 RMS to the maximum of H2 RMS, √2|a₅| and residual RMS with the accepted absolute floor and margins above. Use original M5 and same-path neutral q² denominators. Compute candidate paired power with its full three-term quadratic. For the realized test use the measured y projections, powers and actual difference directly. Strictly positive reference eligibility and inclusive level, dominance and paired gates retain their previous thresholds. A completed fit describes only that block's host-time samples.
+
+For close tick c, trial ticks c+1 through c+17 test indices 16 down to 0. Retain the largest passing index. Zero must pass. At the last trial, reset the clean count on a failed realized, reference, eligibility or neutral gate, otherwise saturate at two. The selected target first drives the slew on **c+18**. The new block has already accumulated 17 samples. With N≥194 there is at most one retired owner. Reset, disposal or fault removes it immediately. Partial windows and partial trials produce no selection. Recovery uses the same schedule as withdrawal. M6 overrides that schedule on a numerical fault.
+
+### Prepared storage, retirement and deadline
+
+Prepare two lane arenas and one shared arena. Use the layout calculator's byte offsets for ring capacities, feature vectors, source cursor, support stamps, typed events, eligibility, all four O2 states, projection arithmetic, monitor factor and trial scratch. Pool fixed-size working slices on the stream, including the Cholesky factor and component vector. The maximum occurs immediately below 192 kHz. Proposed analysis/control capacity is **61,376 bytes**, including 4,768 shared bytes and two 28,304-byte lanes. Four 4096-element physical rings, both families of 8192-frame scratch, JUCE stereo wet scratch and explicit guide/stream descriptor reservations bring the proposed prepared payload to **726,976 bytes**. These dimensions describe a proposed arena. Allocator usage and stack/ABI layout on a future implementation still require measurement. [Executable layout and sizes](../../tools/validation/i1_layout.py)
+
+On ordinary disposal retire the old held feature, physical epoch, all O2/bank histories, phase, prospective/retired moments, trials, permission and wet cache. Keep HP/FIR history and a distinct pending acquisition. An affected lane fault also retires its pending and confirmed acquisition, published/completed source slot and support validity. Shared analysis and the other lane progress. Cache exactly E and P from the previous finite sample. Emit `(Nf−1−i)/Nf` times each saved value, with i=0 at detection. Finish at exact zero on detection+Nf−1. A second fault during this interval has no live epoch to invalidate. Stream reset clears the fade immediately, restarts both origins and invalidates all generation-stamped work. Use ring valid counts and generation stamps for logical clearing. Fixed 123-word blocks and fixed banks can be zeroed on acquisition of their slot. No large physical history needs clearing on a sample.
+
+Per live lane the maximum regular tick executes one guide/O1, four O2 updates, 12 coefficient updates, 96 complex section updates, 48 weighted output terms, one phase increment, four harmonic basis evaluations and 123 moment additions of products. A change of pitch also prepares 12 pole/taper pairs. One trial evaluates three two-column fits, their three fitted/component energy comparisons and the paired/off power comparison. Closure normalizes 123 words, screens six rows, performs one lower 6×6 Cholesky (21 entries), 13 forward and 13 backward triangular solves (15 multiply-subtracts per direction per RHS), five measured comparisons and one realized paired comparison. It clears the next 123-word slot. There is no same-lane trial on that closure. Two lanes can close together, or one can close while the other executes a trial.
+
+Include coincident A1 and I1 FIR emissions (up to 769 and 385 taps per lane), A2's K=W+1 lag updates at an A1 emission and bounded O(K+W) hop work, ≤7 source indices ×12 orders per lane, ≤12 magnitudes/logs at finalization, a due publication of up to 12 gains, both M4 launches, direct/mix conversions and shared stereo output. Old-job finalization occurs before the next snapshot's hop. A late postcommit fault can incur almost the full tick plus fixed invalidation and the first cached pair. Stream reset cancels retired work before reuse. Neither allocation, locking, I/O, retries, an unbounded search nor unbounded catch-up belongs on the proposed sample path. Offline diagnostic export is outside this bound. The 192 kHz one-sample deadline is 5.2083 µs. V21's 48 kHz/64 mean budget is 133 µs, with 667 µs p99.9. Counting bounded operations leaves their Rust callback timing open.
+
+### Private stereo entry point
+
+```rust
+struct Lane<'a> {
+    acquisition: Capture, source_ring: &'a mut [f64], support: &'a mut [Stamp<Support>],
+    electrical: [O2Lane;4], bank: [CorrectionBank;4], moments: [Moments;2],
+    retired: Option<Retired>, trial: Option<Trial>, permission: Permission,
+    cache: WetCache, fade: Option<FaultFade>, physical: Guide,
+}
+struct Support { source: Token, hz: f64, quality: f64, amplitude: f64, previous_floor: f64,
+                 movement: f64, supported: bool, compatible: bool }
+struct Receipt { epoch: PhysicalEpoch, prepared_rate: f64, issued: u64, through: u64,
+                 hz: [f64;2], speed: [f64;2], force: [f64;2], depth: [f64;2] }
+enum ReceiptUpdate { Keep, Revoke, Grant(Receipt) }
+struct ControllerFrame { events: EventFrame, a2: Stamp<Support>, identity: Stamp<()>,
+                         receipt: ReceiptUpdate, hz: f64, speed: f64, force: f64,
+                         depth: f64, signed_gain: f64, energy: f64 }
+struct HostFrame { reset: bool, direct: [f64;2], character: f64, controller: [ControllerFrame;2] }
+struct Stereo<'a> { generation: u64, tick: u64, prepared: PreparedI1<'a>, lanes: [Lane<'a>;2] }
+fn stereo_tick(s: &mut Stereo<'_>, host: HostFrame, output: &mut [f32;2]);
+```
+
+```text
+take frame at s.tick; resolve transport reset for both lanes
+read the smoothed shared controls for this timestamp
+for lane in left, right:
+    decode frame; expire by elapsed pre-confirm age
+    advance source ring and ingest due support or missing stamp
+    confirm eligible owner; dispose old zero-energy epoch; launch fresh owner at zero
+    finish previous job slice; consume exact due publication; start next eligible slice
+    if cached fade: emit next cached pair
+    else if idle: emit zero pair
+    else:
+        match guide.tick_observed(current controls):
+            physical error -> issue Physical fault
+            success -> retain converted M5 and O1, tick four O2 histories
+        electrical error -> issue ElectricalAfterCommit fault
+        update coefficients and four banks; advance phase
+        use prior available target; advance one retired trial
+        slew; form d and actual y; update packed moments
+        if closing: factor, solve, classify realized, retire, arm trials
+        propose signed wet, product and finite conversion
+        checked failure -> issue IdentityAfterCommit(site) fault
+        success -> publish lane state and cache
+    on fault: invalidate once; emit fade index zero using the previous cache
+    output[lane] = checked_f32((1-C*emitted_E)*direct+C*emitted_product)
+advance the existing shared output stage once on the stereo pair; increment tick
+```
+
+A nonempty sample call owns one timestamp. Empty partitions execute no step. Prepared scratch belongs to the exclusively borrowed stream. The closure factor needs 35 multiply-subtractions, 15 divisions and six square roots. The 13 pairs of substitutions need another 390 multiply-subtractions and 156 divisions. Each fitted comparator evaluates 36 full-energy terms plus two four-term component energies. Five comparators run at closure and three in a scheduled trial. Include finite checks and absolute-term sums for roundoff at those sites. A2 has at most 155 lag positions per decimated emission. A failed finite conditioning test skips the solves but still consumes the bounded trial schedule.

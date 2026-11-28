@@ -38,3 +38,7 @@ These are proposed revisions, not edits to previously signed-off mathematics or 
 ### Stage 08.1 handoff
 
 Independent Review 8.1 must decide the moving-basis permission, stationary upstream prerequisite, automated delivery, two-lane fault ownership and acceptance-tooling evidence before authorizing isolated I1. Preserve baseline injected S4a's existing authorization. Natural-source recognition needs the registered controlled recording cell and owner audition. Keep final A2, amended articulation, S4b, supported S5, public Noise mapping and integration at their existing gates. [Remediation evidence](status/STAGE_08_1_I1_REMEDIATION.md)
+
+## Stage 08.2 handoff
+
+Submit the bounded two-lane sample transaction, corrected evidence ownership and memory/work proposal to independent Review 8.2. An isolated Rust I1 implementation requires a subsequent authorization. Baseline injected S4a retains its independent scope. Live controller receipts, controlled recordings, owner listening, integrated routing and release retain their existing gates. [Implementation evidence and review request](status/STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
