@@ -1,5 +1,11 @@
 # Implementation ledger
 
+## 2026-11-28 · Review 8.2 retains the packed I1 contract and holds isolated Rust I1
+
+Reviewed `9a54cd7..f0bce623` from a clean tree. Fresh complete O2 and I1 runs passed. The independent audit retained exact guide/O1/O2 and shipping behavior, all 108 revised stationary rows, all nine historical unsafe rejections and 700 active moving cells on each of off and actual delivery. Independent QR verified the packed fit and scheduled candidate decisions. Exact acquisition expiry and the original fourth-bank, producer, timing and numerical-fault counterexamples produced the required dispositions. Signed stereo probes preserved detection-tick commits and the unaffected lane across 18 genuine fault cases.
+
+Isolated Rust I1 remains held. A coherent half-product producer passed the complete I1 exit. The native permission recurrence missed the exact zero deadline at five rates. Prepared capacity needs explicit field ownership, and retained evidence readers accepted non-JSON nonfinite values. Authorize one offline transaction and qualification revision for those boundaries. Baseline injected S4a retains its independent scope. Controlled recordings, perception, live tracking and subsequent integration retain their existing gates. [Independent Review 8.2](REVIEW_08_2_I1_STREAMING_QUALIFICATION.md)
+
 ## 2026-11-28 · Stage 08.2 bounded transaction awaits independent review
 
 The offline transaction now executes packed moving windows and one candidate per tick through source publication, automated fourth-path delivery and stereo M6 recovery. The submission retains 108 stationary rows and 700 active cells each on the sentinel and actual delivery. The proposed 61,376-byte analysis/control payload and 726,976-byte total await layout and callback measurement in a separately authorized implementation. [Stage 08.2 handoff](STAGE_08_2_I1_STREAMING_QUALIFICATION.md)

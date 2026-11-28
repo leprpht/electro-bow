@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-28 · Hold isolated Rust I1 on signed delivery and exact transaction gates
+
+Retain the qualified S2a/S2b, O1 and O2 code, the original M5 denominator, the I1 source projection and bank, the packed 123-word statistic layout and the 17-tick retired-block schedule. Accept the offline stationary and moving evidence, normalized fourth path, pre-confirm expiry, and demonstrated lane-local retirement. The original O2 provenance and timing substitutions reject. Complete retained-reader sign-off still requires strict JSON ingestion.
+
+Authorize one offline transaction and qualification revision. Grade independently expected signed wet product and emitted A4 mix on actual samples through live, idle and cached fade, require exact deadline-neutral permission, freeze complete state placement within both existing memory limits, and close evidence ingestion. Require direct rejection of the surviving half-product variant and the late-neutral witness in the full exit. Keep isolated Rust I1 held pending a narrow re-review. Baseline injected S4a retains its existing scope. Empirical identity, owner perception, final A2, amended gesture/S4b, supported S5, production integration and release retain their separate gates. [Review 8.2 findings and authorization](REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
 ## 2026-11-28 · Propose the chronological I1 contract for independent Review 8.2
 
 Use pre-confirm expiry, typed event validation, two packed 984-byte blocks, scheduled retired-window trials and checked lane-local recovery. Require canonical producer samples, executed timing and behavioral mutant evidence. Review 8.1 continues to govern implementation authority, controlled identity and perception. [Stage 08.2 handoff](STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
