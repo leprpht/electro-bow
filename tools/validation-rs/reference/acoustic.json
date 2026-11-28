@@ -1,0 +1,227 @@
+[
+  {
+    "path": "ThirdParty/q/test/audio_files/1a-Low-E.wav",
+    "sha256": "100c059da02e2c3be673ed756f0f05858afc698765e7402d4ec9faae41e0c832",
+    "decoded": "d69b7a7e55a51178b1cb6dd5457994516d819203f9f26527a999d275b2f7a933",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 1456027,
+    "dtype": "int16"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/1c-Low-E-24th.wav",
+    "sha256": "64931d9200bb1af1864e61bea037d8300e4c0cc67b8e88a224f4b97a9d1596c9",
+    "decoded": "831e03431eff8ea767a082cb6a44bee10e813c60b0da32f37825a9037739a7f1",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 585311,
+    "dtype": "float32"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/4a-G.wav",
+    "sha256": "de59b87cc610815c0b4922bf4e5e90f6cc5ac19ca918522e568e7f4db4423b7c",
+    "decoded": "018e5ad30175e38fa20e4702bb3fd6c8ac1c1d8176f9db6461dd0620947ce22c",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 705600,
+    "dtype": "int16"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/6a-High-E.wav",
+    "sha256": "569ee9f13d421707d986e6bcd2256f4f772d10b972e0eb0d799653c9d561daa3",
+    "decoded": "cf76682e280b39f80807fb48edaaef274a5a91a64a605045ac98d65e542f637b",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 441000,
+    "dtype": "int16"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/6c-High-E-24th.wav",
+    "sha256": "8384d1b13562fa89bfc5d61c24abfda00be3295405e6a6ed6671b3534bf18130",
+    "decoded": "17c2e8f1058d65d4f40a3b6ae2bcdedcdecd295bf404edc20e399c382b05c30c",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 208964,
+    "dtype": "float32"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/Attack-Reset.wav",
+    "sha256": "edc2d08e897caa772e40035a0e03650ef09b3e677047ac9d3adc34b0dc8a1af9",
+    "decoded": "ef4f9ff417bca956794a67771e525f7799b708ad15da8c1199888f5fb332ffe0",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 105769,
+    "dtype": "float32"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/Bend-Slide G.wav",
+    "sha256": "fc506aa1828763bd86d7649f398cfe807ae55b9ad6ed087a1ab181993ce2afa9",
+    "decoded": "caba782bfef8fec9d2d601dbbac329fe2947d688c144e8cb0f99efe5423659c6",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 727650,
+    "dtype": "int16"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/GStaccato.wav",
+    "sha256": "775cc0ec15ce11cb3caa0ed295857e43d6a041e7c4a46185f25867fa5d81a61e",
+    "decoded": "c76e9cfc7de36c37ca81b811088e6e0f5566a3d0d7ff9f58a2ccf14b8c20bfd0",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 723783,
+    "dtype": "float32"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/Hammer-Pull High E.wav",
+    "sha256": "0d421625c91c9aa4a6da07af033d7ece72ad904ba8aafea8de832c18a9f51e8a",
+    "decoded": "bb2d527984bd5b9682ac6b36abae8c4993f86e3e0ad1638c1d976dfe60729d94",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 644873,
+    "dtype": "int16"
+  },
+  {
+    "path": "ThirdParty/q/test/audio_files/gk Low E.wav",
+    "sha256": "b190a4ec42fa8b81a4eb3c15678c5df57ddb9ee05f97426949fae6e623999767",
+    "decoded": "df74a614e9e939ed9cff4fa51cdccce1165385799374cea045f82b2c4b559341",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 1369920,
+    "dtype": "int16"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P1-132.wav",
+    "sha256": "f46acd3eedb156f61b0269819416a9dfaee0707ae7f622d46535d617e36b5d8c",
+    "decoded": "ac9ec57ab6a2351a07149639457247701ec07bfc2c5ffa53f370b6d11fe4cc5f",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P1-204.wav",
+    "sha256": "7577421d39ec0dfcb4f3367646107da42b9a2df1b75f8036a192e2cdf08be16b",
+    "decoded": "be5a2a5f0867677103b977eb95c94f97538b57815cf279484cae488141028a41",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P1-60.wav",
+    "sha256": "5dc41a6b76438484423503edbd0f05a49b3835d91a38aebc2bba927bbd8627fe",
+    "decoded": "cb2b41de052cd8eddb31554fc8761d3d9b895621605fdd803ac588f18d1c522a",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P1-Bendings.wav",
+    "sha256": "95c8ee5c03290e18f2b5006e8abd4da85b35a754375761258a3c5ad500ad325a",
+    "decoded": "26c80e9142eb2610a2bd7b6531a2426d5b6baaffe4a457dd0938b7e0e176c931",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 88200,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P1-PalmMute.wav",
+    "sha256": "f689f7900d59845d0a098f541f668fcf50ebc7172b74b8e743fc9c255b6f2385",
+    "decoded": "2908667055080c31cb7e880ade568af738f1d284ca2c98fc4859d034eb8a0b3a",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 96000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P1-Vibrato.wav",
+    "sha256": "f57f516a7694d27f34dbd84154a14128054456f20a3e194688d91a9e88944ad9",
+    "decoded": "791cf04b5f1268b6e9b3e2757e0e12dfb71f59de6fdbc5746f5bce8b16526416",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 88200,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P2-132.wav",
+    "sha256": "b439e3d09657ff4f903ef591632290fd5aea6669bde3a36777477e27106ea010",
+    "decoded": "2cad39fec8494617cc856f3b9b3f7f6041e76f4f6c7e192c6af7332e723ab9f1",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P2-204.wav",
+    "sha256": "97004035ce1c24c36730a1fd09eb6cf04bfb0f5553aa46deab0c4e5bdf74075e",
+    "decoded": "82ca6fc69234d71ff0697eefd502dc6f1fdcee8c8ce10fbf49a03b2c171b98b0",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/techs-P2-60.wav",
+    "sha256": "3ad52b6eedddd3477ffbf6aff038d6748f14231d73c15f7eb4ab4ea366e0b2d4",
+    "decoded": "102b59d0fa52e44b299bbc775abd4a86f8bafa3046c2d3306d246c55d0ff9884",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/vaisvil-10.wav",
+    "sha256": "cb980459684acca45da737352afc35f0219181bb2bd80ee5dd34a6015ad65b2e",
+    "decoded": "84ad5ff962394375d89beb090c62a10ff2a13f551a64e120296c4312cc3fe2cc",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 44100,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/vaisvil-22.wav",
+    "sha256": "61aa2ea63b1bd5ad74fa3ff0171b3363b8ec194ccf7ab2b1e1842fa9a7cff7ee",
+    "decoded": "e681d44b7df93a21a3dc486eb879193474b10b625ccda2dcc7e848c3dfd89dbd",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 44100,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/vaisvil-8.wav",
+    "sha256": "351c2f52d9c0b219dd0270e038681b73ee8601d283219549dc092a4365f43bad",
+    "decoded": "93e58a97f9d28deaab4748b4774d11cd254b80d256671a29f2af038496f80d47",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 44100,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/fsbs-E2_s1_01.wav",
+    "sha256": "6abf2b9f738371509bd7d9aff3d1b68c02cd843b2c7d8b9d90d776d05309d7e2",
+    "decoded": "fa7dcb6f4c3c92d5772c1449a96d7b434f951ba50b016c219757e568ba0e7183",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/fsbs-E2_s1_soft_01.wav",
+    "sha256": "f6ee6dd1f9e301cdb28162ea0573bbb0a7a889bdf9b7e9a8b7d8c78cb4cd61a8",
+    "decoded": "b6bd68052a3793cd17a86288c175860b723013a1cc61ea45b42225d02dc0128d",
+    "rate": 48000,
+    "channels": 1,
+    "frames": 48000,
+    "dtype": "float32"
+  },
+  {
+    "path": "tools/validation/fixtures/acoustic/vaisvil-low-e-stroke.wav",
+    "sha256": "645ed8f4298842e01c752a20b7a8e52653c7fa959879fbf3f954f9fe31a757b1",
+    "decoded": "ffbd45ad42e327710135dd96815c657787acbcbf46bbe9a5eda5ce58672709d5",
+    "rate": 44100,
+    "channels": 1,
+    "frames": 77176,
+    "dtype": "float32"
+  }
+]
