@@ -51,11 +51,13 @@ pub(super) fn read(path: &Path) -> Result<(u32, Vec<f64>)> {
                 )?;
                 let tag = u16_at(&body[..2]);
                 let extended = tag == 0xfffe
-                    && !big
                     && body.len() >= 40
-                    && u16_at(&body[16..18]) == 22
+                    && u16_at(&body[16..18]) >= 22
                     && matches!(u16_at(&body[18..20]), 0 | 64)
-                    && body[24..40] == [3, 0, 0, 0, 0, 0, 16, 0, 128, 0, 0, 170, 0, 56, 155, 113];
+                    && u32_at(&body[24..28]) == 3
+                    && u16_at(&body[28..30]) == 0
+                    && u16_at(&body[30..32]) == 16
+                    && body[32..40] == [128, 0, 0, 170, 0, 56, 155, 113];
                 let hz = u32_at(&body[4..8]);
                 ensure(
                     (tag == 3 || extended)
@@ -106,6 +108,31 @@ pub(super) fn read(path: &Path) -> Result<(u32, Vec<f64>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn extensible_rifx_uses_native_byte_order_for_the_float_subformat() {
+        let mut wav = b"RIFX".to_vec();
+        wav.extend(68_u32.to_be_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend(40_u32.to_be_bytes());
+        wav.extend(0xfffe_u16.to_be_bytes());
+        wav.extend(1_u16.to_be_bytes());
+        wav.extend(48000_u32.to_be_bytes());
+        wav.extend(384000_u32.to_be_bytes());
+        for field in [8_u16, 64, 22, 64] {
+            wav.extend(field.to_be_bytes());
+        }
+        wav.extend(0_u32.to_be_bytes()); // Channel mask
+        wav.extend(3_u32.to_be_bytes()); // IEEE_FLOAT subformat GUID
+        wav.extend([0, 0, 0, 16, 128, 0, 0, 170, 0, 56, 155, 113]);
+        wav.extend(b"data");
+        wav.extend(8_u32.to_be_bytes());
+        let word = 0.5_f64.next_down();
+        wav.extend(word.to_be_bytes());
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("extensible.wav");
+        fs::write(&file, wav).unwrap();
+        assert_eq!(super::super::read(&file).unwrap(), (48000, vec![word]));
+    }
     #[test]
     fn preserves_binary64_words_and_rejects_damaged_payloads() {
         let words = [0.25_f64.next_up(), -0.0];
