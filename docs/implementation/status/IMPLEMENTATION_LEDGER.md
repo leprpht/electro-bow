@@ -1,5 +1,11 @@
 # Implementation ledger
 
+## 2026-11-28 · Review 8 retains the carrier and holds I1 implementation
+
+Reviewed `ddf77bd..d50a041` from a clean tree. S2a contact/ring, S2b guide, M4/M6, M5, O1, isolated Rust O2 and shipping/fallback remain qualified in their existing scopes. A fresh 156-stream O2 replay preserved 46,818,000 commits and returned factory sample provenance. The independent I1 recurrence reproduced all nine historical failures and passed all 108 corrected stationary depth rows. The prescribed vibrato was exactly neutral at all seven rates. The weakest held G3 contrast was .110 dB and controlled source and owner evidence remain pending.
+
+O2 acceptance tooling remains held on complete sweep/timing provenance, interrupted exit status and authoritative wet-pair clock binding. I1 remains held on the upstream prerequisite, motion/delivery veto, full-exit evidence binding and capture/fault lifecycle. Authorize one offline qualification revision for those boundaries. The DI projection and frozen complex bank are retained for that revision. Baseline injected S4a keeps its independent authorization. [Review 8 evidence and disposition](REVIEW_08_I1_SPECIFICATION.md)
+
 ## 2026-11-28 · Stage 08 I1 specification awaiting independent Review 8
 
 Stage 08 submits one offline I1 architecture and the four Review 7 tooling corrections. The physical carrier comes from the returned Rust O2 stream. The coupled rule passes the stationary engineering grid while held G3 passage separation ranges down to .110 dB and the vibrato trial stays neutral. Independent Review 8, controlled source identity and owner listening remain pending. [Stage 08 evidence](STAGE_08_I1_SPECIFICATION.md)

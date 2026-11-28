@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-28 · Hold I1 Rust implementation and acceptance-tooling sign-off
+
+Accept the DI representation for offline research and the measured past-block ray algebra. Retain the qualified physical/electrical carrier, original converted-M5 V17 denominator, inclusive-Nyquist scorer and paired final-wet residual. The short monitor can admit an upstream V17 failure and strips identity throughout the prescribed vibrato. Capture expiry and replacement, genuine downstream fault ownership and full-exit evidence binding need correction. Close actual returned factory q provenance and the subnormal/silence eligibility predicate. O2 aggregate, interruption and trusted paired-clock sign-off remain open.
+
+Authorize only the offline revision in Review 8, including a bounded guide-phase-referenced moving-pitch permission experiment with a predeclared non-neutral witness. Controlled held-source discrimination and owner listening remain separate gates. Retain baseline injected S4a scope and the holds on live A2/S4b, amended gesture, supported S5, production integration and release. [Review 8 authorization](REVIEW_08_I1_SPECIFICATION.md#9-authorization-decisions)
+
 ## 2026-11-28 · Stage 08 I1 specification awaiting independent Review 8
 
 Propose a common 17-point coefficient ray chosen from complete measured windows, with an independent realized-output veto and stamped per-gesture capture/publication. Retain original converted M5 and the paired factory residual. Natural source discrimination and persistent color under vibrato remain open. This submission requests independent Review 8. Review 7 retains architectural authority, with baseline S4a separately authorized. [Stage 08 evidence](STAGE_08_I1_SPECIFICATION.md)
