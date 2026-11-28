@@ -18,6 +18,7 @@ pub mod stationary;
 pub mod stereo;
 mod stereo_clock;
 pub mod study;
+pub mod study_controls;
 pub mod sweeps;
 pub mod transaction_mutants;
 use crate::{Result, ensure, evidence};

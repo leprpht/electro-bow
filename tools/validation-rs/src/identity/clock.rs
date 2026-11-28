@@ -1,4 +1,5 @@
 //! Independent host-sample controller, capture support and publication replay.
+mod controls;
 use super::capture;
 use crate::{Result, ensure, evidence, pitch};
 use serde::Deserialize;
@@ -429,6 +430,7 @@ fn discrete(rows: &[Value]) -> Result<String> {
 pub fn run(dir: &Path, reference: Option<&Path>) -> Result<Value> {
     let cases: Vec<Case> = serde_json::from_str(include_str!("../../contracts/clock.json"))?;
     let mut result = BTreeMap::new();
+    let negatives = controls::run(&cases)?;
     for c in cases {
         let rows = replay(&c, &[127])?;
         let digest = discrete(&rows)?;
@@ -471,7 +473,7 @@ pub fn run(dir: &Path, reference: Option<&Path>) -> Result<Value> {
             json!({"rows":rows.len(),"maximum_vector_error":worst,"defect":c.defect}),
         );
     }
-    Ok(json!({"cases":result}))
+    Ok(json!({"cases":result,"negatives":negatives}))
 }
 
 fn event_fixture(rate: f64, launch: usize) -> Case {

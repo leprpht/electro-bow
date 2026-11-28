@@ -146,13 +146,12 @@ pub fn expression(rows: &BTreeMap<String, Value>) -> Result<Value> {
         / 12.)
         .sqrt();
     ensure(
-        pressure[0] * pressure[1] > 0.
-            && pressure[1].abs() >= 0.5 * pressure[0].abs()
-            && speed[1] >= 0.75 * speed[0]
-            && spread.iter().all(|v| *v < 3.)
-            && distance >= 1.,
-        "stationary expression",
+        pressure[0] * pressure[1] > 0. && pressure[1].abs() >= 0.5 * pressure[0].abs(),
+        "pressure contrast",
     )?;
+    ensure(speed[1] >= 0.75 * speed[0], "speed contrast")?;
+    ensure(spread.iter().all(|v| *v < 3.), "high-note spread")?;
+    ensure(distance >= 1., "source transfer")?;
     Ok(
         json!({"pressure":pressure,"speed_dB":speed,"high_note_spread_dB":spread,"synthetic_distance_dB":distance}),
     )

@@ -6,7 +6,7 @@ use std::f64::consts::TAU;
 fn power(x: &[f64]) -> f64 {
     x.iter().map(|v| v * v).sum::<f64>() / x.len() as f64
 }
-fn allowed(x: &[f64], phase: &[Complex64], m5: f64, base: f64, recovery: bool) -> bool {
+pub(super) fn allowed(x: &[f64], phase: &[Complex64], m5: f64, base: f64, recovery: bool) -> bool {
     let n = x.len() as f64;
     let mut sums = [Complex64::ZERO; 4];
     for (i, (&v, &z)) in x.iter().zip(phase).enumerate() {

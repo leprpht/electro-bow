@@ -31,7 +31,7 @@ fn checked_nonnegative(v: f64, magnitude: f64, count: usize) -> Result<f64> {
     )?;
     Ok(v.max(0.))
 }
-fn trajectory(scale: &[f64], ramp: usize) -> Result<()> {
+pub(super) fn trajectory(scale: &[f64], ramp: usize) -> Result<()> {
     ensure(
         scale.iter().all(|v| (0. ..=1.).contains(v))
             && scale

@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::Path, process::Command};
 const REGRESSION: &[&str] = &[
     "fixtures",
+    "i1-stereo",
     "recording-controls",
     "contact",
     "contact-mutants",
@@ -28,7 +29,6 @@ const REGRESSION: &[&str] = &[
     "i1-clock",
     "i1-events",
     "i1-transaction-mutants",
-    "i1-stereo",
     "i1-sources",
     "i1-listening",
     "i1-capture",
@@ -39,6 +39,7 @@ const REGRESSION: &[&str] = &[
     "i1-uneven",
     "i1-faults",
     "i1-study",
+    "i1-study-controls",
     "i1-integrity",
     "i1-artifacts",
     "pitch",
@@ -106,20 +107,36 @@ pub fn run(
     }
     let electrical_report = crate::electrical::aggregate::run(&children)?;
     evidence::atomic(&dir.join("electrical.json"), &electrical_report)?;
-    if complete {
-        let pending = [
-            "independent disposition of the legacy audition gain serialization difference",
-            "remaining complete I1 dependent report fields, including motion prerequisites, lifecycle and study control interpretation",
-        ];
+    let mut differences = BTreeMap::new();
+    if !electrical {
+        let audit = evidence::strict(&fs::read(publication::current_artifact(
+            &children,
+            "i1-artifacts",
+            "evidence.json",
+        )?)?)?;
+        for (name, row) in audit["results"]["artifacts"]
+            .as_object()
+            .ok_or("missing measured artifact inventory")?
+        {
+            if row["entry"] != row["actual"]
+                && row["equivalence"] != "same measured fields, invocation-local renderer identity"
+            {
+                differences.insert(name.clone(), row.clone());
+            }
+        }
+    }
+    if complete && !differences.is_empty() {
         evidence::atomic(
             &dir.join("unqualified.json"),
-            &json!({"owners":pending,"review":"8.2","qualification_passed":false}),
+            &json!({"review":"8.2","qualification_passed":false,"unresolved_artifact_differences":differences,"children":reports}),
         )?;
         return Err(format!(
-            "complete qualification remains open: {}",
-            pending.join(", ")
+            "complete qualification: unresolved artifact differences in {}",
+            differences.keys().cloned().collect::<Vec<_>>().join(", ")
         )
         .into());
     }
-    Ok(json!({"suites":reports,"historical_comparisons":historical}))
+    Ok(
+        json!({"suites":reports,"historical_comparisons":historical,"unresolved_artifact_differences":differences}),
+    )
 }

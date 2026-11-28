@@ -63,6 +63,7 @@ const SUITES: &[&str] = &[
     "research-observation",
     "research-observation-compare",
     "i1-artifacts",
+    "i1-study-controls",
     "i1-retirement",
     "i1-joined-motion",
     "i1-stream-compare",
@@ -130,6 +131,9 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
             reference,
             dir.parent().and_then(Path::parent).ok_or("suite root")?,
         ),
+        "i1-study-controls" => {
+            identity::study_controls::run(dir.parent().and_then(Path::parent).ok_or("suite root")?)
+        }
         "i1-artifacts" => {
             identity::artifacts::inventory(dir.parent().and_then(Path::parent).ok_or("suite root")?)
         }
