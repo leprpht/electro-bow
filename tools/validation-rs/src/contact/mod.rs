@@ -1,4 +1,5 @@
 mod cases;
+pub mod controls;
 mod oracle;
 use crate::{Result, ensure, evidence};
 use oracle::{Answer, Input, Mu, compare, graph, physics, ulp};
@@ -24,19 +25,8 @@ pub fn run(out: &Path, reference: Option<&Path>) -> Result<Value> {
         .arg(&exe)
         .status()?;
     ensure(status.success(), "compile contact replay")?;
-    let prep = Command::new(&exe).arg("--coefficients").output()?;
-    ensure(prep.status.success(), "prepare contact coefficients")?;
-    let coeff: Vec<_> = std::str::from_utf8(&prep.stdout)?
-        .split_whitespace()
-        .map(|word| u64::from_str_radix(word, 16).map(f64::from_bits))
-        .collect::<std::result::Result<_, _>>()?;
-    let mu: Mu = coeff.try_into().map_err(|_| "expected ten coefficients")?;
-    let bounds: [[f64; 2]; 10] =
-        serde_json::from_str(include_str!("../../reference/mu-bounds.json"))?;
-    for (m, [lo, hi]) in mu.iter().zip(bounds) {
-        ensure((lo..=hi).contains(m), "80-decimal-digit exponential bound")?;
-    }
-    ensure(mu[0] == 1.65, "static coefficient")?;
+    let mu = coefficients(&exe)?;
+    let extra = controls::ancillary(&mu)?;
     let cases = cases::generate(&mu);
     ensure(cases.len() == 84886, "complete contact inventory")?;
     let input = out.join("contact-input.txt");
@@ -116,7 +106,7 @@ pub fn run(out: &Path, reference: Option<&Path>) -> Result<Value> {
         ensure(graph((d, k, 0), &mu).is_none(), "invalid contact graph")?;
     }
     Ok(
-        json!({"rows":84886,"max_probes":max_probes,"max_slip_ulps":max_ulps,"reference_compared":reference.is_some(),"oracle_sha256":digest,"producer_sha256":evidence::digest(&exe)?}),
+        json!({"ancillary":extra,"rows":84886,"max_probes":max_probes,"max_slip_ulps":max_ulps,"reference_compared":reference.is_some(),"oracle_sha256":digest,"producer_sha256":evidence::digest(&exe)?}),
     )
 }
 fn write_record(w: &mut impl Write, (d, k, p): Input, (j, r, m): Answer) -> Result<()> {
@@ -127,4 +117,21 @@ fn write_record(w: &mut impl Write, (d, k, p): Input, (j, r, m): Answer) -> Resu
     w.write_all(&r.to_le_bytes())?;
     w.write_all(&m.to_le_bytes())?;
     Ok(())
+}
+
+fn coefficients(exe: &Path) -> Result<Mu> {
+    let prep = Command::new(exe).arg("--coefficients").output()?;
+    ensure(prep.status.success(), "prepare contact coefficients")?;
+    let coeff: Vec<_> = std::str::from_utf8(&prep.stdout)?
+        .split_whitespace()
+        .map(|word| u64::from_str_radix(word, 16).map(f64::from_bits))
+        .collect::<std::result::Result<_, _>>()?;
+    let mu: Mu = coeff.try_into().map_err(|_| "expected ten coefficients")?;
+    let bounds: [[f64; 2]; 10] =
+        serde_json::from_str(include_str!("../../reference/mu-bounds.json"))?;
+    for (m, [lo, hi]) in mu.iter().zip(bounds) {
+        ensure((lo..=hi).contains(m), "80-decimal-digit exponential bound")?;
+    }
+    ensure(mu[0] == 1.65, "static coefficient")?;
+    Ok(mu)
 }

@@ -2,20 +2,23 @@ mod audio;
 mod contact;
 mod electrical;
 mod evidence;
+mod guide;
 mod identity;
 mod mutations;
 mod numerics;
 mod observation;
+mod package;
 mod pitch;
 mod process;
+mod publication;
+mod qualification;
 mod replay;
 mod ring;
 use serde_json::{Value, json};
 use std::{
-    env, fs,
+    env,
     path::{Path, PathBuf},
     process::ExitCode,
-    time::Instant,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -32,9 +35,16 @@ const SUITES: &[&str] = &[
     "pitch",
     "pitch-compare",
     "ring",
+    "guide",
+    "guide-compare",
+    "regression",
+    "differential",
+    "qualification",
     "mutations",
+    "contact-mutants",
     "i1-bank-compare",
     "i1-qr",
+    "i1-review82",
     "i1-motion",
     "i1-stationary",
     "o2-carrier",
@@ -44,6 +54,7 @@ const SUITES: &[&str] = &[
     "o1-state",
     "o1-replay",
     "native",
+    "package",
     "compare",
 ];
 const DEFAULT_OUT: &str = "build/validation-migration/rust";
@@ -52,8 +63,11 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
     match suite {
         "fixtures" => audio::fixtures(),
         "mutations" => mutations::run(dir),
+        "contact-mutants" => contact::controls::mutants(dir),
         "o1-state" => mutations::state_parity(dir),
         "native" => process::native(dir),
+        "package" => package::run(dir),
+        "i1-review82" => identity::deadlines::run(dir),
         "i1-qr" => identity::qr::run(dir),
         "i1-motion" => identity::motion::run(dir),
         "i1-stationary" => identity::stationary::run(dir),
@@ -66,6 +80,19 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
         "contact" => contact::run(dir, None),
         "pitch" => pitch::run(dir),
         "pitch-compare" => pitch::differential(dir, reference),
+        "guide-compare" => guide::differential(
+            reference,
+            dir.parent()
+                .and_then(Path::parent)
+                .ok_or("suite output root")?,
+        ),
+        "regression" | "qualification" | "differential" => qualification::run(
+            dir,
+            reference,
+            suite == "qualification",
+            suite == "differential",
+        ),
+        "guide" => guide::run(dir),
         "ring" => ring::run(dir, None),
         "compare" => Ok(
             json!({"fixtures":audio::fixtures()?,"numerics":numerics::differential(reference)?,"contact":contact::run(dir,Some(reference))?,"ring":ring::run(dir,Some(reference))?}),
@@ -90,23 +117,23 @@ fn run() -> Result<()> {
     let root = PathBuf::from(
         env::var_os("ELECTROBOW_VALIDATION_OUT").unwrap_or_else(|| DEFAULT_OUT.into()),
     );
+    if suite == "artifact" {
+        ensure(
+            args.len() == 3 && SUITES.contains(&args[1].as_str()),
+            "artifact <suite> <relative filename>",
+        )?;
+        println!(
+            "{}",
+            publication::current_artifact(&root, &args[1], &args[2])?.display()
+        );
+        return Ok(());
+    }
     if suite == "inspect" {
         ensure(
             args.len() == 2 && SUITES.contains(&args[1].as_str()),
             "inspect requires a suite name",
         )?;
-        let dir = root.join(&args[1]);
-        let lock = fs::File::open(dir.join("runner.lock"))?;
-        let idle = match lock.try_lock() {
-            Ok(()) => true,
-            Err(fs::TryLockError::WouldBlock) => false,
-            Err(fs::TryLockError::Error(e)) => return Err(e.into()),
-        };
-        let mut report = evidence::strict(&fs::read(dir.join("current.json"))?)?;
-        if report["status"] == "running" && idle {
-            report["status"] = "interrupted".into();
-            evidence::atomic(&dir.join("current.json"), &report)?;
-        }
+        let report = publication::inspect(&root.join(&args[1]), &args[1])?;
         println!("{}", serde_json::to_string_pretty(&report)?);
         return ensure(report["status"] == "passed", "suite lacks completed pass");
     }
@@ -116,43 +143,17 @@ fn run() -> Result<()> {
     )?;
     ensure(
         args.len() == 1
-            || (matches!(suite, "compare" | "pitch-compare" | "i1-bank-compare")
-                && args.len() == 2),
+            || (matches!(
+                suite,
+                "compare" | "pitch-compare" | "guide-compare" | "i1-bank-compare" | "differential"
+            ) && args.len() == 2),
         "unexpected argument",
     )?;
     let reference = PathBuf::from(
         args.get(1)
             .map_or("build/validation-migration/reference", String::as_str),
     );
-    let dir = root.join(suite);
-    fs::create_dir_all(&dir)?;
-    let lock = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(dir.join("runner.lock"))?;
-    lock.try_lock()?;
-    let run_dir = tempfile::Builder::new()
-        .prefix("run-")
-        .tempdir_in(&dir)?
-        .keep();
-    let id = run_dir.file_name().unwrap().to_string_lossy();
-    let current = dir.join("current.json");
-    let mut receipt = json!({"schema":1,"suite":suite,"run_id":id,"status":"running"});
-    evidence::atomic(&current, &receipt)?;
-    let start = Instant::now();
-    let result = execute(suite, &run_dir, &reference)
-        .and_then(|v| evidence::atomic(&run_dir.join("evidence.json"), &v));
-    receipt["elapsed_seconds"] = start.elapsed().as_secs_f64().into();
-    receipt["status"] = if result.is_ok() { "passed" } else { "failed" }.into();
-    if let Err(e) = &result {
-        receipt["error"] = e.to_string().into();
-    }
-    evidence::atomic(&run_dir.join("receipt.json"), &receipt)?;
-    evidence::atomic(&current, &receipt)?;
-    println!("{}", serde_json::to_string_pretty(&receipt)?);
-    result
+    publication::run(suite, &root, |dir| execute(suite, dir, &reference))
 }
 fn main() -> ExitCode {
     match run() {

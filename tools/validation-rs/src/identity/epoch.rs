@@ -86,6 +86,10 @@ impl Epoch<'_> {
             &format!("epoch fault site={code} offset={done}"),
         )
     }
+    pub fn inject_stored_phase(&mut self, value: f64) {
+        // Existing Review 8.2 probe offset in the size-checked offline C++ object.
+        self.state[3808 / 8] = value.to_bits();
+    }
     pub fn stats(&mut self, retired: bool) -> [f64; 123] {
         let mut words = [0.; 123];
         // SAFETY: the C++ static assertion fixes each Stats block at 984 bytes.
