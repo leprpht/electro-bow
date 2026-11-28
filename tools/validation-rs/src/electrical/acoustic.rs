@@ -14,7 +14,7 @@ use std::{
     f64::consts::{SQRT_2, TAU},
     path::Path,
 };
-mod listening;
+pub(crate) mod listening;
 pub(crate) mod resample;
 const VECTORS: [&str; 4] = ["neutral", "upper", "lower", "inversion"];
 fn rms(x: &[f64]) -> f64 {

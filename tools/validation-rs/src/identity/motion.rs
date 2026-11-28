@@ -101,7 +101,14 @@ fn words(h: &mut Sha256, row: &[f64]) {
         h.update(v.to_le_bytes());
     }
 }
-fn case(kind: &str, fs: u32, c: &Contract, exe: &Path, kernel: &Kernel) -> Result<Value> {
+fn case(
+    out: &Path,
+    kind: &str,
+    fs: u32,
+    c: &Contract,
+    exe: &Path,
+    kernel: &Kernel,
+) -> Result<Value> {
     let rate = f64::from(fs);
     let (pitch, depth, controls) = schedule(kind, fs);
     let n = pitch.len();
@@ -159,6 +166,36 @@ fn case(kind: &str, fs: u32, c: &Contract, exe: &Path, kernel: &Kernel) -> Resul
     }
     let mut output = vec![[0.; 20]; n];
     kernel.epoch(rate).run(&frames, &mut output, 0)?;
+    if fs == 48000 && matches!(kind, "steady" | "vibrato" | "bend" | "veto") {
+        let n = 2 * fs as usize;
+        let mut clips = Vec::new();
+        if kind == "steady" {
+            let s = super::legacy::scales(&frames, &output, rate)?;
+            clips.push((
+                "previous-stationary",
+                (0..n)
+                    .map(|i| frames[i][2] + s[i] * output[i][0])
+                    .collect::<Vec<_>>(),
+            ));
+        } else {
+            let label = match kind {
+                "vibrato" => "revised-vibrato",
+                "bend" => "revised-bend",
+                _ => "depth-veto-recovery",
+            };
+            clips.push((label, output[..n].iter().map(|r| r[7]).collect()));
+            if kind == "vibrato" {
+                clips.push((
+                    "neutral-vibrato",
+                    frames[..n].iter().map(|r| r[5]).collect(),
+                ));
+            }
+        }
+        for (name, x) in clips {
+            let bytes = x.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>();
+            std::fs::write(out.join(format!("{name}.f64le")), bytes)?;
+        }
+    }
     let mut bank = Bank::new(rate)?;
     let mut maximum = 0.0f64;
     let mut delta = Vec::with_capacity(n);
@@ -281,7 +318,8 @@ pub fn run(out: &Path) -> Result<Value> {
         let (kind, rate) = name.rsplit_once('-').ok_or("motion case")?;
         rows.insert(
             name.clone(),
-            case(kind, rate.parse()?, &c, &exe, &kernel).map_err(|e| format!("{name}: {e}"))?,
+            case(out, kind, rate.parse()?, &c, &exe, &kernel)
+                .map_err(|e| format!("{name}: {e}"))?,
         );
     }
     ensure(rows.len() == 27, "motion inventory")?;

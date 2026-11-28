@@ -11,7 +11,7 @@ type Sources = BTreeMap<(String, String), Vec<f64>>;
 const LISTEN: &str = "Hear the physical low-E stroke, then matched A/B at low, middle and high pitch. Which resembles bowed electric guitar? Which buzzes less? Mark any whistle, resonance or objectionable harmonic with time. Is the 440 Hz detail pair distinguishable and useful? Is the sustained note and lift musically usable? Neither and indistinguishable are valid. Record listener, date, route and failed excerpt before opening the separate listening-key.json. Engineering WAVs preserve common gain. No effects.\n";
 
 // Keep the reviewed Python ZipInfo header encoding. zlib supplies the real compressed stream.
-fn canonical_archive(entries: &[(String, Vec<u8>)], path: &Path) -> Result<()> {
+pub(crate) fn canonical_archive(entries: &[(String, Vec<u8>)], path: &Path) -> Result<()> {
     let mut zipped = ZipWriter::new(Cursor::new(Vec::new()));
     let options = SimpleFileOptions::default()
         .compression_method(CompressionMethod::Deflated)

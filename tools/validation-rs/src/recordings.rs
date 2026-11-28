@@ -16,7 +16,7 @@ fn hash(x: &[f64]) -> String {
     }
     format!("{:x}", h.finalize())
 }
-fn read(path: &Path) -> Result<(u32, Vec<f64>)> {
+pub(crate) fn read(path: &Path) -> Result<(u32, Vec<f64>)> {
     let mut wav = WavReader::open(path)?;
     let spec = wav.spec();
     ensure(

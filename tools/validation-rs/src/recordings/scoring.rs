@@ -10,15 +10,15 @@ use crate::{
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path};
 #[derive(Clone)]
-struct Features {
-    vector: [f64; 12],
-    cues: [f64; 2],
+pub(crate) struct Features {
+    pub(crate) vector: [f64; 12],
+    pub(crate) cues: [f64; 2],
     eligible: [bool; 2],
     orders: [bool; 12],
     bands: [f64; 4],
 }
 impl Features {
-    fn new(h: [f64; 12]) -> Self {
+    pub(crate) fn new(h: [f64; 12]) -> Self {
         let peak = h.iter().copied().fold(0., f64::max);
         let floor = (0.015 * peak).max(0.00096);
         let orders = h.map(|v| v > floor);
@@ -39,7 +39,7 @@ impl Features {
             bands: [(0, 2), (2, 4), (4, 8), (8, 12)].map(|(a, b)| db(norm(a, b) / norm(0, 12))),
         }
     }
-    fn value(&self) -> Value {
+    pub(crate) fn value(&self) -> Value {
         json!({"vector":self.vector,"cues":self.cues,"eligible":self.eligible,"orders":self.orders,"bands":self.bands})
     }
 }
@@ -143,6 +143,15 @@ fn render(
     for (tick, _) in &mut updates {
         *tick = (*tick as f64 * 48000. / f64::from(rate)).round_ties_even() as usize;
     }
+    Ok((render_updates(raw, q, pitch, kernel, &updates)?, nonzero))
+}
+pub(crate) fn render_updates(
+    raw: &[[f64; 30]],
+    q: &[[f64; 4]],
+    pitch: f64,
+    kernel: &Kernel,
+    updates: &capture::Updates,
+) -> Result<Vec<[f64; 4]>> {
     let mut updates = updates.iter().peekable();
     let mut target = [0.; 12];
     let mut z = [0.; 12];
@@ -176,7 +185,7 @@ fn render(
             wet.push(r[4..8].try_into().unwrap());
         }
     }
-    Ok((wet, nonzero))
+    Ok(wet)
 }
 pub(super) fn evaluate_cell(out: &Path, manifest: &Path) -> Result<Value> {
     let config = evidence::strict(&std::fs::read(manifest)?)?;

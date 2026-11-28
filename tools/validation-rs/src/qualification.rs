@@ -25,6 +25,8 @@ const REGRESSION: &[&str] = &[
     "i1-path-mutants",
     "i1-layout",
     "i1-stereo",
+    "i1-sources",
+    "i1-listening",
     "i1-capture",
     "i1-review82",
     "pitch",
@@ -83,9 +85,9 @@ pub fn run(
     evidence::atomic(&dir.join("electrical.json"), &electrical_report)?;
     if complete {
         let pending = [
-            "independent complete O2 report and exit equivalence review",
-            "joined I1 capture, signed A4, cached stereo lifecycle and behavioral mutants",
-            "cross-suite qualification of source-discrimination and joined recording controls",
+            "field-level differential of complete electrical and timing reports",
+            "all-rate joined I1 event collisions, source and evidence mutant coverage",
+            "historical I1 study and controlled-source reports, independently reconstructed complete I1 artifact inventory",
         ];
         evidence::atomic(
             &dir.join("unqualified.json"),

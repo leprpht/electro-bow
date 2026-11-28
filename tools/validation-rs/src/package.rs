@@ -155,7 +155,8 @@ pub fn run(dir: &Path) -> Result<Value> {
             .arg(build)
             .arg(format!(
                 "-DJUCE_PATH={}",
-                fs::canonicalize("JUCE")?.display()
+                fs::canonicalize(std::env::var_os("JUCE_PATH").unwrap_or_else(|| "JUCE".into()))?
+                    .display()
             ))
             .arg("-DCMAKE_BUILD_TYPE=Release"),
     )?;
