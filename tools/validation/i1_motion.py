@@ -16,7 +16,7 @@ from o2_qualification import v17_row
 from o2_records import publish
 from o2_response import require
 
-OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-1/i1"))
+OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-1/qualified/i1"))
 ALT = np.tile([-5.0, 5.0], 6)
 STRESS = ("fast-retune", "max-retune", "bow-controls", "veto", "lift", "held")
 

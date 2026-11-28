@@ -11,7 +11,7 @@ from o2_coverage import UniqueRows
 from o2_response import ROOT2, check_transfer, reference, require
 from scipy import optimize, signal
 
-OUT = Path(os.environ.get("ELECTROBOW_O2_OUT", "build/stage-07"))
+OUT = Path(os.environ.get("ELECTROBOW_O2_OUT", "build/stage-08-1/qualified/o2"))
 BINARY = OUT / "render"
 DEPTHS = (0, 0.5, 1)
 PROBES = (0, 20, 82.41, 196, 440, 1000, 3200, 6000, 12000)

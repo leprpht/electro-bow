@@ -11,7 +11,7 @@ import numpy as np
 from acoustic_identity import analysis_stream, feature
 from o2_response import require
 
-OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-1/i1"))
+OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-1/qualified/i1"))
 
 
 class Gesture(Enum):

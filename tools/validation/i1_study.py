@@ -2,7 +2,6 @@
 
 import json
 import math
-import os
 import subprocess
 from dataclasses import replace
 from itertools import combinations, product
@@ -16,6 +15,7 @@ from guide_qualification import digest, trajectory
 from i1_clock import OUT, Confirm, Frame, Gesture, Launch, controls, due_stamps, replay
 from i1_safety import correction, run, smooth_targets, transfer
 from o2_audio import physical_key
+from o2_bench import OUT as O2
 from o2_coverage import RATE, STATIONARY, keys
 from o2_qualification import strongest_hz, v17_row
 from o2_records import producer_clock
@@ -23,7 +23,6 @@ from o2_response import reference, require
 from scipy import signal
 from scipy.io import wavfile
 
-O2 = Path(os.environ.get("ELECTROBOW_O2_OUT", str(OUT / "o2")))
 ALT = np.tile([-5.0, 5.0], 6)
 VECTORS = {
     "opposed": ALT,
