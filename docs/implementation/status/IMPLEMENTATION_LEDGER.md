@@ -1,5 +1,11 @@
 # Implementation ledger
 
+## 2026-11-28 · Review 8.1 retains the carrier and holds isolated Rust I1
+
+Reviewed `ef0e631..6c10ca0` from a clean tree. S2a/S2b, M4/M6, M5, O1, isolated O2 and shipping remain qualified in scope. Both nominal complete offline exits passed. All 108 revised stationary rows met V17 and all 700 registered moving cells retained useful correction. An independent QR reconstruction verified the host-time Gram fit and realized decisions. Signed-zero neutral delivery, actual fourth electrical returns and cached stereo M6 decrement arithmetic reproduced.
+
+O2 tooling remains held because jointly shifted wet bytes with valid tags, a self-attested M5 tap and coherent cross-rate timing receipts escaped. I1 tooling and isolated Rust I1 remain held. The complete exit passed an always-neutral fourth correction mutant, a confirmation at tick 5760 could launch the expired acquisition, and actual invalid monitor state could bypass or abort the lane-local fault fade. Authorize one offline joined-transaction and provenance remediation. Controlled identity and owner listening remain pending. Baseline injected S4a retains its independent authorization. [Review 8.1 findings and next increment](REVIEW_08_1_I1_REMEDIATION.md)
+
 ## 2026-11-28 · Stage 08.1 offline remediation awaiting independent Review 8.1
 
 The revised guide-phase permission retained meaningful coloration in all 700 registered vibrato cells across seven rates; the historical fixed-bin monitor retained none. All 108 revised stationary depth rows met V17. A fourth actual Rust electrical return exercised automated detail depth. The same-clock stereo oracle covers expiry, zero-E replacement, prospective numerical faults and cached-product fades. The full exit compares the reports and waveform artifacts with fresh replay. Pressure/speed transitions still cause measurable vetoes. Empirical controlled identity, owner listening, measured Rust real-time headroom and isolated implementation authorization remain pending. [Stage evidence and replay commands](STAGE_08_1_I1_REMEDIATION.md)

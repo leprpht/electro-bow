@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-28 · Retain the offline guide-phase fit and require a joined qualification revision
+
+Accept the measured stationary V17 results and the preregistered moving witness under the retrospective host-time Gram contract. Keep the selected DI projection, frozen correction bank, independent physical/O1/O2 qualifications and original V17 denominator. Hold both acceptance-tooling sign-offs and isolated Rust I1 on corrected-wet and timing provenance, automated wet verification, exact expiry and lane-local fault handling.
+
+Authorize one offline revision that makes the two-lane moving transaction authoritative, binds evidence to producer samples and executed timing, rejects the complete-exit counterexamples, and proves the packed schedule and M6 handoff within the existing scope. Retain baseline injected S4a authority. Controlled source approval, perception, live tracking/gesture, supported S5, integration and release retain their separate gates. [Review 8.1 authorization](REVIEW_08_1_I1_REMEDIATION.md#final-authorization)
+
 ## 2026-11-28 · Proposed guide-phase permission and replay-owned qualification
 
 **Proposed, awaiting independent Review 8.1.** Retain the qualified guide/O1/O2 path, DI projection and complex bank. Admit a common grid ray using the completed host-time fit to committed guide phase and an independently qualified upstream carrier. Measure all four realized paths through automation and slew. Require producer-owned provenance, typed acquisition/epoch evidence and a lane-local postcommit fault transaction. The preregistered motion gate passed at seven rates; natural-source approval requires the controlled holdout and perception remains an owner decision. Review 8's implementation hold and the independent baseline S4a authorization stand pending review. [Stage 08.1 handoff](STAGE_08_1_I1_REMEDIATION.md)
