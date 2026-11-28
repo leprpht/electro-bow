@@ -2,7 +2,7 @@
 
 Rust provides the authoritative validation commands. Review 8.2 governs DSP qualification and stage authorizations. [Qualification commands](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
 
-Frozen before corrected-output scoring. Distances and events below apply to binary64 before direct, E, Out or protection. All measurements keep individual failures. Synthetic controls exercise a mechanism. Independent natural identity and V22 remain separate decisions.
+Frozen before corrected-output scoring. The original identity distances and events use binary64 before direct, E, Out or protection. Stage 08.3 also grades the emitted pre-link conversion. All measurements keep individual failures. Synthetic controls exercise a mechanism. Independent natural identity and V22 remain separate decisions.
 
 | Case inventory | Drive and schedule | Reference, tap, window and decision |
 |---|---|---|
@@ -64,3 +64,16 @@ The historical exit reconstructs the reports and engineering artifacts in a fres
 Apply the registered seven-rate vibrato cell thresholds also to actual automated wet minus its own returned q. Use the frozen stationary off correction reference at the same rate. In the veto fixture require nonzero actual correction RMS above 0.0001 FS in [2.5,3) s, and an exact-neutral interval during outage. Constant off/factory/full delivery must equal its matching sentinel bit for bit from identical reset. Require an independently realized fourth bank on its actual q, depths and coefficient sequence. Compare sample correction and wet within 2e-11 FS, packed normalized moments and direct QR energies within 2e-11 FS², fitted coefficients within 2e-10, and slew within 2e-12. Require identical window and trial indices, selected grid index, conditioning and realized classifications even at a threshold. Inclusive comparisons admit equality. Examine every grid entry in descending order and retain the first pass, conditional on passing zero and the two-window recovery rule.
 
 Grade the complete exit against the joined physical commit clock, exact expired and malformed frames, packed/direct QR comparison, all 17 trial positions, four independent bank and wet trajectories, and the signed cache product on both stereo lanes. Use fresh sample/report replay as an additional check. A source mutant must execute its targeted producer, enter the ordinary qualification predicate and publish an unsuccessful run with the registered failure. Compile errors, unrelated exceptions and an unexpected surviving mutant fail the mutation suite. Keep the 108 stationary rows, original M5, nine historical failures, all seven moving rates, engineering/listening gains and V17–V22 gates. [Rust qualification entry](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Historical qualification entry](../../tools/validation/i1_qualification.py) · [Historical source mutations](../../tools/validation/i1_mutants.py)
+
+## Stage 08.3 corrected candidate
+
+| Finding | Acceptance at the producing boundary |
+|---|---|
+| R82-1 | Grade both emitted lanes against the independently evolved bank and full-window QR wet, authoritative E, signed gain, Character and direct. Require exact live product, converted A4, cache and current-control fade samples through reset, replacement and fresh acquisition. The coherent half-product must fail the product predicate in the complete exit. |
+| R82-2 | Start from a measured full permission. Require exact zero on decrement N, original q bits on all four paths and bounded adjacent steps. Test all seven rates, uneven rates, interrupted non-grid origins, reversal and recovery. The compiled accumulating recurrence must fail the exact endpoint predicate. |
+| R82-3 | Enumerate both sides of every decimation boundary. Check the concrete epoch and disjoint named arena fields against the two original byte ceilings. Count stack and allocation overhead separately. |
+| R82-4 | Bind the aggregate to strict run-local receipts and validate dependent payloads. Reject malformed/nonfinite/overflowing numbers, duplicate keys, wrong required types and altered artifacts. Optional null measurements remain valid. |
+| R82-5 | Inject NaN, infinity and maximum binary64 into stored phase on a committed stereo tick. Require PHASE, one invalidation, immediate cached decrement and continuing peer. Retain ordinary finite-rank veto. |
+| Equivalence | Continue the entire frozen comparison, including the historical misses and half-product. Independently grade the corrected permission and normalized wet at every stationary and moving tick. Preserve the frozen bank, physical and scheduled decision words. |
+
+The complete exit includes the standalone corrected contract, stationary and moving producers, registered joined-motion witness, compiled source mutations and frozen comparisons. [Qualification guide](VALIDATION_RUST_GUIDE.md) · [Review submission](status/STAGE_08_3_I1_CONTRACT_CLOSURE.md)

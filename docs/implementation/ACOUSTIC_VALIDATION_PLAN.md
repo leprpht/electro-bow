@@ -102,3 +102,5 @@ Use the registered seven-rate vibrato usefulness test in addition to stationary 
 ## Stage 08.2 offline gate
 
 Use the joined streaming tick for moving, capture, replacement and numerical recovery. Score registered motion separately on off and actual delivery, with the frozen stationary reference and [0.5,2.5) s cell interval. Preserve independent per-block Gram/QR, selected grid, delayed slew, signed neutral bytes, actual wet and clean stereo-twin checks. The complete exit also verifies source mutants, synchronized sample provenance, original session intervals and executed O2 timing. Integrated V18–V21, controlled source discrimination and human listening remain separate measurements. [Stage 08.2 qualification](status/STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
+
+Stage 08.3 adds emitted signed A4 and cached-fade grading on both lanes to this gate. The corrected Rust epoch must also retain the stationary V17 results and the registered off and actual-delivery cells with the original converted M5 denominator. [Corrected acceptance predicates](I1_ACCEPTANCE_MATRIX.md#stage-083-corrected-candidate)

@@ -394,3 +394,41 @@ advance the existing shared output stage once on the stereo pair; increment tick
 ```
 
 A nonempty sample call owns one timestamp. Empty partitions execute no step. Prepared scratch belongs to the exclusively borrowed stream. The closure factor needs 35 multiply-subtractions, 15 divisions and six square roots. The 13 pairs of substitutions need another 390 multiply-subtractions and 156 divisions. Each fitted comparator evaluates 36 full-energy terms plus two four-term component energies. Five comparators run at closure and three in a scheduled trial. Include finite checks and absolute-term sums for roundoff at those sites. A2 has at most 155 lag positions per decimated emission. A failed finite conditioning test skips the solves but still consumes the bounded trial schedule.
+
+## Stage 08.3 emitted transaction
+
+The capture clock, host-time Gram, four actual q paths, original converted M5, 17 trial indices and decision priority above apply. The following rules specify the private transaction after Review 8.2. The implementation under test lives in the offline validation workspace. [Packed candidate](../../tools/validation-rs/src/identity/candidate.rs) · [Emitted sample](../../tools/validation-rs/src/identity/delivery.rs)
+
+### Permission and phase
+
+Let N = floor(.005 fs + .5). On a change to the effective target T, capture the **last emitted** scale O and set the unsigned elapsed count to zero. Receipt denial clears the pending decision and supplies T = +0 on the detection tick. A scheduled trial result first becomes effective on the following tick. A repeated target leaves the origin and count in place. A realized veto supplies zero through the existing decision schedule. Reset and disposal discard the entire ramp with its epoch.
+
+On each tick with actual scale different from T, increment k, compute r = binary64(k)/binary64(N) and Δ = T−O. Assign T itself if r ≥ |Δ|. Otherwise emit O + copysign(r, Δ). Hold the assigned endpoint until a target change. The first post-interruption sample uses k=1 in the new direction. This works with every grid index and a non-grid O reached mid-ramp. In real arithmetic the motion is monotone with displacement min(k/N, |T−O|), so the last increment is bounded by 1/N. For binary64 values in [0,1], each division and addition has absolute rounding error at most half an ULP at one. Comparing two successive rounded levels, including clipped endpoint assignment and rounded subtraction, gives the conservative absolute increment bound 1/N + 2·f64::EPSILON. At k=N the quotient is exactly one. A full withdrawal lands on +0 at decrement N, counting detection. With zero permission, copy each returned q word, preserving either sign of zero.
+
+Every legal committed frequency lies in [65,1320] Hz. At a close the phase is reduced modulo 2π. After k new samples the unwrapped phase is at most 2π + k·2π·1320/fs apart from roundoff. The guard permits one extra maximum increment of headroom before advance. Check stored phase, increment and advanced phase, doubled angle, and the four bounded trigonometric results before inserting any basis product. A damaged phase or derived operand belongs to PHASE. A finite Gram that fails conditioning takes the ordinary unavailable/veto path.
+
+### Signed wet, cache and conversion
+
+Take normalized wet from the actual fourth correction path. In binary64 form w = signed_gain × normalized_wet, P = E × w and y = (1 − Character × E) × direct + Character × P in that order using separate rounded operations. Convert y once to binary32. Publish the cache (E,P) only after this prospective sample passes the finite and conversion checks. During idle, use the zero pair and current host inputs. A normal zero-E replacement starts with cleared cache, histories and permission.
+
+An identity fault after O2 keeps that tick's physical and electrical commit evidence and discards its tentative wet epoch. Save the previous finite pair. For i = 0…N−1 compute s = (N−1−i)/N, emitted E = s × saved E and emitted P = s × saved P. Apply the same A4 operation and conversion to this pair with the current Character and direct. Start i=0 immediately at detection. On the last step emit the signed zero product and clear the held pair. The retired lane consumes no further physical sample through the fade. Transport reset clears both lanes before the new generation's first sample. [Stereo coordinator](../../tools/validation-rs/src/identity/stereo.rs) · [Independent emission checks](../../tools/validation-rs/src/identity/stereo/closure.rs)
+
+### Prepared stereo layout
+
+The Stage 08.3 arena replaces the earlier grouped estimates above. The 64-bit proposal uses 8-byte alignment for f64, u64 and the epoch, 4 for u32/i32/f32, and 1 for bool. The executable layout lists absolute offsets, counts, element types, alignment and lifetimes for every arena field. Inside each corrected epoch it queries the compiler for offsets and enclosing size. Each 984-byte block contains 21 Gram, 78 projection, 12 q/d quadratic, four y², one M5², three paired quadratic, one paired realized, one pre-slew and two qy/dy words in that order. The two blocks start at epoch offsets 0 and 984. Current and retired ownership swaps at the close. [Arena layout](../../tools/validation-rs/src/identity/layout/prepared.rs) · [Epoch layout](../../tools/validation-rs/src/identity/candidate.rs)
+
+At the maximum immediately below 192 kHz the offsets are as follows.
+
+| Byte interval, end exclusive | Owner and lifetime |
+|---|---|
+| 0–4,672 | Shared A1/I1 FIR halves (369 and 177 doubles), O2 coefficients in c,b0,b1,b2,a1,a2 order, rates and transport/control state. |
+| 4,672–32,432 and 32,432–60,192 | Left and right lane. Each owns its HP and decimated rings, A1 powers and eleven signed/indexed peak buckets, the seven-hop A3 level history and mute latch, both lag arrays, all source tags, running job, separate completed, published and held vectors, receipt, event frame, four O2 histories, corrected epoch and fault/cache state. |
+| 60,192–60,936 | Exclusive prepared work arrays. The 21-word factor, basis, trial, path vectors and feature-finalization temporaries are reusable across serial lane calls. |
+| 60,936–192,008 | Four 4,096-word binary64 physical rings. |
+| 192,008–650,760 | Eight 8,192-frame binary32 band slices and six raw/pre-swell slices. |
+| 650,760–716,296 | Two 8,192-frame host wet slices. |
+| 716,296–717,384 | Two guide descriptors (272 bytes each), stream/host slice offsets and lengths, split, attack and output state. |
+
+One causal HP sample ring serves both symmetric FIRs, each with its own decimation cursor. Each lane retains 24 literal nine-word support entries as columns. Tick, generation, serial, flags, Hz, quality, amplitude, previous floor and movement are recoverable without interpolation or reconstruction. The tag and epoch range/deadline of the receipt occupy five integer and nine floating-point words. A grant borrows the incoming controller frame until its validated receipt is stored. Completed, published and held slots have separate 12-word payloads and owner/snapshot tags. Invalidating a slot retires its authority without clearing an unrelated owner. Each O2 history stores previous velocity, blocked velocity and two filter delays. A stream-relative arena base plus the prepared rate determines analysis slice locations.
+
+The budgets remain 65,536 analysis/control bytes and 838,860 total prepared bytes. The proposed sample locals occupy 424 additional bytes of typed values with the two-lane converted output present. Compiler frames, ABI spills, allocator metadata, allocation counts and callback timing require measurement in the later implementation. The offline validation process allocates independent references and sample traces outside this proposal.

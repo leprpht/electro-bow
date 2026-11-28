@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Stage 08.3 submits the offline I1 transaction for independent review
+
+At executable revision `eee1a09`, the offline Rust producer and independent bank/QR grader agree on the emitted signed product, pre-link A4, converted sample and previous finite cache. The compiled candidate meets exact withdrawal on all seven qualification rates and three uneven rates. Stored NaN, infinity and maximum finite phase retire at PHASE. The proposed named field layout requires 60,936 analysis/control bytes and 717,384 total prepared bytes. All 44 regression producers and 14 frozen comparisons passed, with zero unresolved artifact differences. Review 8.3 owns the next isolated implementation decision. [Handoff, mutation predicates and regression receipts](STAGE_08_3_I1_CONTRACT_CLOSURE.md)
+
 ## 2026-11-28 · Review V1.1 closes the Rust validation cutover
 
 Reviewed `3905767..dd13710`. The Stage 08 archive differs only by the authorized one-ULP gain, float64 preflight retains decoded identity and duplicate rejection, and coherent provenance and stale producer substitutions fail schema 3 inspection. Python-blocked O2 and complete frozen qualification exited 0 and passed receipt reinspection. All 43 regression producers and 14 frozen comparisons passed. Rust becomes authoritative for validation. Retain the existing Python and independent offline C++ files without parallel maintenance. Resume the narrow offline Review 8.2 remediation with all DSP and shipping boundaries preserved. [Independent closure and evidence](REVIEW_V1_1_RUST_VALIDATION_CLOSURE.md)

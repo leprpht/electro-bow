@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-28 · Submit the corrected transaction and preserve the frozen qualification
+
+Use the Stage 08.3 offline Rust candidate for emitted A4, cached retirement, endpoint-exact permission and phase ownership. Retain the frozen C++ epoch and historical joined streams as executable comparisons with their original defects. Require the independently derived product, first neutral sample and existing stationary, motion, evidence and artifact gates. The prepared field map supplies the proposed capacities for subsequent measurement. Request focused Review 8.3 before implementing private isolated Rust I1. Baseline injected S4a retains its prior authority. [Decision request](STAGE_08_3_I1_CONTRACT_CLOSURE.md#independent-decision-requested) · [Contract](../../architecture/ELECTROBOW_I1_SOURCE_IDENTITY_SPECIFICATION.md#stage-083-emitted-transaction)
+
 ## 2026-11-28 · Authorize Rust as ElectroBow’s validation infrastructure
 
 Accept V1-1, V1-2 and V1-3. Use Rust by default for all future permanent validation. Use the Rust O2 and complete frozen qualification commands as the authoritative exits. Keep every existing Python validation and independent offline C++ file in place for historical replay and comparison. Future Rust validation changes carry no parallel maintenance requirement. The Stage 08 canonical ZIP and its one authorized equivalence disposition stand. O2 and Stage 08.2 retain exact archive equality.

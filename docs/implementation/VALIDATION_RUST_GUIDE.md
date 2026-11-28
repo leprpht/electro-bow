@@ -47,7 +47,7 @@ Use `"$v" regression` for the fresh regression producers when the historical com
 | src/mutations.rs, contracts/ | Source edits, nominated first failures, historical state replay and fixture definitions |
 | reference/ | Entry-stack fixture extraction and compact canonical hashes. These programs execute only for historical comparisons. |
 
-The root production workspace and both CMake Cargo invocations continue to use the root lockfile. Production code has no dependency on the validation workspace. Processes running the existing Rust adapters own actual measurements. Oracle modules own expected values. The C++ epoch is the reviewed offline candidate. The full-window QR uses rectangular input samples. The independent Rust bank retains complex state separate from the epoch. The stationary grader receives the original converted M5 directly from the verified 30-column carrier. Four returned electrical paths enter the epoch, including the separately executed automated/factory path.
+The root production workspace and both CMake Cargo invocations continue to use the root lockfile. Production code has no dependency on the validation workspace. Processes running the existing Rust adapters own actual measurements. Oracle modules own expected values. The retained C++ epoch supplies the historical candidate. Stage 08.3 runs a separate corrected Rust epoch and emitted-output transaction. The full-window QR uses rectangular input samples. The independent Rust bank retains complex state separate from the epoch. The stationary grader receives the original converted M5 directly from the verified 30-column carrier. Four returned electrical paths enter the epoch, including the separately executed automated/factory path.
 
 ## Reproduction and results
 
@@ -67,12 +67,13 @@ The root production workspace and both CMake Cargo invocations continue to use t
 | Seven-rate motion and fourth-path delivery | `i1-motion` |
 | Packed fields, 13 fitted vectors and every scheduled trial vs QR | `i1-qr` |
 | Standalone bank, 17 little-endian f64 words in and six out per tick | `i1-bank-stream <rate>` |
-| Native build, CTest and macOS signature/19 ABI exports | `native` |
+| Native build, CTest and macOS signature, VST3 factory and 19 ABI exports | `native` |
 | Run contact/ring/utility differential against historical sample words | `compare [reference-dir]` |
 | All pitch rows or the original C++ four-path outputs | `pitch-compare [reference-dir]`, `i1-bank-compare [reference-dir]` |
 | Physical scoring and original SciPy instantaneous pitch comparison | `guide`, `guide-compare [reference-dir]` |
 | O2 acoustic windows, corners, matched WAV and listening ZIP, measured chirp and provenance negatives | `o2-acoustic`, `o2-acoustic-compare [reference-dir]`, `o2-sweep`, `o2-records` |
 | Stationary source publications, independent moving decisions and source mutants | `i1-capture`, `i1-motion`, `i1-path-mutants` |
+| Corrected stereo emitted A4, signed fade, permission deadlines, packed QR, fault probes and exact proposed layout | `i1-contract` |
 | Submitted and disputed prepared capacity, retained deadline and phase faults, surviving producer comparison | `i1-layout`, `i1-review82`, `signed-compare [reference-dir]` |
 | Controlled source inventory, preregistered calibration and withheld scoring | `recordings <manifest>`, `repeatability <manifest>`, `recording-controls` |
 | Actual late guide launch and all retained O1 descriptive measurements | `guide-negative`, `o1-compare [reference-dir]` after `o1-replay` |
@@ -80,7 +81,7 @@ The root production workspace and both CMake Cargo invocations continue to use t
 | Historical electrical measurements, lifecycle and timing batch/terminal differential | `o2-electrical-compare [reference-dir]` after the seven O2 producers |
 | Original acquisition clocks, publication vectors, collisions and expiry boundaries | `i1-clock`, `i1-clock-compare [reference-dir]`, `i1-events` |
 | Stationary sweeps and field-by-field comparison to the historical 36-case report | `i1-stationary-compare [reference-dir]` after `i1-stationary` |
-| Compile defective transactions and regrade altered reports and actual waveform data | `i1-transaction-mutants`, `i1-evidence` after its fourteen child measurements |
+| Compile defective transactions and regrade altered reports and actual waveform data | `i1-transaction-mutants`, `i1-evidence` after its fifteen child measurements |
 | Two independent lanes, signed delivery and M6 fault retirement | `i1-stereo` |
 | Six recorded G3 sources, fifteen pair contrasts, matched historical archive | `i1-sources`, then `i1-listening` with the current `i1-motion` clips |
 | Reconstruct Stage 04 M5, S5 and pickup observations and all nine WAVs | `research-observation`, `research-observation-compare [reference-dir]` |
@@ -99,10 +100,25 @@ Keep expected outcomes on the frozen side of a comparison. Record windows, units
 
 ## Frozen comparison and review
 
-The existing Python validation and independent offline C++ sources are retained in place at the frozen comparison revision `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0`. They preserve earlier study results and support historical differential checks. Future changes to Rust validation require no parallel update of the frozen implementations. The Rust CLI compiles the retained C++ epoch as the offline candidate under test and uses independent Rust mathematics for the expected results.
+The existing Python validation and independent offline C++ sources are retained in place at the frozen comparison revision `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0`. They preserve earlier study results and support historical differential checks. Future changes to Rust validation require no parallel update of the frozen implementations. For historical comparison the Rust CLI compiles the retained C++ epoch and uses independent Rust mathematics for the expected results.
 
 The default comparison directory is `build/validation-migration/reference`. On arm64 macOS install the six pinned packages in the Python 3.9.6 environment named by `ELECTROBOW_REFERENCE_PYTHON`, build the original Release package, then run `sh tools/validation-rs/reference/reproduce.sh` from the project root. This checks out the entry revision, runs the historical suites, exercises the surviving half-product variant and exports comparison data. Freeze scripts are reference-side extraction tools. Run `"$v" differential` to execute both new producers and comparisons. The nested invocation uses a single copied executable throughout and writes one child inventory per aggregate. `qualification` checks the fresh artifact audit and returns nonzero for an unresolved canonical difference. Its invocation keeps `inventory.json`, `electrical.json`, the child receipts and, on an unresolved difference, `unqualified.json`. The complete half-product and carrier mutation controls require the named subordinate predicate to be the first failing boundary. [Historical environment](../../tools/validation-rs/reference/requirements-macos-arm64.txt) · [Disposition and open owners](status/STAGE_V1_RUST_VALIDATION_MIGRATION.md)
 
 The Build and test workflow compiles and exercises the validation workspace on each platform. A manual workflow dispatch also runs the full Rust regression on macOS with Git history for O1 private-state replay. Its artifact contains the aggregate receipt, child inventory and failure logs. A local `differential` additionally requires the original frozen run. Hosted execution of the new workflow is pending.
 
 On macOS, after `"$v" package`, run the optional recorded guitar regression with `cargo test --release --locked --offline --manifest-path tools/validation-rs/Cargo.toml --test packaged_recordings -- --ignored --nocapture`. It recreates all four original auditions from the recorded sources, checks all eight PCM24 containers against frozen SHA-256 values, reloads each fresh state at two other block sizes and prints the directory containing the WAVs and comparison receipt. The original cross-host generator runs as part of the frozen replay.
+
+## Stage 08.3 qualification
+
+Use a fresh output root and the existing frozen reference. The aggregate also runs the corrected stationary and seven-rate motion gates and rebuilds the defective implementations. Keep the terminal receipts and comparison inventory for independent review.
+
+```sh
+export ELECTROBOW_VALIDATION_OUT=build/stage-08-3/final
+"$v" i1-contract
+"$v" o2-qualification
+"$v" regression
+"$v" qualification build/validation-migration/reference
+"$v" inspect qualification
+```
+
+The corrected transaction and historical C++ ABI adapter share the same frame interface. The actual emitter returns the binary64 pre-link sample, checked binary32 output and cache. Its grader drives the separate Rust bank and rectangular QR from carrier and acquisition schedules. The per-case files are little-endian binary64 rows in host-tick, left/right order. The receipt names the columns, including the exact widening of each converted f32. The packed fit and original V17 denominator retain their existing bounds. [Corrected candidate](../../tools/validation-rs/src/identity/candidate.rs) · [Emission grader](../../tools/validation-rs/src/identity/stereo/closure.rs) · [Field layout](../../tools/validation-rs/src/identity/layout/prepared.rs)

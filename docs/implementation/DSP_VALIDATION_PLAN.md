@@ -197,3 +197,7 @@ def final_bridge_rms(lift):
 assert abs(final_bridge_rms(False) - .228131) < .000002
 assert abs(final_bridge_rms(True) - .000144) < .000002
 ```
+
+## Isolated I1 transaction qualification
+
+Use the standalone Rust contract and complete frozen qualification to check pre-link A4, one-time lane retirement, endpoint-exact permission, packed/full-window agreement and the proposed stereo arena. A subsequent isolated implementation must demonstrate actual allocation, stack and callback timing under the Review 8.2 workload. [Field layout and recurrence](../architecture/ELECTROBOW_I1_SOURCE_IDENTITY_SPECIFICATION.md#stage-083-emitted-transaction) · [Review handoff](status/STAGE_08_3_I1_CONTRACT_CLOSURE.md)

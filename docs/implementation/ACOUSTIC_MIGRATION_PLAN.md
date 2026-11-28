@@ -44,3 +44,7 @@ Independent Review 8.1 must decide the moving-basis permission, stationary upstr
 ## Stage 08.2 handoff
 
 Submit the bounded two-lane sample transaction, corrected evidence ownership and memory/work proposal to independent Review 8.2. An isolated Rust I1 implementation requires a subsequent authorization. Baseline injected S4a retains its independent scope. Live controller receipts, controlled recordings, owner listening, integrated routing and release retain their existing gates. [Implementation evidence and review request](status/STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
+
+## Stage 08.3 handoff
+
+The offline corrected Rust candidate and its qualification are submitted to focused Review 8.3. The requested authorization covers the private isolated I1 operation and its measured resource gate. Integration and the live source/controller decisions remain downstream. [Decision request](status/STAGE_08_3_I1_CONTRACT_CLOSURE.md#independent-decision-requested)
