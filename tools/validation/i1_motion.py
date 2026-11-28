@@ -168,7 +168,7 @@ def defect_rows(raw, fs):
     w, a, _ = drive(
         counter, d, raw[:, 11], fs, 196.0, moving=True, trusted=rows["199Hz"]["passed"]
     )
-    old, oa, _ = drive(counter[:, :3], d[:, :3], raw[:, 11], fs, 196.0)
+    old, oa, _ = drive(counter[:, :3], d[:, :3], raw[:, 11], fs, 196.0, moving=False)
     require(
         np.array_equal(w, counter) and max(a) == 0 and oa[-1] > 0,
         "detuned upstream escape",
@@ -196,7 +196,7 @@ def measure(fs, kind, ref, trusted, directory):
         g = smooth_targets(len(raw), fs, [(0, ALT), (fs, -ALT), (2 * fs, ALT)])
         outage = [(round(1.35 * fs), round(1.55 * fs))]
     d = bank(q, fs, f, g)
-    old, old_a, _ = drive(q[:, :3], d[:, :3], raw[:, 11], fs, f, outage)
+    old, old_a, _ = drive(q[:, :3], d[:, :3], raw[:, 11], fs, f, outage, moving=False)
     if kind == "steady":
         ref = rms(old[-fs:, 0] - q[-fs:, 0])
         neutral = prerequisite(raw, fs, 196)

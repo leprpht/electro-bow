@@ -124,7 +124,7 @@ def main():
         -1, 30
     )
     d = bank(q, fs, f, np.full(12, 10**0.25 - 1))
-    _, scale, _ = drive(q[:, :3], d[:, :3], raw[:, 11], fs, f)
+    _, scale, _ = drive(q[:, :3], d[:, :3], raw[:, 11], fs, f, moving=False)
     tick = 2 * fs + int(np.argmax(abs(d[2 * fs : 3 * fs, 0])))
     jump = scale[tick] * d[tick, 0]
     require(abs(jump + 0.16903128689) < 1e-6, "historical abrupt neutralization")

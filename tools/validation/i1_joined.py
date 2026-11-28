@@ -15,7 +15,7 @@ from i1_clock import (
     replay,
     rounded,
 )
-from i1_motion import OUT, physical
+from i1_motion import OUT, physical, prerequisite
 from i1_safety import GRID, ORDERS, permission_block
 from o2_bench import replay as electrical
 from o2_records import sample_hash
@@ -153,13 +153,16 @@ def lane_ticks(
         at, row = clock.send(post if tick else None)
         require(at == tick, "host clock")
         post = False
+        site = faults.get(tick)
         if row:
             capture.append(row)
+            if row["event"] == "fault" and state is not None:
+                site = "pre-guide"
             if row["event"] == "reset":
                 epoch = state = None
                 fade = -1
                 cache = (0.0, 0.0)
-            if row["epoch"] != epoch:
+            if row["epoch"] != epoch and row["event"] != "fault":
                 require(
                     epoch is None
                     or row["event"] in ("reset", "fault")
@@ -180,7 +183,6 @@ def lane_ticks(
                     state = WetEpoch(fs)
                     pointer = 0
             dest = np.asarray(row["target"])
-        site = faults.get(tick)
         gc = oc = 0
         wet = qval = depth = a = 0.0
         index = -1
@@ -414,9 +416,10 @@ def main():
         2: returns(fs, n, "replacement"),
         3: returns(fs, n, "fresh"),
     }
-    trusted = json.loads((OUT / "motion.json").read_text())["rows"]["steady-48000"][
-        "prerequisite"
-    ]["passed"]
+    neutral = np.memmap(
+        OUT / "motion/steady-48000.f64le", dtype="<f8", mode="r"
+    ).reshape(-1, 30)
+    trusted = prerequisite(neutral, fs, 196)["passed"]
 
     def stream(faults, parts=(127,), di=x):
         return lane_ticks(
@@ -472,7 +475,7 @@ def main():
         ("moment", 6100),
         ("bank", 7800),
         ("wet", 9000),
-        ("conversion", replace + 600),
+        ("conversion", replace + 192),
         ("delivery-state", 6000),
         ("pre-guide", 5600),
         ("post-o2", 5600),
@@ -494,6 +497,21 @@ def main():
             and tr[when, 3] == int(site not in ("pre-guide", "post-o2")),
             "fault ownership",
         )
+        if site == "conversion":
+            require(
+                0 < tr[when - 1, 11] < 1 and tr[when - 1, 12] != 0,
+                "fractional cached product",
+            )
+            check, coeff, cap, probe, _ = simulate(
+                {when: site, when + 4: site}, (0, 1, 37, 255)
+            )
+            require(
+                np.array_equal(check, tr)
+                and np.array_equal(coeff, g)
+                and cap == c
+                and probe == tx,
+                "faultful partition invariance",
+            )
         nf = rounded(0.005 * fs)
         expected = (nf - 1 - np.arange(nf)) / nf
         require(

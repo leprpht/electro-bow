@@ -138,6 +138,17 @@ def grade(candidate, reference):
             vib["witness"]["passed"] and not vib["old_witness"]["passed"],
             "moving identity witness",
         )
+    for name, row in motion["rows"].items():
+        for block in row["monitor"]:
+            if not (
+                block["available"] and block["realized_ok"] and block["neutral_ok"]
+            ):
+                require(block["veto"] and block["scale"] == 0, "missed veto " + name)
+        if name.startswith(("vibrato-", "bend-")):
+            require(
+                all(b["realized_ok"] for b in row["monitor"]),
+                "realized motion safety " + name,
+            )
     require(motion["motion_pass"], "motion usefulness")
     keys(reports["joined"]["faults"], SITES, "stereo faults")
 
@@ -299,6 +310,11 @@ def run(existing=False):
         result.update(
             status="passed",
             evidence=candidate[1],
+            tools={
+                p.name: digest(p)
+                for p in sorted(Path(__file__).parent.glob("i1_*"))
+                if p.is_file()
+            },
             reports={k: digest(OUT / (k + ".json")) for k in REPORTS},
             engineering="passed",
             motion_usefulness="passed",

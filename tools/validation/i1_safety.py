@@ -183,13 +183,13 @@ def smooth_targets(count, fs, updates):
     return signal.lfilter([a], [1, a - 1], targets, axis=0)
 
 
-def run(carriers, m5, fs, pitch, gains, force_unavailable=()):
+def historical_run(carriers, m5, fs, pitch, gains, force_unavailable=()):
     """Use the actual off/factory/full return streams on one physical clock.
     Returned arrays are off/factory/full before signed G. At most 17 candidate trials.
     """
     q = np.column_stack(carriers)
     delta = np.column_stack([correction(s, fs, pitch, gains) for s in carriers])
-    return drive(q, delta, m5, fs, pitch, force_unavailable)
+    return drive(q, delta, m5, fs, pitch, force_unavailable, moving=False)
 
 
 def permission_block(q, delta, out, m5, fs, fq, moving, phase, trusted, observable):
@@ -232,7 +232,7 @@ def permission_block(q, delta, out, m5, fs, fq, moving, phase, trusted, observab
     return phase, masks, bool(live_ok), bool(available), bool(valid), bridge_ok
 
 
-def drive(q, delta, m5, fs, pitch, force_unavailable=(), *, moving=False, trusted=None):
+def drive(q, delta, m5, fs, pitch, force_unavailable=(), *, moving=True, trusted=None):
     trusted = (not moving) if trusted is None else trusted is True
     n = len(q)
     fq = np.broadcast_to(pitch, (n,))

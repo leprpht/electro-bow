@@ -13,7 +13,7 @@ from acoustic_identity import FIXTURES, audio, capture, distances
 from acoustic_observation import db, partials, rms, tracking
 from guide_qualification import digest, trajectory
 from i1_clock import OUT, Confirm, Frame, Gesture, Launch, controls, due_stamps, replay
-from i1_safety import correction, run, smooth_targets, transfer
+from i1_safety import correction, historical_run, smooth_targets, transfer
 from o2_audio import physical_key
 from o2_bench import OUT as O2
 from o2_coverage import RATE, STATIONARY, keys
@@ -191,7 +191,7 @@ def study_case(raw, case):
     else:
         updates = updates_for(source(fs, f, name), fs, f)
         gains = smooth_targets(len(raw), fs, updates)
-    out, alpha, log = run(raw[:, 25:28].T, raw[:, 11], fs, f, gains)
+    out, alpha, log = historical_run(raw[:, 25:28].T, raw[:, 11], fs, f, gains)
     final = gains if gains.ndim == 1 else gains[-1]
     spec = inspect_row(raw, out, fs, f, key(case))
     frequencies = np.arange(65.0, 4000.25, 0.25)
@@ -261,7 +261,7 @@ def gain_corners():
                 out = raw[:, 25:28]
             else:
                 gains = np.expm1(np.log(10) * VECTORS[name] / 20)
-                out, _, _ = run(raw[:, 25:28].T, raw[:, 11], fs, 440, gains)
+                out, _, _ = historical_run(raw[:, 25:28].T, raw[:, 11], fs, 440, gains)
             for i, d in enumerate((0, 0.5, 1)):
                 wet_peak = float(max(abs(out[:, i])))
                 for g, c, trim in product((0.08, 1.4), (0, 1), (0, 2)):
@@ -367,7 +367,7 @@ def real_sources(clips):
         require(bool(updates), "missing source capture " + name)
         times = [(round(t * fs / rate), g) for t, g in updates]
         coeff = smooth_targets(len(q), fs, times)
-        wet, alpha, log = run(raw[:, 25:28].T, m5, fs, 196, coeff)
+        wet, alpha, log = historical_run(raw[:, 25:28].T, m5, fs, 196, coeff)
         unsafe = q + correction(q, fs, 196, coeff)
         di = x[round(0.08 * rate) : round(0.23 * rate)]
         pitchgrid = np.arange(193, 199.01, 0.025)
@@ -495,7 +495,9 @@ def dynamic(clips):
         if kind == "gain-veto":
             coeff = smooth_targets(len(raw), fs, [(0, ALT), (fs, -ALT), (2 * fs, ALT)])
         forced = [(round(1.35 * fs), round(1.55 * fs))] if kind == "gain-veto" else []
-        out, alpha, log = run(raw[:, 25:28].T, raw[:, 11], fs, freq, coeff, forced)
+        out, alpha, log = historical_run(
+            raw[:, 25:28].T, raw[:, 11], fs, freq, coeff, forced
+        )
         row = {
             "policy": summary(log, alpha),
             "peak": float(np.max(abs(out))),
