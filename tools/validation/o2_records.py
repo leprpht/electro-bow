@@ -1,0 +1,159 @@
+"""Replay-owned physical clock. A corrected wet package can only cite this record."""
+
+import csv
+import json
+from dataclasses import dataclass, replace
+from hashlib import sha256
+from pathlib import Path
+
+import numpy as np
+from guide_qualification import digest
+from o2_response import require
+
+
+def sample_hash(x):
+    return sha256(np.ascontiguousarray(x, dtype="<f8")).hexdigest()
+
+
+def publish(path, binary, controls, fs, pitch, commits):
+    count = len(controls)
+    require(commits == [count, 1, 0, 1, count, count], "unsuccessful physical epoch")
+    raw = np.memmap(path, mode="r", dtype="<f8").reshape(count, 30)
+    record = {
+        "fixture": path.stem,
+        "rate": fs,
+        "pitch": pitch,
+        "epoch": 1,
+        "start": 0,
+        "end": count,
+        "count": count,
+        "window": [count - fs, count],
+        "source": digest(path),
+        "executable": digest(binary),
+        "invocation": ["--o2-guide", str(fs)],
+        "controls": sample_hash(controls),
+        "taps": {
+            str(i): sample_hash(raw[:, i]) for i in (3, 11, 21, 22, 24, 25, 26, 27)
+        },
+        "commits": commits,
+    }
+    path.with_suffix(".json").write_text(json.dumps(record, sort_keys=True))
+
+
+@dataclass(frozen=True)
+class WetTrace:
+    samples: np.ndarray
+    source: str
+    rate: int
+    pitch: float
+    epoch: int
+    start_tick: int
+    end_tick: int
+    count: int
+    window: tuple
+    settings: tuple
+    m5_hash: str
+    off_hash: str
+    depth: float
+
+    def tag(self):
+        return tuple(v for k, v in vars(self).items() if k != "samples")
+
+
+def producer_clock(m5, off, fs, pitch, settings):
+    path = Path(m5.filename) if isinstance(m5, np.memmap) else None
+    require(path is not None and path.is_file(), "missing producing carrier")
+    record = json.loads(path.with_suffix(".json").read_text())
+    from o2_bench import BINARY
+
+    n = len(m5)
+    require(
+        record["fixture"] == path.stem
+        and record["source"] == digest(path)
+        and record["executable"] == digest(BINARY)
+        and record["invocation"] == ["--o2-guide", str(fs)]
+        and record["commits"] == [n, 1, 0, 1, n, n]
+        and (
+            record["rate"],
+            record["pitch"],
+            record["epoch"],
+            record["start"],
+            record["end"],
+            record["count"],
+            record["window"],
+        )
+        == (fs, pitch, 1, 0, n, n, [n - fs, n])
+        and n >= fs
+        and record["taps"]["11"] == sample_hash(m5)
+        and record["taps"]["25"] == sample_hash(off),
+        "physical clock/tap provenance",
+    )
+    if path.parent.name == "traces":
+        with (
+            Path(__file__)
+            .with_name("fixtures")
+            .joinpath("o2_replay_sha256.tsv")
+            .open() as f
+        ):
+            frozen = {
+                r["case"]: r["retained_O2"] for r in csv.DictReader(f, delimiter="\t")
+            }
+        require(frozen[path.stem] == record["source"], "frozen carrier digest")
+        kind, rate, hz, ratio, speed, seconds = path.stem.split("_")
+        require(
+            (
+                int(rate),
+                float(hz),
+                int(seconds[:-1]) * fs + (fs // 4 if kind == "vibrato" else 0),
+            )
+            == (fs, pitch, n),
+            "carrier fixture clock",
+        )
+        from guide_qualification import trajectory
+
+        v, r = float(speed[1:]), float(ratio[1:])
+        expected = np.column_stack(
+            (
+                pitch * np.exp2(trajectory(np.arange(n) / fs, kind) / 1200),
+                np.full(n, v),
+                np.full(n, r * v / 1.65),
+            )
+        )
+        if kind == "lift":
+            expected[fs:, 2] = 0
+        require(
+            sample_hash(expected) == record["controls"], "producing control schedule"
+        )
+    ident = digest(path.with_suffix(".json"))
+    return WetTrace(
+        off,
+        ident,
+        fs,
+        pitch,
+        1,
+        0,
+        n,
+        n,
+        (n - fs, n),
+        settings,
+        sample_hash(m5),
+        sample_hash(off),
+        0,
+    ), record["taps"]
+
+
+def check_pair(
+    m5, off, fs, pitch, settings, noise, corrected, corrected_off, clock, columns
+):
+    ref, taps = producer_clock(m5, off, fs, pitch, settings)
+    require(
+        all(isinstance(r, WetTrace) for r in (clock, corrected, corrected_off)),
+        "paired final wet traces required",
+    )
+    require(
+        clock.tag() == corrected_off.tag() == ref.tag()
+        and corrected.tag() == replace(ref, depth=noise).tag()
+        and corrected.samples.shape == corrected_off.samples.shape == m5.shape
+        and all(sample_hash(x) == taps[str(i)] for i, x in columns),
+        "final wet alignment/settings/reference differ",
+    )

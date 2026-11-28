@@ -181,22 +181,34 @@ def check_rate(fs):
     }
 
 
-def timing():
+def measured_timing(fs, run_id):
+    from guide_qualification import digest
+    from o2_coverage import timing_ratio
 
+    path = OUT / f"timing-{fs}.tsv"
+    records = []
+    for line in path.read_text().splitlines():
+        invocation, rate, label, batch, frames, elapsed, h = line.split()
+        require(
+            invocation == run_id and int(rate) == fs and int(frames) == 30 * fs,
+            "timing invocation/rate/count",
+        )
+        records.append([label, int(batch), int(elapsed) / int(frames), float(h)])
+    return {
+        "records": records,
+        "near_denormal_ratio": timing_ratio(records),
+        "sha256": digest(path),
+        "executable": digest(BINARY),
+        "argv": ["--o2-timing", str(fs), run_id],
+    }
+
+
+def timing(run_id):
     widths = list(map(int, run("size", 48000).split()))
     require(widths == [48, 32], "Rust coefficient/lane size")
     batches = {}
     for fs in (32000, 48000, 192000):
-        raw = run("timing", fs)
+        raw = run("timing", fs, run_id)
         (OUT / f"timing-{fs}.tsv").write_text(raw)
-        records = []
-        for line in raw.splitlines():
-            label, batch, ns, h = line.split()
-            records.append([label, int(batch), float(ns), float(h)])
-        from o2_coverage import timing_ratio
-
-        batches[str(fs)] = {
-            "records": records,
-            "near_denormal_ratio": timing_ratio(records),
-        }
+        batches[str(fs)] = measured_timing(fs, run_id)
     return {"coefficient_bytes": widths[0], "lane_bytes": widths[1], "rates": batches}

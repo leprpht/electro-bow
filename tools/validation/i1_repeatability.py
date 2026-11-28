@@ -2,17 +2,15 @@
 
 import argparse
 import json
-import subprocess
 from itertools import combinations, product
 from pathlib import Path
 
 import numpy as np
-from acoustic_identity import audio
 from acoustic_observation import db, partials, rms
 from guide_qualification import digest
 from i1_clock import OUT
-from i1_safety import run, smooth_targets
-from i1_study import O2, cues, harmonics, inspect_row, spectrum, updates_for
+from i1_safety import drive, smooth_targets
+from i1_study import cues, harmonics, inspect_row, spectrum, updates_for
 from o2_response import require
 
 
@@ -58,6 +56,7 @@ def discrimination(records):
         for c, other in (("A", "B"), ("B", "A"))
         for i in (3, 4)
     }
+    out["all_pairs"] = {a + "/" + b: dist(a, b) for a, b in combinations(records, 2)}
     return out
 
 
@@ -100,7 +99,12 @@ def qualify(manifest):
     }[config["comparison"]]
     for field in required:
         require(
-            all(str(cell[c][field]).strip() for c in cell), "missing label " + field
+            all(
+                isinstance(cell[c][field], (str, int, float))
+                and str(cell[c][field]).strip()
+                for c in cell
+            ),
+            "missing label " + field,
         )
         if field not in varies:
             require(cell["A"][field] == cell["B"][field], "uncontrolled " + field)
@@ -110,25 +114,23 @@ def qualify(manifest):
     )
     takes = {}
     inputs = {}
-    used = set()
+    from i1_motion import physical, prerequisite
+    from i1_recordings import inventory
+
+    records, samples, failures = inventory(config, manifest)
+    report = {
+        "manifest_sha256": digest(manifest),
+        "protocol": config["protocol_revision"],
+        "labels": cell,
+        "takes": records,
+        "failures": failures,
+    }
     for c in ("A", "B"):
-        require(len(cell[c]["takes"]) == 4, "four independent takes per setting")
-        for i, filename in enumerate(cell[c]["takes"], 1):
-            path = manifest.parent / filename
-            rate, x = audio(path)
-            sha = digest(path)
-            require(
-                sha not in used
-                and x.ndim == 1
-                and np.isfinite(x).all()
-                and max(abs(x)) < 1,
-                "invalid/duplicate take",
-            )
-            used.add(sha)
-            starts = np.flatnonzero(abs(x) > 0.01)
-            require(len(starts) > 0, "absent attack")
-            x = x[starts[0] :]
-            require(len(x) >= round(0.30 * rate), "incomplete DI")
+        for i in range(1, 5):
+            take = c + str(i)
+            if take not in samples:
+                continue
+            rate, x, sha = samples[take]
             segment = x[round(0.08 * rate) : round(0.23 * rate)]
             hzgrid = np.arange(
                 pitch * 2 ** (-40 / 1200), pitch * 2 ** (40 / 1200) + 0.025, 0.025
@@ -138,19 +140,33 @@ def qualify(manifest):
                     np.argmax([abs(partials(segment, rate, f, 1)[0]) for f in hzgrid])
                 ]
             )
-            require(abs(1200 * np.log2(hz / pitch)) <= 15, "DI pitch mismatch")
+            if abs(1200 * np.log2(hz / pitch)) > 15:
+                failures.append(take + " DI pitch mismatch")
             take = c + str(i)
             h = abs(partials(segment, rate, hz))
-            require(len(h) == 12 and max(h) > 1e-5, "DI harmonic eligibility")
+            if len(h) != 12 or max(h) <= 1e-5:
+                failures.append(take + " DI harmonic eligibility")
             inputs[take] = representation(h)
             takes[take] = (rate, x, hz, sha)
-    require(
-        all(
-            abs(1200 * np.log2(takes["A" + str(i)][2] / takes["B" + str(j)][2])) <= 10
-            for i, j in product(range(1, 5), repeat=2)
-        ),
-        "between-take pitch mismatch",
-    )
+    report["di_pairs"] = {
+        a + "/" + b: {
+            "distance": rms(np.subtract(inputs[a]["vector"], inputs[b]["vector"])),
+            "reason": None,
+        }
+        if a in inputs and b in inputs
+        else {"distance": None, "reason": "ineligible take"}
+        for a, b in combinations(records, 2)
+    }
+    for a, b in product(range(1, 5), repeat=2):
+        left, right = f"A{a}", f"B{b}"
+        if (
+            left in takes
+            and right in takes
+            and abs(1200 * np.log2(takes[left][2] / takes[right][2])) > 10
+        ):
+            failures.append(left + "/" + right + " between-take pitch mismatch")
+    if failures:
+        return dict(report, status="ineligible controlled recordings")
     di = discrimination(inputs)
     signs = [stable_cue(inputs, k, (1, 2), 2) for k in (0, 1)]
     repeat = all(di[s]["margin"] >= 1 for s in ("calibration", "withheld")) and all(
@@ -160,49 +176,59 @@ def qualify(manifest):
         s if s and stable_cue(inputs, k, (1, 2, 3, 4), 2) == s else 0
         for k, s in enumerate(signs)
     ]
-    report = {
-        "di": di,
-        "registered_signs": signs,
-        "inputs": inputs,
-        "source_hashes": {k: t[3] for k, t in takes.items()},
-    }
+    report.update(
+        {
+            "di": di,
+            "registered_signs": signs,
+            "inputs": inputs,
+            "source_hashes": {k: t[3] for k, t in takes.items()},
+        }
+    )
     if not repeat or not any(signs):
         return dict(report, status="DI discrimination ineligible")
     fs = 48000
     controls = np.tile([pitch, 0.1, 1.8 * 0.1 / 1.65], (3 * fs, 1)).astype("<f8")
-    proc = subprocess.run(
-        [O2 / "render", "--o2-guide", str(fs)],
-        input=controls.tobytes(),
-        capture_output=True,
-        check=True,
-    )
-    require(
-        list(map(int, proc.stderr.split())) == [3 * fs, 1, 0, 1, 3 * fs, 3 * fs],
-        "reference clock",
-    )
-    raw = np.frombuffer(proc.stdout, "<f8").reshape(3 * fs, 30)
+    OUT.mkdir(parents=True, exist_ok=True)
+    raw = physical(controls, fs, "controlled-carrier", OUT)
+    upstream = prerequisite(raw, fs, pitch)
+    if not upstream["passed"]:
+        return dict(report, status="ineligible upstream carrier", upstream=upstream)
     from o2_qualification import strongest_hz
 
     anchor = strongest_hz(raw[-fs:, 11], fs)
+    from i1_motion import bank, build_bank
+    from o2_bench import replay
+
+    build_bank()
+    q = np.column_stack((raw[:, 25:28], replay(fs, raw[:, 21], 0.5)[:, 3]))
     wet = {}
+    wet_rows = {}
     for name, (rate, x, hz, _) in takes.items():
         updates = updates_for(x, rate, pitch)
-        require(any(np.any(g) for _, g in updates), "missing capture")
+        if not any(np.any(g) for _, g in updates):
+            failures.append(name + " missing capture")
         gains = smooth_targets(
             len(raw), fs, [(round(n * fs / rate), g) for n, g in updates]
         )
-        out, _, _ = run(raw[:, 25:28].T, raw[:, 11], fs, pitch, gains)
-        for row in inspect_row(raw, out, fs, pitch, name):
-            require(
-                all(v is not False for v in row["passes"].values()), "unsafe held wet"
-            )
+        d = bank(q, fs, np.full(len(q), pitch), gains)
+        out, _, _ = drive(
+            q, d, raw[:, 11], fs, pitch, moving=True, trusted=upstream["passed"]
+        )
+        wet_rows[name] = inspect_row(raw, out, fs, pitch, name)
+        failures.extend(
+            f"{name}/{i}/{gate}"
+            for i, row in enumerate(wet_rows[name])
+            for gate, flag in row["passes"].items()
+            if flag is False
+        )
         wet[name] = representation(harmonics(out[:, 0], fs, anchor))
     score = discrimination(wet)
     preserved = all(
         not s or s == stable_cue(wet, k, (3, 4), 0.5) for k, s in enumerate(signs)
     )
     passed = (
-        all(score[s]["margin"] >= 0.5 for s in ("calibration", "withheld"))
+        not failures
+        and all(score[s]["margin"] >= 0.5 for s in ("calibration", "withheld"))
         and all(score["matches"].values())
         and preserved
     )
@@ -211,6 +237,7 @@ def qualify(manifest):
         status="passed" if passed else "held discrimination failed",
         wet=wet,
         score=score,
+        wet_v17=wet_rows,
     )
 
 

@@ -3,10 +3,11 @@
 import json
 import math
 import os
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
+from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import acoustic_observation as obs
@@ -19,7 +20,8 @@ from o2_audio import physical_key
 from o2_audio import qualify as qualify_audio
 from o2_audio import rows as audio_rows
 from o2_bench import BINARY, DEPTHS, OUT, check_rate, replay, run, timing
-from o2_coverage import UniqueRows, coverage_negatives, grade, grade_complete
+from o2_coverage import UniqueRows, coverage_negatives, grade, grade_measurements
+from o2_records import check_pair, producer_clock, sample_hash
 from o2_response import (
     RATES_EXTENDED,
     ROOT2,
@@ -131,62 +133,6 @@ def pluck(fs, f, n):
     return 0.35 * x / max(abs(x))
 
 
-@dataclass(frozen=True)
-class WetTrace:
-    samples: np.ndarray
-    rate: int
-    pitch: float
-    start_tick: int
-    # Identifies the exact physical epoch/control stream and all downstream settings.
-    epoch: str
-    settings: tuple
-    depth: float
-
-    source: str
-    window: tuple
-    end_tick: int
-    count: int
-    m5_hash: str
-    off_hash: str
-
-    def alignment(self):
-        return (
-            self.rate,
-            self.pitch,
-            self.start_tick,
-            self.end_tick,
-            self.count,
-            self.epoch,
-            self.source,
-            self.settings,
-            self.window,
-            self.m5_hash,
-            self.off_hash,
-        )
-
-
-def reference_trace(m5, off, fs, f, source, epoch, settings, start=0):
-    def digest(x):
-        return sha256(np.ascontiguousarray(x, dtype="<f8").tobytes()).hexdigest()
-
-    end = start + len(m5)
-    return WetTrace(
-        off,
-        fs,
-        f,
-        start,
-        epoch,
-        settings,
-        0,
-        source,
-        (end - fs, end),
-        end,
-        len(m5),
-        digest(m5),
-        digest(off),
-    )
-
-
 def v17_row(
     q,
     neutral,
@@ -203,6 +149,7 @@ def v17_row(
     corrected=None,
     corrected_off=None,
     clock=None,
+    settings=None,
 ):
     tail = slice(-fs, None)
 
@@ -213,31 +160,17 @@ def v17_row(
         require(corrected is None and corrected_off is None, "unexpected colored wet")
         wet, off = q, neutral
     elif operation == "corrected":
-        require(
-            isinstance(clock, WetTrace)
-            and isinstance(corrected, WetTrace)
-            and isinstance(corrected_off, WetTrace),
-            "paired final wet traces required",
-        )
-        ref = reference_trace(
+        check_pair(
             m5,
             neutral,
             fs,
             f,
-            clock.source,
-            clock.epoch,
-            clock.settings,
-            clock.start_tick,
-        )
-        require(
-            ref.alignment()
-            == clock.alignment()
-            == corrected.alignment()
-            == corrected_off.alignment()
-            and corrected.depth == noise
-            and corrected_off.depth == 0
-            and corrected.samples.shape == corrected_off.samples.shape == m5.shape,
-            "final wet alignment/settings/reference differ",
+            settings,
+            noise,
+            corrected,
+            corrected_off,
+            clock,
+            [(25 + DEPTHS.index(noise), q), (22, h), (24, loaded), (21, v), (3, nut)],
         )
         wet, off = corrected.samples, corrected_off.samples
     else:
@@ -430,7 +363,7 @@ def acoustic(make_audio=True):
         if f < 1000 and speed == 0.1 and r == 1.8:
             for ident, corrected in corrections(off, fs, f).items():
                 if ident != "neutral":
-                    clock = reference_trace(m5, off, fs, f, key, "launch-1", (ident,))
+                    clock, _ = producer_clock(m5, off, fs, f, (ident,))
                     colored = replace(clock, samples=corrected)
                     rows[f"stress/{f}/{ident}"] = v17_row(
                         off,
@@ -447,6 +380,7 @@ def acoustic(make_audio=True):
                         corrected=colored,
                         corrected_off=colored,
                         clock=clock,
+                        settings=(ident,),
                     )
         if speed == 0.16:
             peak = float(np.max(abs(off)))
@@ -598,13 +532,22 @@ def sweep(fs):
     valid = (freq >= 65) & (freq <= 4000) & (abs(den) / len(x) > FLOOR)
     rows = UniqueRows()
     for noise in (0, 0.5, 1):
-        measured = (
-            np.fft.rfft(replay(fs, x, noise)[:, 3])[valid] * ROOT2 / (0.85 * den[valid])
-        )
+        q = replay(fs, x, noise)[:, 3]
+        measured = np.fft.rfft(q)[valid] * ROOT2 / (0.85 * den[valid])
         error = float(np.max(abs(measured - reference(fs, freq[valid], noise))))
         magnitude = abs(measured)
         peaks = sweep_peaks(freq[valid], magnitude)
         rows[str(noise)] = {
+            "rate": fs,
+            "interval": [0, len(x)],
+            "depth": noise,
+            "executable": guide.digest(BINARY),
+            "tap": "--o2-taps/q[3]",
+            "excitation": sample_hash(x),
+            "returned": sample_hash(q),
+            "bins": sample_hash(np.flatnonzero(valid)),
+            "quotient": sha256(measured.astype("<c16").tobytes()).hexdigest(),
+            "peaks": peaks,
             "maximum_dB": max(p["dB"] for p in peaks),
             "maximum": max(peaks, key=lambda p: p["dB"]),
             "peaks_above_6dB": [p for p in peaks if p["dB"] > 6],
@@ -799,32 +742,42 @@ def negative_controls():
             v17_row(m5, m5, m5, m5, upper, m5, m5, fs, 196, 0, operation="neutral")
         ),
     )
-    colored = m5 + 0.1 * np.sin(2 * np.pi * 6151 * t)
-    off = reference_trace(m5, m5, fs, 196, "injected DI", "epoch-1", ("unity",))
+    raw, _ = trace(fs, 196)
+    m5, q = raw[:, 11], raw[:, 25]
+    off, _ = producer_clock(m5, q, fs, 196, ("unity",))
+    tone = np.sin(2 * np.pi * 6151 * np.arange(len(q)) / fs)
+    colored = q + tone * (0.1 * obs.rms(q[-fs:]) / obs.rms(tone[-fs:]))
     factory = replace(off, samples=colored, depth=0.5)
 
-    def paired(off_trace, on=factory):
+    def paired(off_trace, on=factory, clock=off, factory_q=raw[:, 26]):
         return v17_row(
+            factory_q,
+            q,
+            raw[:, 22],
+            raw[:, 24],
             m5,
-            m5,
-            m5,
-            m5,
-            m5,
-            m5,
-            m5,
+            raw[:, 21],
+            raw[:, 3],
             fs,
             196,
             0.5,
             operation="corrected",
             corrected=on,
             corrected_off=off_trace,
-            clock=off,
+            clock=clock,
+            settings=("unity",),
         )
 
     row = paired(off)
+    reject(
+        "incorrect underlying factory bytes",
+        lambda: paired(off, factory, off, np.roll(raw[:, 26], 1)),
+    )
     reject("off only", lambda: paired(off, None))
     reject("factory only", lambda: paired(None))
     for label, edit in [
+        ("wrong source", {"source": "other recording"}),
+        ("incorrect count", {"count": len(q) - 1}),
         ("unaligned wet pair", {"start_tick": 1}),
         ("unmatched wet settings", {"settings": ("other gain",)}),
         ("wrong epoch", {"epoch": "epoch-2"}),
@@ -838,12 +791,18 @@ def negative_controls():
         )
     require(
         abs(row["factory_difference_over_off"] + 20) < 1e-9
-        and row["local_q_difference_over_off"] == -240,
+        and row["local_q_difference_over_off"] < -28,
         "colored wet control",
     )
     reject(
         "colored final wet",
         lambda: require(row["passes"]["factory_residual"], "final wet residual -20 dB"),
+    )
+    moved = replace(
+        off, start_tick=1, end_tick=len(q) + 1, window=(len(q) - fs + 1, len(q) + 1)
+    )
+    reject(
+        "self-attested shift", lambda: paired(moved, replace(moved, depth=0.5), moved)
     )
     edge = sweep_peaks(np.arange(3.0), np.array([3.0, 1.0, 0.5]))[0]
     require(
@@ -887,7 +846,7 @@ def qualify(result):
         for line in run("lifecycle", fs).splitlines():
             name, *values = line.split()
             result["lifecycle"][f"{fs}/{name}"] = list(map(int, values))
-    result["local_timing"] = timing()
+    result["local_timing"] = timing(result["run_id"])
     pluck_frames = pluck(48000, 196, 144000)
     nominal = np.pad(pluck_frames.astype("<f4"), (4800, 62400))
     result["nominal_mono_input"] = {
@@ -911,50 +870,78 @@ def qualify(result):
         if False in row["passes"].values()
     }
     result["all_tested_vectors_passed"] = not result["failed_predicates"]
-    result["stage"] = "acceptance tooling awaiting independent Review 8"
-    result["head"] = guide.git("rev-parse", "HEAD")
+    result["stage"] = "awaiting independent Review 8.1"
     result["tool_hashes"] = tool_hashes()
     result["renderer_sha256"] = guide.digest(BINARY)
     grade(result)
     result["negatives"].update(coverage_negatives(result))
-    result["neutral_candidate_passed"] = True
-    grade_complete(result)
     print("Retained downstream failures", result["failed_predicates"])
+
+
+def publish(result, name="results.json"):
+    payload = json.dumps(result, indent=2, allow_nan=False) + "\n"
+    path = OUT / (name + ".tmp")
+    with path.open("w") as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(path, OUT / name)
+
+
+def partial(value):
+    if isinstance(value, dict):
+        return {str(k): partial(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [partial(v) for v in value]
+    if isinstance(value, np.generic):
+        return partial(value.item())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return f"unserializable {type(value).__name__}"
 
 
 def main():
     OUT.mkdir(exist_ok=True, parents=True)
-    result = {"neutral_candidate_passed": False}
-    write_json(
-        "results.json",
-        {"neutral_candidate_passed": False, "error": "qualification incomplete"},
-    )
-    try:
-        qualify(result)
-        json.dumps(result, allow_nan=False)
-    except Exception as exc:
-        result["error"] = f"{type(exc).__name__}: {exc}"
-        result["neutral_candidate_passed"] = False
-        from o2_coverage import REQUIRED
+    with (OUT / "runner.lock").open("a") as lock:
+        if os.name == "nt":
+            import msvcrt
 
-        result["missing_sections"] = sorted(REQUIRED - result.keys())
-        raise
-    finally:
-        # Preserve partial evidence, including the location of invalid numbers.
-        def clean(value):
-            if isinstance(value, dict):
-                return {k: clean(v) for k, v in value.items()}
-            if isinstance(value, (list, tuple)):
-                return [clean(v) for v in value]
-            if isinstance(value, np.generic):
-                return clean(value.item())
-            if isinstance(value, float) and not math.isfinite(value):
-                return None
-            return value
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
 
-        path = OUT / "results.tmp"
-        path.write_text(json.dumps(clean(result), allow_nan=False, indent=2) + "\n")
-        os.replace(path, OUT / "results.json")
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = {
+            "status": "running",
+            "neutral_candidate_passed": False,
+            "run_id": uuid4().hex,
+            "head": guide.git("rev-parse", "HEAD"),
+        }
+        publish({k: result[k] for k in ("run_id", "head")}, "current-run.json")
+        try:
+            publish(result)
+            from o2_coverage import reset_references
+
+            reset_references()
+            qualify(result)
+            grade_measurements(result)
+            publish(dict(result, status="passed", neutral_candidate_passed=True))
+        except BaseException as exc:
+            from o2_coverage import REQUIRED
+
+            result.update(
+                status="interrupted"
+                if isinstance(exc, (KeyboardInterrupt, SystemExit))
+                else "failed",
+                neutral_candidate_passed=False,
+                error=f"{type(exc).__name__}: {exc}",
+                missing_sections=sorted(REQUIRED - result.keys()),
+            )
+            publish(partial(result))
+            raise
 
 
 if __name__ == "__main__":

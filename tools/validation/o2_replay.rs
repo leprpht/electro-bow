@@ -159,6 +159,7 @@ fn long_step(fs: f64, depth: f64) {
 }
 
 fn timing(fs: f64) {
+    let invocation = std::env::args().nth(3).expect("timing invocation id");
     for workload in ["silence", "near-denormal", "o2", "guide-o1", "guide-o1-o2"] {
         let mut h = Harness::new(fs);
         h.launch(196.0, 0.1);
@@ -186,9 +187,12 @@ fn timing(fs: f64) {
                     black_box(h.lane.tick(&h.coeff, black_box(v), black_box(d)).unwrap());
                 }
             }
-            let ns = start.elapsed().as_secs_f64() * 1e9 / frames as f64;
+            let elapsed = start.elapsed().as_nanos();
             if batch > 0 {
-                println!("{workload} {batch} {ns:.4} {:e}", h.lane.state()[1]);
+                println!(
+                    "{invocation} {fs} {workload} {batch} {frames} {elapsed} {:e}",
+                    h.lane.state()[1]
+                );
             }
         }
     }

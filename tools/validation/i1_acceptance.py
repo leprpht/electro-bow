@@ -58,6 +58,11 @@ def grade_depths(depths, fs, f, m5_rms, neutral_rms):
         require(abs(level) <= 3 and abs(row["corrected_over_neutral"]) <= 3, "level")
         require(strongest(row["strongest_hz"], f), "fundamental")
         h = row["harmonics"]
+        count = sum(k * row["measured_f0"] < fs / 2 for k in range(1, 13))
+        require(
+            all(len(h[k]) == count for k in ("peak_FS", "phase_deg", "dBr")),
+            "harmonic inventory",
+        )
         for j, (amp, phase, rel) in enumerate(
             zip(h["peak_FS"], h["phase_deg"], h["dBr"])
         ):
@@ -144,7 +149,7 @@ def pack(result):
             )
 
 
-def audit(result):
+def audit_structure(result):
     from guide_qualification import digest
     from i1_study import carrier
 
@@ -181,6 +186,10 @@ def audit(result):
             "Nyquist veto",
         ),
         "negative controls",
+    )
+    require(
+        all(isinstance(v, str) and v for v in result["negatives"].values()),
+        "missing rejection",
     )
     inventory = stationary_inventory()
     keys(result["stationary"], inventory, "I1 cases")
@@ -290,6 +299,33 @@ def audit(result):
             "corrected corner levels",
         )
     pack(result)
+
+
+def audit(result):
+    """Standalone Review 8 report audit. Reconstruct measurements from actual taps."""
+    import json
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    from i1_study import O2
+
+    audit_structure(result)
+    with TemporaryDirectory(dir=OUT.parent) as tmp:
+        env = dict(os.environ, ELECTROBOW_I1_OUT=tmp, ELECTROBOW_O2_OUT=str(O2))
+        subprocess.run(
+            [
+                sys.executable,
+                Path(__file__).with_name("i1_study.py"),
+                "--historical-measurements",
+            ],
+            env=env,
+            check=True,
+        )
+        expected = json.loads((Path(tmp) / "i1-results.json").read_text())
+    require(result == expected, "historical report differs from waveform replay")
 
 
 def negative_controls(result):

@@ -2,15 +2,50 @@
 
 import json
 import math
+import os
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 import numpy as np
 from acoustic_identity import analysis_stream, feature
 from o2_response import require
 
-OUT = Path("build/stage-08")
-PRIORITY = ("reset", "fault", "pick", "mute", "change", "support", "release")
+OUT = Path(os.environ.get("ELECTROBOW_I1_OUT", "build/stage-08-1/i1"))
+
+
+class Gesture(Enum):
+    RESET = "reset"
+    FAULT = "fault"
+    PICK = "pick"
+    MUTE = "mute"
+    CHANGE = "change"
+    HOLD = "hold"
+    COMPATIBLE = "compatible"
+    RELEASE = "release"
+    TIMEOUT = "timeout"
+
+
+@dataclass(frozen=True)
+class Confirm:
+    token: tuple
+    valid_through: int  # injected A3 decision with explicit freshness deadline
+
+
+@dataclass(frozen=True)
+class Launch:
+    token: tuple
+    epoch: int
+    energy: float
+
+
+@dataclass(frozen=True)
+class Dispose:
+    epoch: int
+    energy: float
+
+
+PRIORITY = tuple(Gesture)
 ZERO = np.zeros(12)
 
 
@@ -42,7 +77,9 @@ class Frame:
         )
 
 
-def replay(x, fs, frames, events, partitions=(127,), defect=None):
+def clock_ticks(
+    x, fs, frames, events, partitions=(127,), defect=None, *, identity_stamps
+):
     """Restart FIR phase at reset. Vectorized causal FIR is indexed only through n."""
     d = int(fs // 16000)
     fa = fs / d
@@ -53,7 +90,9 @@ def replay(x, fs, frames, events, partitions=(127,), defect=None):
     origin = 0
     z, _ = analysis_stream(x, fs)
     generation = serial = 0
-    owner = live = None
+    owner = live = confirmed = epoch = None
+    last_epoch = 0
+    expiry = -1
     anchor = -1
     held = ZERO.copy()
     published = ZERO.copy()
@@ -61,7 +100,8 @@ def replay(x, fs, frames, events, partitions=(127,), defect=None):
     published_end = None
     phase = "idle"
     history = {}
-    log = []
+    blocked_until = -1
+    post_fault = False
     require(
         partitions and all(p >= 0 for p in partitions) and any(partitions),
         "nonadvancing partition schedule",
@@ -72,32 +112,75 @@ def replay(x, fs, frames, events, partitions=(127,), defect=None):
         block += 1
         for tick in range(n, end):
             actions = events.get(tick, ())
-            action = next((a for a in PRIORITY if a in actions), None)
+            if tick < blocked_until and Gesture.RESET not in actions:
+                actions = ()
+            require(
+                all(
+                    isinstance(a, (Gesture, Confirm, Dispose, Launch)) for a in actions
+                ),
+                "untyped controller input",
+            )
+
+            def single(kind, actions=actions):
+                values = [a for a in actions if isinstance(a, kind)]
+                require(len(values) <= 1, "conflicting controller evidence")
+                return next(iter(values), None)
+
+            conf, disposal, launch = single(Confirm), single(Dispose), single(Launch)
+            action = next((a.value for a in PRIORITY if a in actions), None)
             note = []
             consumed = None
             if action == "reset":
+                blocked_until = -1
+                last_epoch = 0
                 origin = tick
                 z, _ = analysis_stream(x[tick:], fs)
                 generation += 1
-                owner = live = job = None
+                owner = live = confirmed = epoch = job = None
+                published_end = None
                 phase = "idle"
                 held = ZERO.copy()
                 published = ZERO.copy()
                 history.clear()
-            elif action in ("fault", "release", "mute"):
-                owner = None
+            elif action in ("fault", "release", "mute", "timeout"):
+                owner = confirmed = None
                 phase = "release"
                 job = None
                 published = ZERO.copy()
             elif action in ("pick", "change"):
                 serial += 1
                 owner = (generation, serial)
+                confirmed = None
                 phase = "pending"
                 published_end = None
                 anchor = tick
                 published = ZERO.copy()
                 job = None
                 history.clear()
+            elif action == "hold" and owner and owner == live:
+                job = None
+                phase = "hold"
+            elif action == "compatible" and owner and owner == live:
+                phase = "active"
+            if (
+                conf
+                and action not in ("reset", "fault", "mute", "release", "timeout")
+                and (
+                    owner
+                    and conf.token == owner
+                    and phase == "pending"
+                    and conf.valid_through >= tick
+                )
+            ):
+                confirmed, expiry = owner, conf.valid_through
+                phase = "confirmed"
+            if (phase == "pending" and tick - anchor >= math.ceil(0.120 * fs)) or (
+                phase == "confirmed" and tick > expiry
+            ):
+                owner = confirmed = job = published_end = None
+                published = ZERO.copy()
+                phase = "idle"
+                note.append("expired")
             age = tick - origin
             if (age + 1) % ha == 0:
                 history[tick] = frames.get(tick, Frame(0, supported=False))
@@ -113,14 +196,28 @@ def replay(x, fs, frames, events, partitions=(127,), defect=None):
                 history.pop(
                     tick - (math.ceil((4 / 65 + 0.035) * fs / ha) + 3) * ha, None
                 )
-            if "dispose" in actions or action == "fault":
+            if action == "fault" or (
+                disposal
+                and epoch is not None
+                and disposal.epoch == epoch
+                and disposal.energy == 0
+            ):
                 if owner == live:
-                    owner = job = None
+                    owner = confirmed = job = None
                     published = ZERO.copy()
                     phase = "idle"
-                live = None
+                live = epoch = None
                 held = ZERO.copy()
-            if ("launch", owner) in actions and owner and phase == "pending":
+            if (
+                launch
+                and confirmed
+                and launch.token == confirmed == owner
+                and phase == "confirmed"
+                and epoch is None
+                and launch.energy == 0
+                and launch.epoch > last_epoch
+            ):
+                epoch = last_epoch = launch.epoch
                 live = owner
                 phase = "active"
                 if published_end is None or tick - published_end > 2 * hop:
@@ -131,6 +228,10 @@ def replay(x, fs, frames, events, partitions=(127,), defect=None):
                 job["complete"] = True
                 note.append("complete")
             due = (age + 1) % hop == 0
+            if due and (generation, tick) not in identity_stamps:
+                job = None
+                note.append("missing identity hop")
+                due = False
             if due and job:
                 last = max(history, default=-1)
                 ok = (
@@ -152,7 +253,7 @@ def replay(x, fs, frames, events, partitions=(127,), defect=None):
                     note.append("discard")
                 job = None
             snapshot = None
-            if due and owner and history:
+            if due and owner and phase in ("active", "confirmed") and history:
                 last = max(history)
                 frame = history[last]
                 if frame.good() and frame.owner == owner:
@@ -202,36 +303,64 @@ def replay(x, fs, frames, events, partitions=(127,), defect=None):
                             if defect == "late":
                                 job["pub"] += 1
                             note.append("snapshot")
+            row = None
             if action or actions or due or note:
-                log.append(
-                    {
-                        "tick": tick,
-                        "generation": generation,
-                        "event": action,
-                        "phase": phase,
-                        "owner": owner,
-                        "live": live,
-                        "consumed": consumed,
-                        "actions": note,
-                        "window": snapshot,
-                        "held": held.tolist(),
-                        "target": (10 ** (held / 20) - 1).tolist(),
-                        "job": None
-                        if job is None
-                        else [*job["owner"], job["pub"] - hop],
-                        "held_without_support": bool(
-                            live
-                            and (
-                                phase != "active"
-                                or not history
-                                or not history[max(history)].good()
-                            )
-                        ),
-                        "published": published.tolist(),
-                    }
-                )
+                row = {
+                    "tick": tick,
+                    "generation": generation,
+                    "event": action,
+                    "phase": phase,
+                    "owner": owner,
+                    "live": live,
+                    "epoch": epoch,
+                    "confirmed": confirmed,
+                    "pending": owner if phase in ("pending", "confirmed") else None,
+                    "consumed": consumed,
+                    "actions": note,
+                    "window": snapshot,
+                    "held": held.tolist(),
+                    "target": (10 ** (held / 20) - 1).tolist(),
+                    "job": None if job is None else [*job["owner"], job["pub"] - hop],
+                    "held_without_support": bool(
+                        live
+                        and (
+                            phase != "active"
+                            or not history
+                            or not history[max(history)].good()
+                        )
+                    ),
+                    "published": published.tolist(),
+                }
+            post_fault = yield tick, row
+            if post_fault:
+                blocked_until = tick + rounded(0.005 * fs)
+                owner = confirmed = live = epoch = job = published_end = None
+                phase = "idle"
+                held = ZERO.copy()
+                published = ZERO.copy()
+                history.clear()
         n = end
-    return log
+
+
+def replay(x, fs, frames, events, partitions=(127,), defect=None, *, identity_stamps):
+    return [
+        row
+        for _, row in clock_ticks(
+            x, fs, frames, events, partitions, defect, identity_stamps=identity_stamps
+        )
+        if row is not None
+    ]
+
+
+def due_stamps(count, fs, resets=()):
+    d = int(fs // 16000)
+    hop = d * rounded(0.005 * fs / d)
+    origins = [0, *sorted(resets), count]
+    return {
+        (g, t)
+        for g, (lo, hi) in enumerate(zip(origins, origins[1:]))
+        for t in range(lo + hop - 1, hi, hop)
+    }
 
 
 def controls():
@@ -273,7 +402,35 @@ def controls():
             )
             frames[tick] = replace(frames[tick], owner=tag)
     frames[ticks[31]] = Frame(196, owner=(-1, 1))
-    logs = replay(x, fs, frames, events)
+
+    def fixture(actions):
+        typed = {}
+        for tick, group in actions.items():
+            commands = []
+            for command in group:
+                if isinstance(command, tuple):
+                    token = command[1]
+                    commands.extend(
+                        (Confirm(token, len(x)), Launch(token, token[1], 0.0))
+                    )
+                elif command == "dispose":
+                    commands.append(Dispose(1 if tick == ticks[51] else 2, 0.0))
+                else:
+                    commands.append(Gesture(command))
+            typed[tick] = tuple(commands)
+        # An explicit A3 confirmation may precede the first launch.
+        if 0 in actions:
+            typed[ticks[1]] = (*typed.get(ticks[1], ()), Confirm((0, 1), len(x)))
+        return typed
+
+    def exercise(x, fs, frames, events, partitions=(127,), defect=None):
+        resets = [t for t, a in events.items() if "reset" in a]
+        stamps = due_stamps(len(x), fs, resets)
+        return replay(
+            x, fs, frames, fixture(events), partitions, defect, identity_stamps=stamps
+        )
+
+    logs = exercise(x, fs, frames, events)
     for parts in (
         (1,),
         (17,),
@@ -284,7 +441,7 @@ def controls():
         (4097,),
         tuple(np.random.default_rng(8).integers(1, 500, 30)) + (0,),
     ):
-        require(replay(x, fs, frames, events, parts) == logs, "clock partition")
+        require(exercise(x, fs, frames, events, parts) == logs, "clock partition")
 
     def valid(rows):
         by = {r["tick"]: r for r in rows}
@@ -358,7 +515,9 @@ def controls():
 
     valid(logs)
     # Publication with a pending confirmed gesture is also legal before launch.
-    before = replay(x, fs, frames, {0: ("pick",), ticks[13] + 1: (("launch", (0, 1)),)})
+    before = exercise(
+        x, fs, frames, {0: ("pick",), ticks[13] + 1: (("launch", (0, 1)),)}
+    )
     launch = next(r for r in before if r["tick"] == ticks[13] + 1)
     require(
         any(launch["held"]) and launch["live"] == (0, 1), "publication before launch"
@@ -367,12 +526,12 @@ def controls():
     changed = x.copy()
     changed[prefix + 1 :] = -0.9
     require(
-        [r for r in replay(changed, fs, frames, events) if r["tick"] <= prefix]
+        [r for r in exercise(changed, fs, frames, events) if r["tick"] <= prefix]
         == [r for r in logs if r["tick"] <= prefix],
         "future input changes past output",
     )
     # Invalidate an already confirmed job if its result is attached to a stale voice.
-    stale = replay(x, fs, frames, {0: ("pick",), ticks[13]: (("launch", (0, 9)),)})
+    stale = exercise(x, fs, frames, {0: ("pick",), ticks[13]: (("launch", (0, 9)),)})
     require(all(r["live"] is None for r in stale), "wrong launch token")
     rejected = {"wrong launch token": "stale confirmation cannot promote a gesture"}
     import copy
@@ -397,7 +556,7 @@ def controls():
         else:
             raise ValueError("escaped " + name)
     for defect in ("late", "wrong epoch"):
-        altered = replay(x, fs, frames, events, defect=defect)
+        altered = exercise(x, fs, frames, events, defect=defect)
         require(all("publish" not in r["actions"] for r in altered), defect)
         rejected[defect] = "no obsolete publication"
     require(any(np.any(r["held"]) for r in logs), "no live identity")

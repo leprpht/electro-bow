@@ -130,6 +130,11 @@ def qualify():
                     f"{name} offline audio at {difference.argmax()}",
                 )
                 offline_errors.append(float(max(difference)))
+            from o2_records import publish
+
+            publish(
+                path, BINARY, controls, fs, e["hz"], list(map(int, proc.stderr.split()))
+            )
             info.update(stage06_max_FS=offline_errors, sha256=guide.digest(path))
             for label, col in [("M5", 11), ("off", 25), ("factory", 26)]:
                 wavfile.write(

@@ -441,6 +441,12 @@ EXTRA_CONTROLS = {
     "wrong epoch",
     "wrong reference",
     "wrong measurement window",
+    "incorrect underlying factory bytes",
+    "wrong source",
+    "incorrect count",
+    "self-attested shift",
+    "fabricated factory sweep",
+    "cross-rate timing",
 }
 NEGATIVES.update(EXTRA_CONTROLS)
 
@@ -578,8 +584,14 @@ def diagnostics(result):
         (timing["coefficient_bytes"], timing["lane_bytes"]) == (48, 32), "timing sizes"
     )
     keys(timing["rates"], ("32000", "48000", "192000"), "timing rates")
-    for data in timing["rates"].values():
+    from o2_bench import measured_timing
+
+    for rate, data in timing["rates"].items():
         ratio = timing_ratio(data["records"])
+        require(
+            data == measured_timing(int(rate), result["run_id"]),
+            "measured timing record",
+        )
         require(ratio == data["near_denormal_ratio"] and ratio <= 2, "timing bound")
 
 
@@ -595,6 +607,13 @@ def provenance_files():
     from o2_qualification import BINARY, tool_hashes
 
     return tool_hashes(), guide.digest(BINARY)
+
+
+@lru_cache(None)
+def sweep_reference(executable_hash):
+    from o2_qualification import sweep
+
+    return sweep(48000)
 
 
 def grade(result):
@@ -653,6 +672,7 @@ def grade(result):
     diagnostics(result)
     replay_grade(result)
     sweeps(result["sweep"])
+    require(result["sweep"] == sweep_reference(binary_hash), "tap-derived sweep")
     corners(result["corners"])
     wanted = {f"{fs}/{k}": v for fs in (32000, 48000, 192000) for k, v in LIFE.items()}
     require(result["lifecycle"] == wanted, "lifecycle coverage or counters")
@@ -671,15 +691,41 @@ def grade(result):
         )
 
 
-def grade_complete(result):
+def grade_measurements(result):
     grade(result)
     grade_controls(result["negatives"])
     require(
-        result["neutral_candidate_passed"] is True
-        and result["all_tested_vectors_passed"]
-        is (not bool(result["failed_predicates"])),
+        result["all_tested_vectors_passed"] is (not bool(result["failed_predicates"])),
         "inconsistent qualification summary",
     )
+
+
+def reset_references():
+    for fn in (
+        provenance_files,
+        provenance,
+        diagnostic_reference,
+        electrical_reference,
+        sweep_reference,
+    ):
+        fn.cache_clear()
+
+
+def grade_complete(result):
+    from o2_qualification import OUT
+
+    current = json.loads((OUT / "current-run.json").read_text())
+    require(
+        all(current[k] == result.get(k) for k in ("run_id", "head")),
+        "stale run identity",
+    )
+    reset_references()
+    require(
+        result.get("status") == "passed"
+        and result.get("neutral_candidate_passed") is True,
+        "unsuccessful publication",
+    )
+    grade_measurements(result)
 
 
 def grade_controls(controls):
@@ -772,6 +818,24 @@ def coverage_negatives(result):
             ]["points"][idx].update(changes),
             reason,
         )
+
+    defect(
+        "fabricated factory sweep",
+        lambda x: x["sweep"]["0.5"].update(
+            maximum={"hz": 65.0, "dB": -100.0, "width_hz": None},
+            maximum_dB=-100.0,
+            complex_error=0.0,
+            peaks_above_6dB=[],
+        ),
+        "tap-derived sweep",
+    )
+    defect(
+        "cross-rate timing",
+        lambda x: x["local_timing"]["rates"].update(
+            {"192000": x["local_timing"]["rates"]["32000"]}
+        ),
+        "measured timing record",
+    )
 
     def flush(x):
         for row in x["local_timing"]["rates"]["48000"]["records"]:

@@ -13,11 +13,12 @@ import numpy as np
 from acoustic_identity import FIXTURES, audio, capture, distances
 from acoustic_observation import db, partials, rms, tracking
 from guide_qualification import digest, trajectory
-from i1_clock import OUT, Frame, controls, replay
+from i1_clock import OUT, Confirm, Frame, Gesture, Launch, controls, due_stamps, replay
 from i1_safety import correction, run, smooth_targets, transfer
 from o2_audio import physical_key
 from o2_coverage import RATE, STATIONARY, keys
-from o2_qualification import reference_trace, strongest_hz, v17_row
+from o2_qualification import strongest_hz, v17_row
+from o2_records import producer_clock
 from o2_response import reference, require
 from scipy import signal
 from scipy.io import wavfile
@@ -94,7 +95,16 @@ def capture_log(x, fs, f):
         t: Frame(f, amplitude=amplitude[t], supported=t < round(0.30 * fs))
         for t in range(hop - 1, len(raw), hop)
     }
-    return replay(raw, fs, frames, {0: ("pick",), 2 * hop - 1: (("launch", (0, 1)),)})
+    return replay(
+        raw,
+        fs,
+        frames,
+        {
+            0: (Gesture.PICK,),
+            2 * hop - 1: (Confirm((0, 1), len(raw)), Launch((0, 1), 1, 0.0)),
+        },
+        identity_stamps=due_stamps(len(raw), fs),
+    )
 
 
 def updates_for(x, fs, f):
@@ -111,9 +121,7 @@ def grade_wet(row):
 def inspect_row(raw, wet, fs, f, setting):
     q = raw[:, 25:28]
     m5 = raw[:, 11]
-    ref = reference_trace(
-        m5, q[:, 0], fs, f, setting, "first guide launch", (setting, 1, 1, 1)
-    )
+    ref, _ = producer_clock(m5, q[:, 0], fs, f, (setting,))
     off = replace(ref, samples=wet[:, 0])
     rows = []
     for i, d in enumerate((0, 0.5, 1)):
@@ -130,6 +138,7 @@ def inspect_row(raw, wet, fs, f, setting):
             d,
             operation="corrected",
             clock=ref,
+            settings=(setting,),
             corrected_off=off,
             corrected=replace(ref, samples=wet[:, i], depth=d),
         )
@@ -626,10 +635,10 @@ def main():
         result["dynamic"] = dynamic(clips)
         result["listening_gains"] = listening(clips)
         result["failures"], result["expression"] = grade(result)
-        from i1_acceptance import audit, negative_controls
+        from i1_acceptance import audit_structure, negative_controls
 
         result["negatives"] = negative_controls(result)
-        audit(result)
+        audit_structure(result)
         json.dumps(result, allow_nan=False)
         result["passed"] = not result["failures"]
     except Exception as err:
@@ -653,4 +662,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if sys.argv[1:] == ["--historical-measurements"]:
+        main()
+    elif len(sys.argv) == 1:
+        from i1_qualification import run as qualify
+
+        qualify()
+    else:
+        raise SystemExit(
+            "use --historical-measurements or run the complete qualification"
+        )

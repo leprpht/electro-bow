@@ -80,12 +80,83 @@ def moments(q, delta):
     return x.T @ x / n, projections
 
 
+def nonnegative(value, magnitude, count):
+    # Conservative forward error envelope for length-N binary64 dot products.
+    tolerance = 64 * count * np.finfo(float).eps * magnitude
+    require(
+        np.isfinite(value).all()
+        and np.isfinite(tolerance).all()
+        and np.all(value >= -tolerance),
+        "nonfinite or negative moment",
+    )
+    return np.maximum(value, 0)
+
+
+def quadratic(matrix, weights, count):
+    terms = weights * (matrix @ weights)
+    magnitude = np.sum(abs(weights) * (abs(matrix) @ abs(weights)), axis=0)
+    return nonnegative(np.sum(terms, axis=0), magnitude, count)
+
+
+def moving_basis(pitch, fs, initial):
+    phase = initial + (2 * np.pi / fs) * np.cumsum(pitch)
+    b = np.column_stack(
+        (
+            np.ones(len(phase)),
+            np.cos(phase),
+            np.sin(phase),
+            np.cos(2 * phase),
+            np.sin(2 * phase),
+            (-1.0) ** np.arange(len(phase)),
+        )
+    )
+    gram = b.T @ b / len(b)
+    # Gershgorin lower/upper bounds. Same fixed cost as a rank screen in Rust.
+    radii = np.sum(abs(gram), axis=1) - gram.diagonal()
+    valid = min(gram.diagonal() - radii) >= 0.25 and max(gram.diagonal() + radii) <= 2
+    return b, gram, valid, float(phase[-1] % (2 * np.pi))
+
+
+def moving_test(b, gram, x, scales, mp, recovery):
+    n = len(b)
+    cross = b.T @ x / n
+    coeff = np.linalg.solve(gram, cross)
+    w = np.stack((np.ones_like(scales), scales))
+    a = coeff @ w
+    moment = x.T @ x / n
+    power = quadratic(moment, w, n)
+    fitted = quadratic(gram, a, n)
+    rest = nonnegative(power - fitted, abs(power) + abs(fitted), n)
+
+    def group(s):
+        return np.sqrt(quadratic(gram[s, s], a[s], n))
+
+    h1, h2 = group(slice(1, 3)), group(slice(3, 5))
+    # Compare host-time RMS of fitted components and all orthogonal remainder.
+    margin = 10 ** ((0.30 if recovery else 0.05) / 20)
+    factor = 10 ** ((2.85 if recovery else 3.0) / 10)
+    return (
+        (mp > FLOOR**2)
+        & (moment[0, 0] > FLOOR**2)
+        & (
+            h1
+            >= margin * np.maximum.reduce((h2, np.sqrt(2) * abs(a[5]), np.sqrt(rest)))
+            + FLOOR
+        )
+        & (power >= mp / factor)
+        & (power <= mp * factor)
+        & (power >= moment[0, 0] / factor)
+        & (power <= moment[0, 0] * factor)
+    )
+
+
 def inspect(stats, scales, m5power, recovery):
     gram, projection = stats
     weights = np.stack((np.ones_like(scales), scales))
     power = np.sum(weights * (gram @ weights), axis=0)
     dc, h1, h2, nyq = abs(projection @ weights)
-    rest = np.maximum(0, power - dc**2 - 2 * h1**2 - 2 * h2**2 - nyq**2)
+    used = dc**2 + 2 * h1**2 + 2 * h2**2 + nyq**2
+    rest = nonnegative(power - used, abs(power) + used, 24000)
     competitor = np.maximum.reduce((h2, nyq, np.sqrt(rest / 2)))
     bound = 2.85 if recovery else 3.0
     factor = 10 ** (bound / 10)
@@ -121,13 +192,55 @@ def run(carriers, m5, fs, pitch, gains, force_unavailable=()):
     return drive(q, delta, m5, fs, pitch, force_unavailable)
 
 
-def drive(q, delta, m5, fs, pitch, force_unavailable=()):
+def permission_block(q, delta, out, m5, fs, fq, moving, phase, trusted, observable):
+    mp = np.mean(m5**2)
+    length = len(m5)
+    require(
+        np.isfinite(mp) and all(np.isfinite(x).all() for x in (q, delta, out, fq)),
+        "nonfinite monitor input",
+    )
+    if moving:
+        b, gram, valid, phase = moving_basis(fq, fs, phase)
+    else:
+        valid = 1200 * np.log2(max(fq) / min(fq)) <= 25
+
+    def test(x, d, scales, recovery):
+        if not valid:
+            return np.zeros(len(scales), dtype=bool)
+        if moving:
+            return moving_test(b, gram, np.column_stack((x, d)), scales, mp, recovery)
+        return inspect(moments(x, d), scales, mp, recovery)
+
+    bridge_ok = bool(test(m5, np.zeros(length), np.zeros(1), False)[0])
+    available = trusted and observable and valid and bridge_ok
+    masks = np.ones(len(GRID), bool)
+    live_ok = True
+    for j in range(q.shape[1]):
+        if j < 3:
+            masks &= test(q[:, j], delta[:, j], GRID, True)
+        live_ok &= bool(test(q[:, j], out[:, j] - q[:, j], np.ones(1), False)[0])
+    pair = np.column_stack((q[:, 1] - q[:, 0], delta[:, 1] - delta[:, 0]))
+    off = np.column_stack((q[:, 0], delta[:, 0]))
+    gram, off_gram = pair.T @ pair / length, off.T @ off / length
+    w = np.stack((np.ones_like(GRID), GRID))
+    masks &= quadratic(gram, w, length) <= 10 ** (-28.5 / 10) * quadratic(
+        off_gram, w, length
+    )
+    live_ok &= np.mean((out[:, 1] - out[:, 0]) ** 2) <= 10 ** (-28 / 10) * np.mean(
+        out[:, 0] ** 2
+    )
+    return phase, masks, bool(live_ok), bool(available), bool(valid), bridge_ok
+
+
+def drive(q, delta, m5, fs, pitch, force_unavailable=(), *, moving=False, trusted=None):
+    trusted = (not moving) if trusted is None else trusted is True
     n = len(q)
     fq = np.broadcast_to(pitch, (n,))
     out = np.empty_like(q)
     alpha = np.zeros(n)
     logs = []
     start = 0
+    phase = 0.0
     scale = target = next_target = 0.0
     ready = 0
     latched = True
@@ -136,6 +249,7 @@ def drive(q, delta, m5, fs, pitch, force_unavailable=()):
         length = 2 * math.floor(4 * fs / fq[start] + 0.5)
         end = min(start + length, n)
         # Last block's trials run one per tick. First changed target at offset 17.
+        previous_target = target
         for a, b, dest in (
             (start, min(start + 17, end), target),
             (min(start + 17, end), end, next_target),
@@ -147,38 +261,24 @@ def drive(q, delta, m5, fs, pitch, force_unavailable=()):
                 scale = alpha[b - 1]
         target = next_target
         sl = slice(start, end)
-        out[sl] = q[sl] + alpha[sl, None] * delta[sl]
+        out[sl] = q[sl]
+        active = alpha[sl] != 0
+        out[sl][active] = q[sl][active] + alpha[sl][active, None] * delta[sl][active]
         if end - start != length:
             break
-        mp = np.mean(m5[sl] ** 2)
-        available = (
-            np.min(fq[sl]) > 0
-            and 1200 * np.log2(max(fq[sl]) / min(fq[sl])) <= 25
-            and all(not (start < hi and end > lo) for lo, hi in force_unavailable)
+        observable = all(not (start < hi and end > lo) for lo, hi in force_unavailable)
+        phase, masks, live_ok, available, valid, bridge_ok = permission_block(
+            q[sl],
+            delta[sl],
+            out[sl],
+            m5[sl],
+            fs,
+            fq[sl],
+            moving,
+            phase,
+            trusted,
+            observable,
         )
-        bridge_ok = bool(
-            inspect(moments(m5[sl], np.zeros(length)), np.zeros(1), mp, False)[0]
-        )
-        available = available and bridge_ok
-        masks = np.ones(len(GRID), bool)
-        live_ok = True
-        for j in range(3):
-            masks &= inspect(moments(q[sl, j], delta[sl, j]), GRID, mp, True)
-            # Use a separate realized basis so coloration remains relative to q.
-            live_ok &= bool(
-                inspect(
-                    moments(q[sl, j], out[sl, j] - q[sl, j]), np.ones(1), mp, False
-                )[0]
-            )
-        gram, _ = moments(q[sl, 1] - q[sl, 0], delta[sl, 1] - delta[sl, 0])
-        off_gram, _ = moments(q[sl, 0], delta[sl, 0])
-        w = np.stack((np.ones_like(GRID), GRID))
-        masks &= np.sum(w * (gram @ w), axis=0) <= 10 ** (-28.5 / 10) * np.sum(
-            w * (off_gram @ w), axis=0
-        )
-        live_ok &= np.mean((out[sl, 1] - out[sl, 0]) ** 2) <= 10 ** (
-            -28 / 10
-        ) * np.mean(out[sl, 0] ** 2)
         if not available or not live_ok or not masks[-1]:
             ready = 0
             latched = True
@@ -189,7 +289,11 @@ def drive(q, delta, m5, fs, pitch, force_unavailable=()):
         next_target = 0.0 if latched else float(GRID[np.flatnonzero(masks)[0]])
         logs.append(
             {
+                "start": start,
                 "end": end,
+                "conditioned": bool(valid),
+                "observable": observable,
+                "trusted": trusted,
                 "available": bool(available),
                 "bridge_ok": bridge_ok,
                 "neutral_ok": bool(masks[-1]),
@@ -198,6 +302,15 @@ def drive(q, delta, m5, fs, pitch, force_unavailable=()):
                 "scale": next_target,
             }
         )
+        if moving:
+            before_slew = np.full(length, target)
+            before_slew[:17] = previous_target
+            ideal = q[sl, -1] + before_slew * delta[sl, -1]
+            streams = np.column_stack((q[sl, -1], delta[sl, -1], out[sl, -1]))
+            logs[-1]["delivery_pre_slew_power"] = float(np.mean(ideal**2))
+            logs[-1]["delivery_realized_power"] = float(np.mean(out[sl, -1] ** 2))
+            logs[-1]["delivery_gram_q_d_y"] = (streams.T @ streams / length).tolist()
+            logs[-1]["paired_power"] = float(np.mean((out[sl, 1] - out[sl, 0]) ** 2))
         start = end
     check_trajectory(alpha, ramp)
     require(np.all(np.isfinite(out)), "finite output")
