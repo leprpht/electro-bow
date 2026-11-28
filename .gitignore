@@ -58,3 +58,4 @@ instructions.md
 
 # Cargo (CMake builds use build/rust)
 /target/
+/tools/validation-rs/target/

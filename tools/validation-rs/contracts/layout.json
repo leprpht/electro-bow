@@ -1,0 +1,144 @@
+{
+  "shared": [
+    [
+      "A1 symmetric FIR f64",
+      2952
+    ],
+    [
+      "I1 symmetric FIR f64",
+      1416
+    ],
+    [
+      "O2 coefficients f64[6]",
+      48
+    ],
+    [
+      "rate HP step smooth and prepared scalars f64[16]",
+      128
+    ],
+    [
+      "generation tick and transport u64[4]",
+      32
+    ],
+    [
+      "shared control smoother f64[24]",
+      192
+    ]
+  ],
+  "lane": [
+    [
+      "HP ring f64",
+      5896
+    ],
+    [
+      "A2 history f64",
+      2080
+    ],
+    [
+      "lag and normalized differences f64",
+      2096
+    ],
+    [
+      "I1 decimated ring f64",
+      9320
+    ],
+    [
+      "monitor and complex bank Epoch",
+      3880
+    ],
+    [
+      "Cholesky packed f64[21]",
+      168
+    ],
+    [
+      "trial vector and basis f64[6] each",
+      96
+    ],
+    [
+      "O2 lanes four times f64[4]",
+      128
+    ],
+    [
+      "smoothed c f64[12]",
+      96
+    ],
+    [
+      "pending published and active held dB f64[12] each",
+      192
+    ],
+    [
+      "source projection XW W phasor and rotation complex[12] each",
+      768
+    ],
+    [
+      "source magnitude reliability and gain f64[12] each",
+      288
+    ],
+    [
+      "job start end cursor owner deadlines Hann DC and sums u64/f64[20]",
+      160
+    ],
+    [
+      "support frames 24 times tick serial generation hz flags u64[5]",
+      960
+    ],
+    [
+      "A2 A3 scalars counters filter history and ramps 128 words",
+      1024
+    ],
+    [
+      "capture tokens serial anchor expiry physical epoch and eligibility 24 words",
+      192
+    ],
+    [
+      "validated gesture confirm dispose launch and stamps 24 words",
+      192
+    ],
+    [
+      "M6 preceding E product fade index and length 4 words",
+      32
+    ],
+    [
+      "indices and validity for three circular histories 12 words",
+      96
+    ],
+    [
+      "candidate and wet sample scratch f64[32]",
+      256
+    ],
+    [
+      "feature and capture finalize scratch f64[48]",
+      384
+    ]
+  ],
+  "full_layout": [
+    [
+      "analysis and controls",
+      61376
+    ],
+    [
+      "four physical rings 4096 f64",
+      131072
+    ],
+    [
+      "band scratch 8x8192 f32",
+      262144
+    ],
+    [
+      "raw scratch 6x8192 f32",
+      196608
+    ],
+    [
+      "JUCE wet 2x8192 f32",
+      65536
+    ],
+    [
+      "guide scalar and ring descriptors two 1024-byte slots",
+      2048
+    ],
+    [
+      "DSP filters splitter limiter smoothing host and stream descriptors 8192-byte slot",
+      8192
+    ]
+  ]
+}

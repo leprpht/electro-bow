@@ -1,10 +1,20 @@
 # Proposed acoustic validation and listening gate
 
+Rust provides the authoritative validation commands. Review 8.2 governs DSP qualification and stage authorizations. [Qualification commands](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
+Stage 08 proposes an [executable I1 matrix](I1_ACCEPTANCE_MATRIX.md) and [registered held-source protocol](../research/I1_SOURCE_REPEATABILITY_EVIDENCE.md). The Stage 07 neutral evidence and historical unsafe stress vectors remain separate references. Review 8 retained the carrier and held I1. Independent Review 8.1 owns the remediation disposition. Original V17–V22 and owner hearing retain their stage ownership.
+
 The signed-off V01–V22 matrix remains in force. The [Stage 06 matrix](O2_ACCEPTANCE_MATRIX.md) fixes intermediate diagnostics and preserves the converted-M5-to-final wet denominator. It defines strict JSON nulls for ineligible O1 phase and partial ratios, including lift tails below the 1e−12 m/s diagnostic floor. A physics pass, source-feature discrimination, acoustic reference match and a human preference are different deliverables. [Existing qualification criteria](DSP_VALIDATION_PLAN.md) · [Proposed specification](../architecture/ELECTROBOW_ACOUSTIC_OUTPUT_SPECIFICATION.md)
+
+The Stage 07 renderer compares actual Rust intermediate taps to independent convolution and grades the same-tick returned audio with the Review 6 scorer. The frozen corpus includes physical/M5 parity, explicit injected identity failures and original-gain and matched listening files. [Stage 07 reproduction](status/STAGE_07_O2_IMPLEMENTATION.md#reproduction)
 
 ## Replay and corpus
 
-Run from the repository root with the pinned Rust toolchain on PATH and Python with NumPy/SciPy. The saved reference WAVs and hashes below allow an offline replay. No network, ignored Review 3 script, host or pitch selector is required. The qualification writes approximately 4.5 GB to the ignored build directory.
+Use the Rust `guide`, `guide-negative`, `research-observation` and `o2-qualification` suites for current validation of the covered boundaries. Stage 04 identity and gesture auditions retain their historical experiment record. [Rust commands and comparison owners](VALIDATION_RUST_GUIDE.md#reproduction-and-results)
+
+### Historical Stage 03 and 04 replay
+
+Run this historical replay from the repository root with the pinned Rust toolchain on PATH and Python with NumPy/SciPy. The saved reference WAVs and hashes below allow an offline replay. No network, ignored Review 3 script, host or pitch selector is required. The qualification writes approximately 4.5 GB to the ignored build directory.
 
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"
@@ -83,3 +93,12 @@ The [listening pack](../../build/stage-04/listening-comparisons.zip) contains th
 Engineering comparisons preserve gains. Listening copies target .10 FS RMS using [.2,1) s for timbre, the late held interval for identity and [.25,.5) for stroke, with one common attenuation per pair if a peak would exceed .90. Timbre/held listening cuts have 5 ms endpoint fades; matched RMS differs by <.5 dB. The attack window retains its actual envelope. Raw direct references are converted to 48 kHz for audition only and separately level-matched. The randomized order is repeatable; a second listener or rerun may use a new hidden assignment, recorded with the trial. Keep original-gain files for overload judgments.
 
 Advance the direction only if the selected output is preferred for bow/buzz, both identity matches and the named cue are correct, and the selected attack wins with a usable release and no objectionable noise/resonance. A tie, missing evidence or stated fault leaves the corresponding gate open. One listener and one binary pairing cannot establish statistical recognition. Confirm on the untouched pickup repeats before committing live integration. Record the actual human answer verbatim and compare to the objective repeatability gate; never infer a listening verdict from these measurements.
+
+
+### Stage 08.1 listening and motion evidence
+
+Use the registered seven-rate vibrato usefulness test in addition to stationary V17. Compare measured wet minus returned neutral over the motion interval at common engineering gain. Use the separate matched folder for listening. It includes neutral/revised vibrato, previous stationary correction, revised bend, two held DI source comparisons, and automated depth through veto/recovery. Supply only the anonymous matched subset for blind source pairing. Keep playback route and gain fixed, record date, audible cue, source assignment or indistinguishable result, and any transition artifacts before revealing the key. Each clip has its engineering provenance, sample interval and one matched scalar. No human result or pickup calibration has been recorded. [Witness](I1_ACCEPTANCE_MATRIX.md#stage-081-motion-witness-registration) · [Listening package](../../build/stage-08-1/qualified/i1/stage-08-1-listening.zip)
+
+## Stage 08.2 offline gate
+
+Use the joined streaming tick for moving, capture, replacement and numerical recovery. Score registered motion separately on off and actual delivery, with the frozen stationary reference and [0.5,2.5) s cell interval. Preserve independent per-block Gram/QR, selected grid, delayed slew, signed neutral bytes, actual wet and clean stereo-twin checks. The complete exit also verifies source mutants, synchronized sample provenance, original session intervals and executed O2 timing. Integrated V18–V21, controlled source discrimination and human listening remain separate measurements. [Stage 08.2 qualification](status/STAGE_08_2_I1_STREAMING_QUALIFICATION.md)

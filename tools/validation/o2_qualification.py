@@ -1,11 +1,13 @@
-"""Offline O2 matrix. Run from repo root after o1_qualification.py (Stage 06 report)."""
+"""Stage 07 private Rust O2 replay. See STAGE_07_O2_IMPLEMENTATION.md."""
 
 import json
 import math
-import subprocess
+import os
+from dataclasses import replace
 from hashlib import sha256
 from itertools import product
 from pathlib import Path
+from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 import acoustic_observation as obs
@@ -14,12 +16,17 @@ import numpy as np
 import o1_qualification as o1
 from acoustic_identity import resonant_bands
 from guide_audit_build import build
+from o2_audio import physical_key
+from o2_audio import qualify as qualify_audio
+from o2_audio import rows as audio_rows
+from o2_bench import BINARY, DEPTHS, OUT, check_rate, replay, run, timing
+from o2_coverage import UniqueRows, coverage_negatives, grade, grade_measurements
+from o2_records import delivered, check_pair, producer_clock, sample_hash
 from o2_response import (
     RATES_EXTENDED,
     ROOT2,
     apply_load,
     blend,
-    check_rate,
     check_transfer,
     coefficients,
     reference,
@@ -29,7 +36,6 @@ from o2_response import (
 from scipy import signal
 from scipy.io import wavfile
 
-OUT = Path("build/stage-06")
 FIX = Path(__file__).with_name("fixtures")
 FLOOR = obs.SPECTRAL_FLOOR
 VECTORS = {
@@ -46,35 +52,9 @@ def write_json(name, value):
 
 
 def trace(fs, f, speed=0.1, ratio=1.8, kind="steady"):
-    seconds = 7 if kind == "lift" else 3
-    name = f"{kind}_{fs}_{f:g}_R{ratio:g}_V{speed:g}_{seconds}s.f64le"
-    hashes = dict(line.split()[::-1] for line in o1.HASHES.read_text().splitlines())
-    if name in hashes:
-        path = o1.OUT / name
-    else:
-        path = OUT / name
-        controls = np.tile([f, speed, ratio * speed / 1.65], (seconds * fs, 1)).astype(
-            "<f8"
-        )
-        if kind == "lift":
-            controls[fs:, 2] = 0
-        with path.open("wb") as dest:
-            run = subprocess.run(
-                [OUT / "observed-render", str(fs), "--o1"],
-                input=controls.tobytes(),
-                stdout=dest,
-                stderr=subprocess.PIPE,
-                check=True,
-            )
-        require(list(map(int, run.stderr.split())) == [len(controls), 1, 0, 1], name)
-        hashes = dict(
-            line.split()[::-1]
-            for line in (FIX / "o2_sha256.tsv").read_text().splitlines()
-        )
-    digest = guide.digest(path)
-    require(digest == hashes[name], name)
-    rows = np.memmap(path, mode="r", dtype="<f8").reshape(seconds * fs, 22)
-    return rows, digest
+    name = physical_key(fs, f, speed, ratio, kind)
+    path = OUT / "traces" / (name + ".f64le")
+    return audio_rows(name), guide.digest(path)
 
 
 def ratio_db(num, den):
@@ -82,12 +62,31 @@ def ratio_db(num, den):
     return guide.db(obs.rms(num) / denom) if denom > FLOOR else None
 
 
-def strongest(f, target):
-    return abs(f - target) <= max(2.0, target * (2 ** (15 / 1200) - 1))
+def strongest(f, target, native_bin=1.0):
+    return bool(
+        f is not None
+        and f > 0
+        and (abs(f - target) <= 2 * native_bin or abs(1200 * np.log2(f / target)) <= 15)
+    )
+
+
+def strongest_hz(x, fs):
+    if not np.isfinite(x).all() or x.std() <= FLOOR:
+        return None
+    n = 8 * len(x)
+    amp = abs(np.fft.rfft((x - x.mean()) * np.hanning(len(x)), n))
+    k = 1 + np.argmax(amp[1:])
+    offset = 0.0
+    if k < len(amp) - 1 and amp[k] >= amp[k - 1] and min(amp[k - 1 : k + 2]) > 0:
+        left, center, right = np.log(amp[k - 1 : k + 2])
+        curvature = left - 2 * center + right
+        if curvature < 0:
+            offset = 0.5 * (left - right) / curvature
+    return float((k + offset) * fs / n)
 
 
 def summary(x, fs, f):
-    spec = obs.harmonic_report(x, fs, f) if len(x) >= 3 else None
+    spec = obs.harmonic_report(x, fs, f) if len(x) >= 3 and f is not None else None
     return {
         "rms": obs.rms(x),
         "ac_rms": x.std(),
@@ -134,42 +133,94 @@ def pluck(fs, f, n):
     return 0.35 * x / max(abs(x))
 
 
-def v17_row(q, neutral, h, loaded, m5, v, nut, fs, f, noise, corrected=None):
-    # Analyze a whole three-second physical render; final one-second window throughout.
+def v17_row(
+    q,
+    neutral,
+    h,
+    loaded,
+    m5,
+    v,
+    nut,
+    fs,
+    f,
+    noise,
+    *,
+    operation,
+    corrected=None,
+    corrected_off=None,
+    clock=None,
+    settings=None,
+):
     tail = slice(-fs, None)
 
     def level(num, den):
         return ratio_db(num[tail], den[tail])
 
-    wet = q if corrected is None else corrected
+    if operation == "neutral":
+        require(corrected is None and corrected_off is None, "unexpected colored wet")
+        wet, off = q, neutral
+    elif operation == "corrected":
+        check_pair(
+            m5,
+            neutral,
+            fs,
+            f,
+            settings,
+            noise,
+            corrected,
+            corrected_off,
+            clock,
+            [(25 + DEPTHS.index(noise), q), (22, h), (24, loaded), (21, v), (3, nut)],
+        )
+        wet, off = corrected.samples, corrected_off.samples
+    else:
+        raise ValueError("unknown wet operation")
+    require(
+        all(x.shape == q.shape for x in (neutral, h, loaded, m5, v, nut, wet)),
+        "unaligned V17 streams",
+    )
 
     def voiced_pitch(x):
-        return guide.spectrum(x[tail], fs, f)["hz"] if x[tail].std() > FLOOR else None
+        return strongest_hz(x[tail], fs)
 
     measured_f = voiced_pitch(m5)
     peak_f = voiced_pitch(wet)
-    voiced = measured_f is not None and peak_f is not None
+    anchor = strongest(measured_f, f, fs / len(m5[tail]))
+    voiced = anchor and peak_f is not None
     spectral = fft_metrics(wet[tail], fs, measured_f) if voiced else None
     eta_pass = voiced and bool(spectral["eta"] >= 0.85)
     rms_db = level(wet, m5)
-    residual = level(q - neutral, neutral)
+    local_residual = level(q - neutral, neutral)
+    # Both wet arrays originate from the same epoch and coloration settings.
+    if noise == 0.5:
+        require(
+            off is not None and off.shape == wet.shape,
+            "aligned off-depth final wet required",
+        )
+    residual = level(wet - off, off) if noise == 0.5 else None
     color_db = level(wet, q)
     return {
+        "failure_reason": None if anchor else "ineligible M5 bridge anchor",
         "peak_FS": float(max(abs(wet))),
         "rms_FS": obs.rms(wet[tail]),
         "same_source_difference_rms_FS": obs.rms((q - neutral)[tail]),
         "harmonics": obs.harmonic_report(wet[tail], fs, measured_f) if voiced else None,
         "spatial_over_N": level(v, nut),
         "load_over_blocked": level(loaded, 0.85 * h / ROOT2),
-        "detail_over_neutral": level(q, neutral),
+        "detail_over_neutral": level(q, loaded),
         "common_over_M5": level(ROOT2 * q, m5),
         "corrected_over_neutral": color_db,
         "final_over_M5": rms_db,
+        "local_q_difference_over_off": local_residual,
+        "factory_wet_difference_rms_FS": obs.rms((wet - off)[tail])
+        if noise == 0.5
+        else None,
         "factory_difference_over_off": residual if noise == 0.5 else None,
         "measured_f0": measured_f,
         "strongest_hz": peak_f,
         "spectral": spectral,
         "passes": {
+            "bridge_anchor": bool(anchor),
             "level": rms_db is not None and abs(rms_db) <= 3,
             "coloration": color_db is not None and abs(color_db) <= 3,
             "fundamental": voiced and bool(strongest(peak_f, f)),
@@ -197,16 +248,14 @@ def corners():
     result = []
     for speed, r in product((0.06, 0.16), (1.2, 2.4)):
         raw, digest = trace(fs, f, speed, r)
-        h, loaded, _ = apply_load(raw[:, -1], coefficients(fs))
-        check_transfer(
-            blend(h, loaded, 1) - loaded, 2 * (blend(h, loaded, 0.5) - loaded)
-        )
+        loaded = raw[:, 24]
+        check_transfer(raw[:, 27] - loaded, 2 * (raw[:, 26] - loaded))
         require(
-            obs.rms((blend(h, loaded, 0.5) - loaded)[-fs:]) > FLOOR,
+            obs.rms((raw[:, 26] - loaded)[-fs:]) > FLOOR,
             "absent carrier detail",
         )
         for noise in (0, 0.5, 1):
-            q = blend(h, loaded, noise)
+            q = raw[:, 25 + DEPTHS.index(noise)]
             for ident, wet in corrections(q, fs, f).items():
                 for g, char, out in product((0.08, 1.4), (0.0, 1.0), (0.0, 2.0)):
                     pre = out * ((1 - char) * direct + char * g * wet)
@@ -288,39 +337,55 @@ def listening(clips):
     return key
 
 
-def acoustic():
-    rows, high, onset, clips, inputs = {}, {}, {}, {}, {}
+def acoustic(make_audio=True):
+    rows, high, onset, clips, inputs = UniqueRows(), {}, {}, {}, {}
     witness = {}
     for fs, f, speed, r in (
         [(48000, f, 0.1, r) for f in (82.41, 196, 440) for r in (1.2, 1.8, 2.4)]
-        + [(fs, 1318.51, 0.1, 1.8) for fs in (32000, 48000, 96000, 192000)]
+        + [(fs, 1318.51, 0.1, 1.8) for fs in guide.RATES]
         + [(48000, 440, 0.16, 1.8)]
     ):
         key = f"{fs}/{f}/{speed}/{r}"
         raw, inputs[key] = trace(fs, f, speed, r)
-        v, m5 = raw[:, -1], raw[:, 11]
-        h, loaded, _ = apply_load(v, coefficients(fs))
-        check_transfer(
-            blend(h, loaded, 1) - loaded, 2 * (blend(h, loaded, 0.5) - loaded)
-        )
+        v, m5 = raw[:, 21], raw[:, 11]
+        h, loaded, off = raw[:, 22], raw[:, 24], raw[:, 25]
+        check_transfer(raw[:, 27] - loaded, 2 * (raw[:, 26] - loaded))
         require(
-            obs.rms((blend(h, loaded, 0.5) - loaded)[-fs:]) > FLOOR,
+            obs.rms((raw[:, 26] - loaded)[-fs:]) > FLOOR,
             "absent carrier detail",
         )
         for noise in (0, 0.5, 1):
-            q = blend(h, loaded, noise)
-            verify_taps(h, 0.85 * h / ROOT2, loaded, q, ROOT2 * q, noise)
+            q = raw[:, 25 + DEPTHS.index(noise)]
+            verify_taps(h, raw[:, 23], loaded, q, ROOT2 * q, noise)
             rows[f"{key}/{noise}"] = v17_row(
-                q, loaded, h, loaded, m5, v, raw[:, 3], fs, f, noise
+                q, off, h, loaded, m5, v, raw[:, 3], fs, f, noise, operation="neutral"
             )
         if f < 1000 and speed == 0.1 and r == 1.8:
-            for ident, corrected in corrections(loaded, fs, f).items():
+            for ident, corrected in corrections(off, fs, f).items():
                 if ident != "neutral":
+                    clock, _ = producer_clock(m5, off, fs, f, (ident,))
+                    colored = replace(
+                        clock, samples=delivered(corrected[:, None], m5, (ident,))[:, 0]
+                    )
                     rows[f"stress/{f}/{ident}"] = v17_row(
-                        loaded, loaded, h, loaded, m5, v, raw[:, 3], fs, f, 0, corrected
+                        off,
+                        off,
+                        h,
+                        loaded,
+                        m5,
+                        v,
+                        raw[:, 3],
+                        fs,
+                        f,
+                        0,
+                        operation="corrected",
+                        corrected=colored,
+                        corrected_off=colored,
+                        clock=clock,
+                        settings=(ident,),
                     )
         if speed == 0.16:
-            peak = float(np.max(abs(loaded)))
+            peak = float(np.max(abs(off)))
             witness = {
                 "common": ROOT2 * peak,
                 "trimmed": peak,
@@ -332,21 +397,29 @@ def acoustic():
                     abs(a - b) < (0.0005 if b == 6.155 else 1e-6), "Review 5 witness"
                 )
         elif f < 1000 and r == 1.8:
-            clips[f"{f:g}Hz"] = {"M5": m5[:fs], "O2": ROOT2 * loaded[:fs]}
+            clips[f"{f:g}Hz"] = {"M5": m5[:fs], "O2": ROOT2 * off[:fs]}
             if f == 440:
                 clips["detail"] = {
-                    "off": ROOT2 * loaded[:fs],
-                    "factory": ROOT2 * blend(h, loaded, 0.5)[:fs],
+                    "off": ROOT2 * off[:fs],
+                    "factory": ROOT2 * raw[:, 26][:fs],
                 }
         if f == 1318.51:
-            f0 = guide.spectrum(m5[-fs:], fs, f)["hz"]
+            f0 = strongest_hz(m5[-fs:], fs)
+            anchor_ok = strongest(f0, f)
             for name, x in [
                 ("raw", v),
                 ("blocked", h),
                 ("loaded", loaded * ROOT2 / 0.85),
-                ("factory", blend(h, loaded, 0.5) * ROOT2 / 0.85),
-                ("full", blend(h, loaded, 1) * ROOT2 / 0.85),
+                ("factory", raw[:, 26] * ROOT2 / 0.85),
+                ("full", raw[:, 27] * ROOT2 / 0.85),
             ]:
+                if not anchor_ok:
+                    high[f"{fs}/{name}"] = {
+                        "failure_reason": "ineligible high-note bridge anchor",
+                        "f0": f0,
+                        "eta": None,
+                    }
+                    continue
                 divisor = math.gcd(fs, 32000)
                 y = signal.resample_poly(
                     x, 32000 // divisor, fs // divisor, window=("kaiser", 10)
@@ -364,6 +437,13 @@ def acoustic():
                 )
     for key, data in high.items():
         ref = high["192000/" + key.split("/")[1]]
+        if "failure_reason" in ref or "failure_reason" in data:
+            data.update(
+                centroid_minus_ref_hz=None,
+                H1_to_H10_delta_dB=None,
+                high_fraction_minus_ref=None,
+            )
+            continue
         data["centroid_minus_ref_hz"] = data["centroid_hz"] - ref["centroid_hz"]
         data["H1_to_H10_delta_dB"] = obs.relative_db(
             np.array(data["amplitudes_m_s"]),
@@ -374,10 +454,11 @@ def acoustic():
     for f in (82.41, 440):
         fs = 48000
         raw, inputs[f"lift/{f}"] = trace(fs, f, kind="lift")
-        h, loaded, _ = apply_load(raw[:, -1], coefficients(fs))
-        f0 = guide.spectrum(raw[:fs, 11], fs, f)["hz"]
+        h, loaded, off = raw[:, 22], raw[:, 24], raw[:, 25]
+        f0 = strongest_hz(raw[:fs, 11], fs)
+        anchor_ok = strongest(f0, f)
         for noise in (0, 0.5, 1):
-            q = blend(h, loaded, noise)
+            q = raw[:, 25 + DEPTHS.index(noise)]
             for start, end in [
                 (0, 1 / fs),
                 (0, 0.01),
@@ -391,9 +472,11 @@ def acoustic():
                 (6, 7),
             ]:
                 window = slice(round(start * fs), round(end * fs))
-                d = summary(q[window], fs, f0)
+                d = summary(q[window], fs, f0 if anchor_ok else None)
+                if not anchor_ok:
+                    d["failure_reason"] = "ineligible lift bridge anchor"
                 d.update(
-                    detail_difference_rms=obs.rms((q - loaded)[window]),
+                    detail_difference_rms=obs.rms((q - off)[window]),
                     load_minus_input_rms=obs.rms((loaded - 0.85 * h / ROOT2)[window]),
                 )
                 onset[f"{f}/{noise}/{start}-{end}"] = d
@@ -405,8 +488,38 @@ def acoustic():
         "onset_release": onset,
         "witness": witness,
         "inputs": inputs,
-        "listening": listening(clips),
+        "listening": listening(clips) if make_audio else None,
     }
+
+
+def sweep_peaks(grid, magnitude):
+    # Each contiguous eligible band owns its endpoints. An edge can truncate
+    # either half-power crossing, in which case width is unavailable.
+    peaks = []
+    for ix in np.split(
+        np.arange(len(grid)),
+        np.flatnonzero(np.diff(grid) > 1.5 * np.min(np.diff(grid))) + 1,
+    ):
+        y = magnitude[ix]
+        maxima = list(signal.find_peaks(y)[0])
+        if len(y) == 1 or y[0] >= y[1]:
+            maxima.append(0)
+        if len(y) > 1 and y[-1] >= y[-2]:
+            maxima.append(len(y) - 1)
+        for k in maxima:
+            threshold = y[k] * 10 ** (-3 / 20)
+            left = np.flatnonzero(y[:k] < threshold)
+            right = np.flatnonzero(y[k + 1 :] < threshold)
+            width = None
+            if len(left) and len(right):
+                i, j = left[-1], k + 1 + right[0]
+                low = np.interp(threshold, y[i : i + 2], grid[ix[i : i + 2]])
+                high = np.interp(
+                    threshold, y[j - 1 : j + 1][::-1], grid[ix[j - 1 : j + 1]][::-1]
+                )
+                width = high - low
+            peaks.append({"hz": grid[ix[k]], "dB": guide.db(y[k]), "width_hz": width})
+    return peaks
 
 
 def sweep(fs):
@@ -416,48 +529,43 @@ def sweep(fs):
     x = np.r_[
         0.1 * signal.chirp(t, 65, 3, 4000, method="logarithmic"), np.zeros(fs // 2)
     ]
-    h, loaded, _ = apply_load(x, coefficients(fs))
     freq = np.fft.rfftfreq(len(x), 1 / fs)
     den = np.fft.rfft(x)
     valid = (freq >= 65) & (freq <= 4000) & (abs(den) / len(x) > FLOOR)
-    rows = {}
+    rows = UniqueRows()
     for noise in (0, 0.5, 1):
-        measured = (
-            np.fft.rfft(blend(h, loaded, noise))[valid] * ROOT2 / (0.85 * den[valid])
-        )
-        error = check_transfer(measured, reference(fs, freq[valid], noise))
+        q = replay(fs, x, noise)[:, 3]
+        measured = np.fft.rfft(q)[valid] * ROOT2 / (0.85 * den[valid])
+        error = float(np.max(abs(measured - reference(fs, freq[valid], noise))))
         magnitude = abs(measured)
-        maxima = signal.find_peaks(magnitude)[0]
-        grid = freq[valid]
-        flagged = []
-        for peak in maxima[magnitude[maxima] > 10**0.3]:
-            threshold = magnitude[peak] / ROOT2
-            left = np.flatnonzero(magnitude[:peak] < threshold)
-            right = np.flatnonzero(magnitude[peak:] < threshold)
-            width = None
-            if len(left) and len(right):
-                width = grid[peak + right[0]] - grid[left[-1]]
-            flagged.append(
-                {"hz": grid[peak], "dB": guide.db(magnitude[peak]), "width_hz": width}
-            )
+        peaks = sweep_peaks(freq[valid], magnitude)
         rows[str(noise)] = {
-            "maximum_dB": guide.db(max(magnitude)),
-            "peaks_above_6dB": flagged,
+            "rate": fs,
+            "interval": [0, len(x)],
+            "depth": noise,
+            "executable": guide.digest(BINARY),
+            "tap": "--o2-taps/q[3]",
+            "excitation": sample_hash(x),
+            "returned": sample_hash(q),
+            "bins": sample_hash(np.flatnonzero(valid)),
+            "quotient": sha256(measured.astype("<c16").tobytes()).hexdigest(),
+            "peaks": peaks,
+            "maximum_dB": max(p["dB"] for p in peaks),
+            "maximum": max(peaks, key=lambda p: p["dB"]),
+            "peaks_above_6dB": [p for p in peaks if p["dB"] > 6],
             "complex_error": error,
         }
     return rows
 
 
 def negative_controls():
+    expected = json.loads((FIX / "o2_negative_predicates.json").read_text())
     rejected = {}
 
     def reject(name, fn):
-        try:
-            fn()
-        except ValueError as exc:
-            rejected[name] = str(exc)
-        else:
-            raise ValueError("escaped negative: " + name)
+        from o2_coverage import execute_control
+
+        rejected[name] = execute_control(name, fn, expected[name])
 
     fs = 48000
     coeff = coefficients(fs)
@@ -566,6 +674,7 @@ def negative_controls():
         fs,
         196,
         0.5,
+        operation="neutral",
     )
     require(
         missing["final_over_M5"] is None
@@ -588,7 +697,7 @@ def negative_controls():
     def grade_pitch(row):
         require(row["passes"]["fundamental"], "strongest fundamental")
 
-    changed = v17_row(2 * m5, m5, m5, m5, m5, m5, m5, fs, 196, 0)
+    changed = v17_row(2 * m5, m5, m5, m5, m5, m5, m5, fs, 196, 0, operation="neutral")
     reject(
         "wrong denominator self-reference",
         lambda: check_transfer(
@@ -598,21 +707,191 @@ def negative_controls():
     reject("double wet level", lambda: grade_level(changed["final_over_M5"]))
     reject(
         "dominant H2",
-        lambda: grade_pitch(v17_row(upper, m5, m5, m5, m5, m5, m5, fs, 196, 0)),
+        lambda: grade_pitch(
+            v17_row(upper, m5, m5, m5, m5, m5, m5, fs, 196, 0, operation="neutral")
+        ),
     )
     require(guide.db(0) == guide.db(1e-20) == -240, "amplitude ratio floor")
+    nyquist = 0.5 * m5 + 0.6 * (-1.0) ** np.arange(fs)
+    nyq_row = v17_row(nyquist, m5, m5, m5, m5, m5, m5, fs, 196, 0, operation="neutral")
+    require(nyq_row["strongest_hz"] == fs / 2, "Nyquist endpoint")
+    reject("dominant Nyquist", lambda: grade_pitch(nyq_row))
+    flat = np.sin(2 * np.pi * 440 * 2 ** (-15.04 / 1200) * t)
+    anchor = np.sin(2 * np.pi * 440 * t)
+    reject(
+        "15.04 cents flat",
+        lambda: grade_pitch(
+            v17_row(
+                flat,
+                anchor,
+                anchor,
+                anchor,
+                anchor,
+                anchor,
+                anchor,
+                fs,
+                440,
+                0,
+                operation="neutral",
+            )
+        ),
+    )
+    reject(
+        "invalid bridge anchor",
+        lambda: grade_pitch(
+            v17_row(m5, m5, m5, m5, upper, m5, m5, fs, 196, 0, operation="neutral")
+        ),
+    )
+    raw, _ = trace(fs, 196)
+    m5, q = raw[:, 11], raw[:, 25]
+    off, _ = producer_clock(m5, q, fs, 196, ("unity",))
+    tone = np.sin(2 * np.pi * 6151 * np.arange(len(q)) / fs)
+    colored = q + tone * (0.1 * obs.rms(q[-fs:]) / obs.rms(tone[-fs:]))
+    output = delivered(np.column_stack((q, colored)), m5, ("unity",))
+    off = replace(off, samples=output[:, 0])
+    factory = replace(off, samples=output[:, 1], depth=0.5)
+
+    def paired(off_trace, on=factory, clock=off, factory_q=raw[:, 26]):
+        return v17_row(
+            factory_q,
+            q,
+            raw[:, 22],
+            raw[:, 24],
+            m5,
+            raw[:, 21],
+            raw[:, 3],
+            fs,
+            196,
+            0.5,
+            operation="corrected",
+            corrected=on,
+            corrected_off=off_trace,
+            clock=clock,
+            settings=("unity",),
+        )
+
+    row = paired(off)
+    reject(
+        "incorrect underlying factory bytes",
+        lambda: paired(off, factory, off, np.roll(raw[:, 26], 1)),
+    )
+    reject("off only", lambda: paired(off, None))
+    reject("factory only", lambda: paired(None))
+    for label, edit in [
+        ("wrong source", {"source": "other recording"}),
+        ("incorrect count", {"count": len(q) - 1}),
+        ("unaligned wet pair", {"start_tick": 1}),
+        ("unmatched wet settings", {"settings": ("other gain",)}),
+        ("wrong epoch", {"epoch": "epoch-2"}),
+        ("wrong reference", {"m5_hash": off.m5_hash[::-1]}),
+        ("wrong measurement window", {"window": (1, fs)}),
+        ("joint shift", {"start_tick": 1, "end_tick": fs + 1, "window": (1, fs + 1)}),
+    ]:
+        reject(
+            label,
+            lambda edit=edit: paired(replace(off, **edit), replace(factory, **edit)),
+        )
+    require(
+        abs(row["factory_difference_over_off"] + 20) < 1e-9
+        and row["local_q_difference_over_off"] < -28,
+        "colored wet control",
+    )
+    reject(
+        "colored final wet",
+        lambda: require(row["passes"]["factory_residual"], "final wet residual -20 dB"),
+    )
+    moved = replace(
+        off, start_tick=1, end_tick=len(q) + 1, window=(len(q) - fs + 1, len(q) + 1)
+    )
+    reject(
+        "self-attested shift", lambda: paired(moved, replace(moved, depth=0.5), moved)
+    )
+    reject(
+        "rolled wet valid tags",
+        lambda: paired(
+            replace(off, samples=np.roll(off.samples, 1)),
+            replace(factory, samples=np.roll(factory.samples, 1)),
+        ),
+    )
+    # Keep the frozen carrier intact and change only the claimed denominator and sidecar.
+    from tempfile import TemporaryDirectory
+
+    with TemporaryDirectory(dir=OUT) as tmp:
+        directory = Path(tmp) / "traces"
+        directory.mkdir()
+        path = directory / Path(raw.filename).name
+        os.link(raw.filename, path)
+        receipt = json.loads(Path(raw.filename).with_suffix(".json").read_text())
+        receipt["taps"]["11"] = sample_hash(q)
+        path.with_suffix(".json").write_text(json.dumps(receipt))
+        bad = np.memmap(path, mode="r", dtype="<f8").reshape(-1, 30)
+        reject(
+            "substituted original M5",
+            lambda: producer_clock(bad[:, 25], bad[:, 25], fs, 196, ("unity",)),
+        )
+    edge = sweep_peaks(np.arange(3.0), np.array([3.0, 1.0, 0.5]))[0]
+    require(
+        edge["hz"] == 0 and edge["width_hz"] is None and edge["dB"] > 6,
+        "sweep endpoint",
+    )
     return rejected
 
 
-def main():
-    OUT.mkdir(exist_ok=True, parents=True)
-    build(OUT / "observed-render")
-    result = {"electrical": {}, "errors": {}}
+def tool_hashes():
+    paths = [
+        *sorted(Path(__file__).parent.glob("o2_*.py")),
+        *sorted(Path(__file__).parent.glob("o2_*.rs")),
+        Path(__file__).with_name("guide_render.rs"),
+        Path(__file__).with_name("guide_epoch.rs"),
+        Path(__file__).with_name("guide_audit_build.py"),
+        Path(__file__).with_name("acoustic_identity.py"),
+        Path(obs.__file__),
+        Path(o1.__file__),
+        Path(guide.__file__),
+        *(
+            Path("rust/dsp/src/instrument") / (name + ".rs")
+            for name in ("o2", "waveguide", "friction", "ring")
+        ),
+        FIX / "o1_sha256.tsv",
+        FIX / "o2_sha256.tsv",
+        FIX / "o2_corner_peaks.tsv",
+        FIX / "o2_replay_sha256.tsv",
+        FIX / "acoustic/SHA256SUMS",
+        FIX / "o2_negative_predicates.json",
+        FIX / "o2_timing_terminals.json",
+    ]
+    return {p.name: guide.digest(p) for p in paths}
+
+
+def executed_controls(result, outcomes):
+    expected = json.loads((FIX / "o2_negative_predicates.json").read_text())
+    require(outcomes == expected, "executed negative-control predicates")
+    return {
+        k: {
+            "control": k,
+            "run_id": result["run_id"],
+            "entry": "o2_qualification.qualify",
+            "adapter": result["tool_hashes"]["o2_qualification.py"],
+            "expected": expected[k],
+            "actual": value,
+            "status": "behavioral rejection",
+            "predicate_exit": 1,
+        }
+        for k, value in outcomes.items()
+    }
+
+
+def qualify(result):
+    build(BINARY, o2=True)
+    result["replay"] = qualify_audio()
+    result.update(electrical=UniqueRows(), lifecycle=UniqueRows())
     for fs in RATES_EXTENDED:
-        try:
-            result["electrical"][str(fs)] = check_rate(fs)
-        except ValueError as exc:
-            result["errors"][str(fs)] = str(exc)
+        result["electrical"][str(fs)] = check_rate(fs)
+    for fs in (32000, 48000, 192000):
+        for line in run("lifecycle", fs).splitlines():
+            name, *values = line.split()
+            result["lifecycle"][f"{fs}/{name}"] = list(map(int, values))
+    result["local_timing"] = timing(result["run_id"])
     pluck_frames = pluck(48000, 196, 144000)
     nominal = np.pad(pluck_frames.astype("<f4"), (4800, 62400))
     result["nominal_mono_input"] = {
@@ -623,60 +902,92 @@ def main():
         "sha256_f32le": sha256(nominal.tobytes()).hexdigest(),
     }
     data = acoustic()
+    result.update(data)
     result.update(
-        data,
         corners=corners(),
         sweep=sweep(48000),
         negatives=negative_controls(),
         injected_vectors_dB=VECTORS,
     )
-    failures = {
-        key: [gate for gate, ok in row["passes"].items() if ok is False]
-        for key, row in data["v17"].items()
+    result["failed_predicates"] = {
+        k: [g for g, v in row["passes"].items() if v is False]
+        for k, row in data["v17"].items()
+        if False in row["passes"].values()
     }
-    result["failed_predicates"] = {k: v for k, v in failures.items() if v}
-    result["neutral_candidate_passed"] = not result["errors"] and all(
-        not gates for key, gates in failures.items() if not key.startswith("stress/")
-    )
-    result["all_tested_vectors_passed"] = (
-        not result["errors"] and not result["failed_predicates"]
-    )
-    result["stage"] = "isolated offline; S5/V17 and S6R protection pending"
-    result["head"] = guide.git("rev-parse", "HEAD")
-    result["tool_hashes"] = {
-        path.name: guide.digest(path)
-        for path in [
-            Path(__file__),
-            Path(__file__).with_name("o2_response.py"),
-            Path(obs.__file__),
-            Path(o1.__file__),
-            Path(guide.__file__),
-            FIX / "o1_sha256.tsv",
-            FIX / "o2_sha256.tsv",
-            FIX / "acoustic/SHA256SUMS",
-        ]
-    }
-    write_json("results.json", result)
-    print("Review 5 witness", data["witness"])
-    print(
-        "Failed per-case predicates",
-        result["failed_predicates"],
-        "rate errors",
-        result["errors"],
-    )
-    require(not result["errors"], "electrical rate failure; see results.json")
-    require(
-        all(
-            not failed
-            for key, failed in failures.items()
-            if not key.startswith("stress/")
-        ),
-        "candidate exceedance; see results.json",
-    )
-    require(
-        "fundamental" in failures["stress/196/inversion"],
-        "identity stress missed inversion",
-    )
+    result["all_tested_vectors_passed"] = not result["failed_predicates"]
+    result["stage"] = "awaiting independent Review 8.2"
+    result["tool_hashes"] = tool_hashes()
+    result["renderer_sha256"] = guide.digest(BINARY)
+    grade(result)
+    result["negatives"].update(coverage_negatives(result))
+    result["executions"] = executed_controls(result, result["negatives"])
+    print("Retained downstream failures", result["failed_predicates"])
+
+
+def publish(result, name="results.json"):
+    payload = json.dumps(result, indent=2, allow_nan=False) + "\n"
+    path = OUT / (name + ".tmp")
+    with path.open("w") as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(path, OUT / name)
+
+
+def partial(value):
+    if isinstance(value, dict):
+        return {str(k): partial(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [partial(v) for v in value]
+    if isinstance(value, np.generic):
+        return partial(value.item())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return f"unserializable {type(value).__name__}"
+
+
+def main():
+    OUT.mkdir(exist_ok=True, parents=True)
+    with (OUT / "runner.lock").open("a") as lock:
+        if os.name == "nt":
+            import msvcrt
+
+            lock.seek(0)
+            msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = {
+            "status": "running",
+            "neutral_candidate_passed": False,
+            "run_id": uuid4().hex,
+            "head": guide.git("rev-parse", "HEAD"),
+        }
+        publish({k: result[k] for k in ("run_id", "head")}, "current-run.json")
+        try:
+            publish(result)
+            from o2_coverage import reset_references
+
+            reset_references()
+            qualify(result)
+            grade_measurements(result)
+            publish(dict(result, status="passed", neutral_candidate_passed=True))
+        except BaseException as exc:
+            from o2_coverage import REQUIRED
+
+            result.update(
+                status="interrupted"
+                if isinstance(exc, (KeyboardInterrupt, SystemExit))
+                else "failed",
+                neutral_candidate_passed=False,
+                error=f"{type(exc).__name__}: {exc}",
+                missing_sections=sorted(REQUIRED - result.keys()),
+            )
+            publish(partial(result))
+            raise
 
 
 if __name__ == "__main__":

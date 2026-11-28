@@ -1,0 +1,14 @@
+[
+  [
+    "    live: bool,",
+    "    ticks: usize,\n    bend_start: bool,\n    armed: bool,\n    live: bool,"
+  ],
+  [
+    "            live: false,",
+    "            ticks: 0,\n            bend_start: false,\n            armed: false,\n            live: false,"
+  ],
+  [
+    "        let result = self.transaction",
+    "        if self.ticks == 0 { self.bend_start = hz == 196.0; }\n        if self.bend_start && self.ticks == 57600 && hz > 210.0 { self.armed = true; }\n        if self.ticks == 96000 && self.armed { self.launch(hz, speed)?; }\n        self.ticks += 1;\n        let result = self.transaction"
+  ]
+]

@@ -1,5 +1,61 @@
 # Implementation ledger
 
+## 2026-11-28 · Review V1.1 closes the Rust validation cutover
+
+Reviewed `3905767..dd13710`. The Stage 08 archive differs only by the authorized one-ULP gain, float64 preflight retains decoded identity and duplicate rejection, and coherent provenance and stale producer substitutions fail schema 3 inspection. Python-blocked O2 and complete frozen qualification exited 0 and passed receipt reinspection. All 43 regression producers and 14 frozen comparisons passed. Rust becomes authoritative for validation. Retain the existing Python and independent offline C++ files without parallel maintenance. Resume the narrow offline Review 8.2 remediation with all DSP and shipping boundaries preserved. [Independent closure and evidence](REVIEW_V1_1_RUST_VALIDATION_CLOSURE.md)
+
+## 2026-11-28 · Stage V1.1 submits the three validation corrections for independent review
+
+At `000bd410`, Python-blocked O2 and complete Rust qualification both exited 0. All 43 regression producers and 14 frozen comparisons passed. Stage 08 retains its canonical archive with one owner-authorized gain disposition. The float64 eight-take control retains its decoded identities and withheld wet-cue failure. The coherently rehashed fixtures counterexample now fails at inspection. Review V1.1 owns the proposed validation cutover. Existing DSP and release gates remain in force. [Runs, digests and review scope](STAGE_V1_1_RUST_VALIDATION_CLOSURE.md)
+
+## 2026-11-28 · Review V1 holds the Rust validation cutover
+
+Reviewed `fcc272f..07a115d` from a clean tracked tree. With Python blocked, Rust O2 qualification exited 0 and full qualification exited 1 at the canonical Stage 08 archive gate after all 57 children passed. Forty-three children were regression producers and 14 were frozen comparisons. A controlled-recording WAV eligibility regression and incomplete schema 3 evidence ingestion also hold cutover. Continue permanent validation development in Rust. The owner retains the Python and independent offline C++ references in place at the entry revision with no synchronization requirement. Existing stage authority, production behavior and the Review 8.2 roadmap boundary are preserved. [Review, commands and receipts](REVIEW_V1_RUST_VALIDATION_MIGRATION.md)
+
+## 2026-11-28 · Stage V1 migrates validation measurements and retains the original complete exits
+
+The independent Rust workspace now reproduces the contact, ring, guide, O1/O2, pitch and offline I1 measurements listed in the stage matrix. The O2 listening ZIP and packaged wet payloads match their original bytes. All 105 historical I1 artifacts have measured dispositions. All 17 historical source defect classes, 16 I1 evidence controls, 13 study controls and eight acquisition controls have Rust owners. One legacy listening gain differs by one ULP and full combined report equivalence remains open. Awaiting independent Review V1. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
+
+## 2026-11-28 · Review 8.2 retains the packed I1 contract and holds isolated Rust I1
+
+Reviewed `9a54cd7..f0bce623` from a clean tree. Fresh complete O2 and I1 runs passed. The independent audit retained exact guide/O1/O2 and shipping behavior, all 108 revised stationary rows, all nine historical unsafe rejections and 700 active moving cells on each of off and actual delivery. Independent QR verified the packed fit and scheduled candidate decisions. Exact acquisition expiry and the original fourth-bank, producer, timing and numerical-fault counterexamples produced the required dispositions. Signed stereo probes preserved detection-tick commits and the unaffected lane across 18 genuine fault cases.
+
+Isolated Rust I1 remains held. A coherent half-product producer passed the complete I1 exit. The native permission recurrence missed the exact zero deadline at five rates. Prepared capacity needs explicit field ownership, and retained evidence readers accepted non-JSON nonfinite values. Authorize one offline transaction and qualification revision for those boundaries. Baseline injected S4a retains its independent scope. Controlled recordings, perception, live tracking and subsequent integration retain their existing gates. [Independent Review 8.2](REVIEW_08_2_I1_STREAMING_QUALIFICATION.md)
+
+## 2026-11-28 · Stage 08.2 bounded transaction awaits independent review
+
+The offline transaction now executes packed moving windows and one candidate per tick through source publication, automated fourth-path delivery and stereo M6 recovery. The submission retains 108 stationary rows and 700 active cells each on the sentinel and actual delivery. The proposed 61,376-byte analysis/control payload and 726,976-byte total await layout and callback measurement in a separately authorized implementation. [Stage 08.2 handoff](STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
+
+## 2026-11-28 · Review 8.1 retains the carrier and holds isolated Rust I1
+
+Reviewed `ef0e631..6c10ca0` from a clean tree. S2a/S2b, M4/M6, M5, O1, isolated O2 and shipping remain qualified in scope. Both nominal complete offline exits passed. All 108 revised stationary rows met V17 and all 700 registered moving cells retained useful correction. An independent QR reconstruction verified the host-time Gram fit and realized decisions. Signed-zero neutral delivery, actual fourth electrical returns and cached stereo M6 decrement arithmetic reproduced.
+
+O2 tooling remains held because jointly shifted wet bytes with valid tags, a self-attested M5 tap and coherent cross-rate timing receipts escaped. I1 tooling and isolated Rust I1 remain held. The complete exit passed an always-neutral fourth correction mutant, a confirmation at tick 5760 could launch the expired acquisition, and actual invalid monitor state could bypass or abort the lane-local fault fade. Authorize one offline joined-transaction and provenance remediation. Controlled identity and owner listening remain pending. Baseline injected S4a retains its independent authorization. [Review 8.1 findings and next increment](REVIEW_08_1_I1_REMEDIATION.md)
+
+## 2026-11-28 · Stage 08.1 offline remediation awaiting independent Review 8.1
+
+The revised guide-phase permission retained meaningful coloration in all 700 registered vibrato cells across seven rates; the historical fixed-bin monitor retained none. All 108 revised stationary depth rows met V17. A fourth actual Rust electrical return exercised automated detail depth. The same-clock stereo oracle covers expiry, zero-E replacement, prospective numerical faults and cached-product fades. The full exit compares the reports and waveform artifacts with fresh replay. Pressure/speed transitions still cause measurable vetoes. Empirical controlled identity, owner listening, measured Rust real-time headroom and isolated implementation authorization remain pending. [Stage evidence and replay commands](STAGE_08_1_I1_REMEDIATION.md)
+
+## 2026-11-28 · Review 8 retains the carrier and holds I1 implementation
+
+Reviewed `ddf77bd..d50a041` from a clean tree. S2a contact/ring, S2b guide, M4/M6, M5, O1, isolated Rust O2 and shipping/fallback remain qualified in their existing scopes. A fresh 156-stream O2 replay preserved 46,818,000 commits and returned factory sample provenance. The independent I1 recurrence reproduced all nine historical failures and passed all 108 corrected stationary depth rows. The prescribed vibrato was exactly neutral at all seven rates. The weakest held G3 contrast was .110 dB and controlled source and owner evidence remain pending.
+
+O2 acceptance tooling remains held on complete sweep/timing provenance, interrupted exit status and authoritative wet-pair clock binding. I1 remains held on the upstream prerequisite, motion/delivery veto, full-exit evidence binding and capture/fault lifecycle. Authorize one offline qualification revision for those boundaries. The DI projection and frozen complex bank are retained for that revision. Baseline injected S4a keeps its independent authorization. [Review 8 evidence and disposition](REVIEW_08_I1_SPECIFICATION.md)
+
+## 2026-11-28 · Stage 08 I1 specification awaiting independent Review 8
+
+Stage 08 submits one offline I1 architecture and the four Review 7 tooling corrections. The physical carrier comes from the returned Rust O2 stream. The coupled rule passes the stationary engineering grid while held G3 passage separation ranges down to .110 dB and the vibrato trial stays neutral. Independent Review 8, controlled source identity and owner listening remain pending. [Stage 08 evidence](STAGE_08_I1_SPECIFICATION.md)
+
+## 2026-11-28 · Review 7 qualifies the private Rust O2 component and holds scorer sign-off
+
+**Reviewed `c9e480a..874e9ff` from a clean tracked and untracked tree.** The eleven-rate differential, 33 full Rust steps, fault and partition probes, zero-allocation workloads and optimized timing passed. The historical O1-only executable matched all 22 guide/M5/O1 columns over 46,818,000 ticks. The canonical M5 WAVs, 81 acoustic WAVs, Stage 06 listening archive and shipping ABI/package evidence reproduced. S2a contact/ring, S2b guide and O1 retain qualification. Rust O2 qualifies in isolation at its provisional settings.
+
+The strongest-component and nominated sweep, coverage and colored-output controls passed. Scorer sign-off remains held on incomplete aggregate and failure records, final-wet pairing and reference alignment, and near-denormal eligibility. The nine injected identity failures and independent A2 octave failures remain visible. Close the validation findings and prepare one bounded I1 mathematical specification and offline evidence task. Baseline injected S4a retains separate authority. Electrical calibration, product gain and voicing, public Noise, owner listening, I1 implementation, amended gesture/S4b, supported S5, integration and release retain their gates. [Review 7 findings and dispositions](REVIEW_07_O2_IMPLEMENTATION.md)
+
+## 2026-11-28 · Stage 07 submits private O2 for independent Review 7
+
+The prescribed O1 velocity now feeds a transactional Rust electrical lane in the isolated renderer. The handoff includes eleven-rate electrical measurements, complete Rust long steps, original M5 hash parity, corrected V17 scoring, allocation and partition results, compiled mutants and the owner listening package. Nine injected downstream identity rows still fail. Independent Review 7, product listening, pickup calibration and integrated headroom are pending. [Stage 07 handoff](STAGE_07_O2_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Review 6 authorizes one isolated provisional O2 increment
 
 **Reviewed `85b0aa1..d53bc11` from a clean tree.** Retain S2a contact/ring, S2b guide and O1. Independent seven-rate transfer and lifecycle diagnostics passed. Fresh O1 reproduced the 440 Hz common/delivery peaks of 1.005419/.710938 FS and all 384 estimated gain corners. The 6.155 dB extreme implication and nine injected identity failures remain visible. Cargo, guide/O1 replay, fixtures, native CTest and shipping package regressions passed. No production files changed.

@@ -1,5 +1,65 @@
 # Decision log
 
+## 2026-11-28 · Authorize Rust as ElectroBow’s validation infrastructure
+
+Accept V1-1, V1-2 and V1-3. Use Rust by default for all future permanent validation. Use the Rust O2 and complete frozen qualification commands as the authoritative exits. Keep every existing Python validation and independent offline C++ file in place for historical replay and comparison. Future Rust validation changes carry no parallel maintenance requirement. The Stage 08 canonical ZIP and its one authorized equivalence disposition stand. O2 and Stage 08.2 retain exact archive equality.
+
+Resume Review 8.2’s single offline transaction and qualification revision for signed pre-link output and fault fade, exact withdrawal, prepared field ownership and strict dependent evidence ingestion. Preserve all existing DSP failures, stage authorizations, holds and shipping behavior. [Cutover decision](REVIEW_V1_1_RUST_VALIDATION_CLOSURE.md) · [Qualification commands](../VALIDATION_RUST_GUIDE.md#qualification-commands) · [Review 8.2 authorization](REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
+## 2026-11-28 · Scope the Stage 08 archive equivalence to one historical gain
+
+Preserve the canonical frozen ZIP at SHA-256 `90222fb6bd1590713f287527607771d1db7d1f36122da5d0020bad70d96c9809`. The owner permits the measured Rust ZIP `0f6a5e212c3d751702ae6e3c16bf8d43db45fc1095b2ef1d05e3a9c42dd5a89c` for historical equivalence. Its techs-P2-60-held gain is 0.48111582544669923 versus the original 0.4811158254466993, exactly one binary64 ULP lower. Require all 17 members, all 14 WAV byte streams, attribution, instructions and the other six gains. Stage 08.2 and O2 retain exact ZIP requirements. The independent reviewer owns the cutover decision. [Stage V1.1 submission](STAGE_V1_1_RUST_VALIDATION_CLOSURE.md)
+
+## 2026-11-28 · Retain the historical references and hold authoritative Rust cutover
+
+Keep all existing Python validation and independent offline C++ references in place, frozen at `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0` for historical replay and comparison. This owner decision supersedes the original deletion proposal. Extend permanent validation in Rust with independent mathematical references, existing acceptance bounds and a Python-free Rust qualification path. Historical validation has no synchronization obligation. Temporary Python research remains permissible.
+
+Keep existing qualification ownership pending closure of the canonical archive, recording eligibility and provenance findings. Review 8.2 authorizes the next narrow offline transaction revision and baseline injected S4a retains its existing scope. Isolated Rust I1, final A2, controlled identity, perception, live gesture, supported S5, integration and release retain their reviewed boundaries. [Independent Review V1](REVIEW_V1_RUST_VALIDATION_MIGRATION.md)
+
+## 2026-11-28 · Retain existing qualification authority during the Rust migration
+
+Use the standalone Rust workspace for new validation calculations. Keep the frozen Python and offline C++ implementations and the original complete qualification commands through independent Review V1. Keep the entry audition ZIP available while Review V1 adjudicates the one-ULP normalization difference. The migrated differential is scoped to its recorded child inventory. Review 8.2 remains the engineering authority. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
+
+## 2026-11-28 · Hold isolated Rust I1 on signed delivery and exact transaction gates
+
+Retain the qualified S2a/S2b, O1 and O2 code, the original M5 denominator, the I1 source projection and bank, the packed 123-word statistic layout and the 17-tick retired-block schedule. Accept the offline stationary and moving evidence, normalized fourth path, pre-confirm expiry, and demonstrated lane-local retirement. The original O2 provenance and timing substitutions reject. Complete retained-reader sign-off still requires strict JSON ingestion.
+
+Authorize one offline transaction and qualification revision. Grade independently expected signed wet product and emitted A4 mix on actual samples through live, idle and cached fade, require exact deadline-neutral permission, freeze complete state placement within both existing memory limits, and close evidence ingestion. Require direct rejection of the surviving half-product variant and the late-neutral witness in the full exit. Keep isolated Rust I1 held pending a narrow re-review. Baseline injected S4a retains its existing scope. Empirical identity, owner perception, final A2, amended gesture/S4b, supported S5, production integration and release retain their separate gates. [Review 8.2 findings and authorization](REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
+## 2026-11-28 · Propose the chronological I1 contract for independent Review 8.2
+
+Use pre-confirm expiry, typed event validation, two packed 984-byte blocks, scheduled retired-window trials and checked lane-local recovery. Require canonical producer samples, executed timing and behavioral mutant evidence. Review 8.1 continues to govern implementation authority, controlled identity and perception. [Stage 08.2 handoff](STAGE_08_2_I1_STREAMING_QUALIFICATION.md)
+
+## 2026-11-28 · Retain the offline guide-phase fit and require a joined qualification revision
+
+Accept the measured stationary V17 results and the preregistered moving witness under the retrospective host-time Gram contract. Keep the selected DI projection, frozen correction bank, independent physical/O1/O2 qualifications and original V17 denominator. Hold both acceptance-tooling sign-offs and isolated Rust I1 on corrected-wet and timing provenance, automated wet verification, exact expiry and lane-local fault handling.
+
+Authorize one offline revision that makes the two-lane moving transaction authoritative, binds evidence to producer samples and executed timing, rejects the complete-exit counterexamples, and proves the packed schedule and M6 handoff within the existing scope. Retain baseline injected S4a authority. Controlled source approval, perception, live tracking/gesture, supported S5, integration and release retain their separate gates. [Review 8.1 authorization](REVIEW_08_1_I1_REMEDIATION.md#final-authorization)
+
+## 2026-11-28 · Proposed guide-phase permission and replay-owned qualification
+
+**Proposed, awaiting independent Review 8.1.** Retain the qualified guide/O1/O2 path, DI projection and complex bank. Admit a common grid ray using the completed host-time fit to committed guide phase and an independently qualified upstream carrier. Measure all four realized paths through automation and slew. Require producer-owned provenance, typed acquisition/epoch evidence and a lane-local postcommit fault transaction. The preregistered motion gate passed at seven rates; natural-source approval requires the controlled holdout and perception remains an owner decision. Review 8's implementation hold and the independent baseline S4a authorization stand pending review. [Stage 08.1 handoff](STAGE_08_1_I1_REMEDIATION.md)
+
+## 2026-11-28 · Hold I1 Rust implementation and acceptance-tooling sign-off
+
+Accept the DI representation for offline research and the measured past-block ray algebra. Retain the qualified physical/electrical carrier, original converted-M5 V17 denominator, inclusive-Nyquist scorer and paired final-wet residual. The short monitor can admit an upstream V17 failure and strips identity throughout the prescribed vibrato. Capture expiry and replacement, genuine downstream fault ownership and full-exit evidence binding need correction. Close actual returned factory q provenance and the subnormal/silence eligibility predicate. O2 aggregate, interruption and trusted paired-clock sign-off remain open.
+
+Authorize only the offline revision in Review 8, including a bounded guide-phase-referenced moving-pitch permission experiment with a predeclared non-neutral witness. Controlled held-source discrimination and owner listening remain separate gates. Retain baseline injected S4a scope and the holds on live A2/S4b, amended gesture, supported S5, production integration and release. [Review 8 authorization](REVIEW_08_I1_SPECIFICATION.md#9-authorization-decisions)
+
+## 2026-11-28 · Stage 08 I1 specification awaiting independent Review 8
+
+Propose a common 17-point coefficient ray chosen from complete measured windows, with an independent realized-output veto and stamped per-gesture capture/publication. Retain original converted M5 and the paired factory residual. Natural source discrimination and persistent color under vibrato remain open. This submission requests independent Review 8. Review 7 retains architectural authority, with baseline S4a separately authorized. [Stage 08 evidence](STAGE_08_I1_SPECIFICATION.md)
+
+## 2026-11-28 · Qualify provisional Rust O2 at the isolated sample boundary
+
+Accept the same-commit O1 input, ordered electrical arithmetic, transactional four-scalar histories, local real-time measurements and exact diagnostic parity. Keep the O2 qualification runner open until its aggregate rejects missing or inconsistent evidence, records failed anchors in strict JSON, requires final-wet pairs aligned to M5 and demonstrates live subnormal work. Retain the original M5 denominator and V17 thresholds. S6R owns actual linked headroom and asymptotic recovery counting.
+
+Authorize one offline I1 specification and evidence increment for coupled gain safety, realized level and fundamental preservation, and sample-clock capture/publication. Define controlled held-source repeats and withheld comparisons before any I1 implementation decision. Baseline injected S4a retains its earlier scope. The independent A2 blocker and the owner, supported-wet, integration and release gates stand. [Review 7](REVIEW_07_O2_IMPLEMENTATION.md)
+
+## 2026-11-28 · Keep the physical commit and electrical fault distinct
+
+The isolated harness consumes the owned observation once. An output fault preserves evidence of that physical commit and disposes the epoch once. A guide fault resets the electrical lane after the guide performs its own invalidation. Use the converted M5 denominator for V17, the returned zero-depth signal for local subtraction and paired final wet traces for downstream subtraction. The fixed gain, trim, load and detail remain provisional pending independent Review 7 and the owner's listening and calibration decisions. [Stage 07 submission](STAGE_07_O2_IMPLEMENTATION.md)
+
 ## 2026-11-27 · Approve provisional O2 only at the isolated Rust boundary
 
 Use one same-tick qualified O1 velocity input, the fixed 20 Hz blocker, prewarped 3200 Hz Butterworth, .85 FS/(m/s) conversion, 1/√2 delivery trim and bounded injected detail depth. Require corrected coverage, strongest-component and sweep scoring at isolated exit. Preserve original converted M5 as the authoritative V17 denominator and use actual final wet for the downstream factory residual. The caller owns post-commit invalidation and the M6 fade of cached E and E·w. Preserve exact linked nominal-use accounting at S6R. Electrical calibration, product gain and Noise semantics, listening and integrated V08/V17/V20 retain their gates. Existing S2a/S2b/O1 qualification and independent baseline S4a authorization stand. I1, final A2, amended gesture/S4b, supported S5, production and release remain held. [Review 6](REVIEW_06_O2_SPECIFICATION.md)

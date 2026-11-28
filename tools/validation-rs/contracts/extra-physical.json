@@ -1,0 +1,46 @@
+{
+  "steady_48000_440_R1.2_V0.06_3s": {
+    "rate": 48000,
+    "hz": 440.0,
+    "speed": 0.06,
+    "k": 0.04363636363636363,
+    "seconds": 3,
+    "trajectory": "steady",
+    "successful_ticks": 144000,
+    "controls_sha256": "9d687490fb7be604fd410678c2a1655c753f2a02800b6bc273816a5a439144e3",
+    "raw_sha256": "552d8a75ed977778c96ba461c3d2981498d12a75fdfd3eb2124494a980f3e3d2"
+  },
+  "steady_48000_440_R1.2_V0.16_3s": {
+    "rate": 48000,
+    "hz": 440.0,
+    "speed": 0.16,
+    "k": 0.11636363636363638,
+    "seconds": 3,
+    "trajectory": "steady",
+    "successful_ticks": 144000,
+    "controls_sha256": "fdc518f43e00578f484203ef945419d8797fa524cc9cde42d7b8342498180327",
+    "raw_sha256": "672ca95076f749b87cb798c8698687fd016770a31368db189c1e6f932e4e8832"
+  },
+  "steady_48000_440_R2.4_V0.06_3s": {
+    "rate": 48000,
+    "hz": 440.0,
+    "speed": 0.06,
+    "k": 0.08727272727272727,
+    "seconds": 3,
+    "trajectory": "steady",
+    "successful_ticks": 144000,
+    "controls_sha256": "43a18b7029c61a38fb3e634ef21f6b89cfa432d4ed5cb4d9e6889b08eb028b79",
+    "raw_sha256": "a9e9d86ba3953f2ea596b2d5cbb368535c3473e869d6e1efd3701017a02b37fc"
+  },
+  "steady_48000_440_R2.4_V0.16_3s": {
+    "rate": 48000,
+    "hz": 440.0,
+    "speed": 0.16,
+    "k": 0.23272727272727275,
+    "seconds": 3,
+    "trajectory": "steady",
+    "successful_ticks": 144000,
+    "controls_sha256": "a39a783147293607995b6a663be4ff3d1374c002b91af82c11b96e3198d083e2",
+    "raw_sha256": "f374077585cc3f04945dfdeae00c94c26106690aea9b946e4c206a322c3f2e42"
+  }
+}

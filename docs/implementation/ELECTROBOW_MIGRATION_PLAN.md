@@ -1,5 +1,9 @@
 # Ordered migration from the six-control instrument
 
+Rust provides the authoritative validation commands. Review 8.2 governs DSP qualification and stage authorizations. [Qualification commands](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
+The next authorized change is Review 8.2’s single offline transaction and qualification revision. [Review 8.2 increment](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
 Begin from the audited six-control `EbInstrument` graph. Each increment below has a buildable end state. The first production audio routing change is step 6. A separately reviewable host-only rate guard can follow step 1. Current independent work permissions are in [specification sign-off](status/SPECIFICATION_SIGNOFF.md). A temporarily unconnected module may be compiled under `#[cfg(test)]` until its consumer is ready. Keep the existing C ABI usable throughout. Sections M1–M7 refer to the [mathematics](../architecture/BOWED_STRING_MATHEMATICS.md), A1–A4 to the [control and integration contracts](../architecture/ELECTROBOW_TARGET_ARCHITECTURE.md), and V01–V22 to the [validation cases](DSP_VALIDATION_PLAN.md).
 
 ## 1. Establish the production baseline
@@ -91,6 +95,7 @@ S1 is the audited shipping processor. S2a is isolated contact/ring, S2b the driv
 | V15 parameter automation output difference | S6R smoothing and complete mix | ABI matched input and sample-timed control changes | Paired .2 FS renders shifted one sample | Rust integration |
 | V16 polarity, silence, clocks, dual Hz, repeatability, switch rate | S3 separate analyzers; S4b controller/guide | Candidate Hz then combined launches and wet lanes | Single-sided, duplicated, inverted, independent 110/196, 196+277.18, layered recorded D chord | Tracker or combined lanes respectively |
 | V16 shaped direct and final stereo sum | S6R linked direct/output and wet | ABI unvoiced fallback and nulls | Same stereo signals and reset replay | Complete integration |
+| V17 isolated provisional O2 | Same-tick qualified O1, private O2 and original converted M5 | Independent convolution, complex response, fixed-gain delivered wet, detail subtraction and fault/epoch probes | Eleven electrical rates, stationary S/H, gain witness and 384 injected corners | Independent Review 7 for isolated O2. S5 and S6R retain integrated obligations. [Submission](status/STAGE_07_O2_IMPLEMENTATION.md) |
 | V17 body gain/sweep/noise residual, harmonics, detail response and high-note alias diagnosis | S5 wet crossover/body with S2b bridge source or captured reference | Isolated bridge vs scaled wet before limiter | Low E/G/A, 65–4000 Hz sweep, matched seeds/LFO, high E at 32 vs low-passed 96 kHz | Body stage |
 | V18 Rust alloc/realloc/dealloc, denormal cost and static reachability | S2–5 local review; S6R full handle/reset | ABI allocator + release performance comparison | Warmed 60 s lifecycle incl. faults/repicks/tiny/oversized partitions, 30 s near-denormal vs silence | Owning module on violation; full RT proof at S6R |
 | V18 bypass and native capacities | S6H host scratch and mixer | Native processor render/reset | Bypass transitions, tiny/oversized blocks and fixed prepared hint | Host |

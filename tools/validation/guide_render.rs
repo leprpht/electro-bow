@@ -9,8 +9,56 @@ mod ring;
 #[path = "../../rust/dsp/src/instrument/waveguide.rs"]
 mod waveguide;
 
+#[cfg(o2_audit)]
+#[path = "../../rust/dsp/src/instrument/o2.rs"]
+mod o2;
+#[cfg(o2_audit)]
+mod o2_replay;
+
 use friction::{Direction, Mode};
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
+
+fn write_sample(
+    output: &mut impl Write,
+    sample: waveguide::Sample,
+    observation: Option<waveguide::Observation>,
+) -> io::Result<()> {
+    let c = sample.contact;
+    let branch = match c.mode {
+        Mode::Stick => 0.0,
+        Mode::Slide(Direction::Positive) => 1.0,
+        Mode::Slide(Direction::Negative) => -1.0,
+    };
+    for value in [
+        sample.from_nut,
+        sample.from_bridge,
+        c.to_bridge,
+        c.to_nut,
+        sample.x,
+        sample.pickup,
+        c.j,
+        c.slip,
+        c.force,
+        c.string_velocity,
+        branch,
+        sample.audio,
+    ] {
+        output.write_all(&value.to_le_bytes())?;
+    }
+    if let Some(o) = observation {
+        for station in o.stations {
+            for value in [
+                station.direct,
+                station.reflected_history,
+                station.velocity(),
+            ] {
+                output.write_all(&value.to_le_bytes())?;
+            }
+        }
+        output.write_all(&o.velocity().to_le_bytes())?;
+    }
+    Ok(())
+}
 
 fn render(rate: f64, observed: bool, input: impl Read, output: impl Write) -> io::Result<()> {
     let mut guide = waveguide::Guide::prepare(rate).expect("supported rate");
@@ -47,40 +95,7 @@ fn render(rate: f64, observed: bool, input: impl Read, output: impl Write) -> io
             .expect("live epoch");
         #[cfg(epoch_audit)]
         guide.check_epoch(tick + 1, seed);
-        let c = sample.contact;
-        let branch = match c.mode {
-            Mode::Stick => 0.0,
-            Mode::Slide(Direction::Positive) => 1.0,
-            Mode::Slide(Direction::Negative) => -1.0,
-        };
-        for value in [
-            sample.from_nut,
-            sample.from_bridge,
-            c.to_bridge,
-            c.to_nut,
-            sample.x,
-            sample.pickup,
-            c.j,
-            c.slip,
-            c.force,
-            c.string_velocity,
-            branch,
-            sample.audio,
-        ] {
-            output.write_all(&value.to_le_bytes())?;
-        }
-        if let Some(o) = observation {
-            for station in o.stations {
-                for value in [
-                    station.direct,
-                    station.reflected_history,
-                    station.velocity(),
-                ] {
-                    output.write_all(&value.to_le_bytes())?;
-                }
-            }
-            output.write_all(&o.velocity().to_le_bytes())?;
-        }
+        write_sample(&mut output, sample, observation)?;
         tick += 1;
     }
     output.flush()?;
@@ -190,6 +205,10 @@ fn stress() {
 }
 
 fn main() -> io::Result<()> {
+    #[cfg(o2_audit)]
+    if let Some(mode) = std::env::args().nth(1).filter(|s| s.starts_with("--o2-")) {
+        return o2_replay::run(&mode);
+    }
     if std::env::args().nth(1).as_deref() == Some("--stress") {
         stress();
         return Ok(());
