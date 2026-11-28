@@ -14,6 +14,7 @@ pub mod sources;
 pub mod stationary;
 pub mod stereo;
 mod stereo_clock;
+pub mod study;
 pub mod sweeps;
 pub mod transaction_mutants;
 use crate::{Result, ensure, evidence};
@@ -134,19 +135,38 @@ struct Case {
     delivery_witness: Option<Witness>,
 }
 fn witness(x: &[[f64; 2]], fs: u32, column: usize, old: &Witness) -> Result<Value> {
-    let edge = |i: usize| ((0.5 + i as f64 * 0.02) * f64::from(fs)).round_ties_even() as usize;
-    let mut cells = Vec::new();
-    let (mut active, mut gap, mut longest) = (0, 0, 0);
+    let row = score(x, fs, column, old.reference)?;
+    let cells = row["cell_rms"].as_array().ok_or("motion witness")?;
     ensure(
-        old.cell_rms.len() == 100 && edge(100) <= x.len(),
+        cells.len() == old.cell_rms.len()
+            && cells
+                .iter()
+                .zip(&old.cell_rms)
+                .all(|(x, y)| (x.as_f64().unwrap() - y).abs() <= 2e-11),
+        "motion cell RMS",
+    )?;
+    ensure(
+        row["active"] == old.active
+            && row["longest_gap_ms"] == old.longest_gap_ms
+            && row["passed"] == old.passed,
+        "motion witness disposition",
+    )?;
+    Ok(
+        json!({"rms":cells,"active":row["active"],"longest_gap_ms":row["longest_gap_ms"],"passed":row["passed"],"stationary_reference":old.reference}),
+    )
+}
+fn score(x: &[[f64; 2]], fs: u32, column: usize, reference: f64) -> Result<Value> {
+    let edge = |i: usize| ((0.5 + i as f64 * 0.02) * f64::from(fs)).round_ties_even() as usize;
+    ensure(
+        edge(100) <= x.len() && reference.is_finite() && reference > 0.,
         "motion window inventory",
     )?;
+    let (mut active, mut gap, mut longest) = (0, 0, 0);
+    let mut cells = Vec::new();
     for i in 0..100 {
-        let window = &x[edge(i)..edge(i + 1)];
-        let rms = (window.iter().map(|v| v[column] * v[column]).sum::<f64>() / window.len() as f64)
-            .sqrt();
-        ensure((rms - old.cell_rms[i]).abs() <= 2e-11, "motion cell RMS")?;
-        if rms >= 0.5 * old.reference {
+        let w = &x[edge(i)..edge(i + 1)];
+        let rms = (w.iter().map(|r| r[column].powi(2)).sum::<f64>() / w.len() as f64).sqrt();
+        if rms >= 0.5 * reference {
             active += 1;
             gap = 0;
         } else {
@@ -155,13 +175,8 @@ fn witness(x: &[[f64; 2]], fs: u32, column: usize, old: &Witness) -> Result<Valu
         }
         cells.push(rms);
     }
-    let passed = old.reference > 1e-4 && active >= 75 && longest <= 3;
-    ensure(
-        active == old.active && longest * 20 == old.longest_gap_ms && passed == old.passed,
-        "motion witness disposition",
-    )?;
     Ok(
-        json!({"rms":cells,"active":active,"longest_gap_ms":longest*20,"passed":passed,"stationary_reference":old.reference}),
+        json!({"cell_rms":cells,"active":active,"longest_gap_ms":longest*20,"reference":reference,"passed":reference>1e-4 && active>=75 && longest<=3}),
     )
 }
 

@@ -20,7 +20,7 @@ pub struct Case {
     pub wav_sha256: Option<String>,
 }
 
-fn frequency(c: &Case, n: usize) -> f64 {
+pub(crate) fn frequency(c: &Case, n: usize) -> f64 {
     let t = n as f64 / f64::from(c.rate);
     let cents = match c.trajectory.as_str() {
         "bend" => 200. * (1. - (t - 1.2).abs() / 0.2).max(0.),

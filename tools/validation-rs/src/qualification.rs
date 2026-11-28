@@ -33,6 +33,10 @@ const REGRESSION: &[&str] = &[
     "i1-capture",
     "i1-review82",
     "i1-evidence",
+    "i1-joined-motion",
+    "i1-uneven",
+    "i1-faults",
+    "i1-study",
     "pitch",
     "native",
     "package",
@@ -42,6 +46,8 @@ const COMPARISONS: &[&str] = &[
     "compare",
     "guide-compare",
     "i1-clock-compare",
+    "i1-study-compare",
+    "i1-stream-compare",
     "i1-stationary-compare",
     "o1-compare",
     "o2-acoustic-compare",
@@ -96,8 +102,8 @@ pub fn run(
     evidence::atomic(&dir.join("electrical.json"), &electrical_report)?;
     if complete {
         let pending = [
-            "complete historical I1 study including its original audition package and dynamic reports",
-            "uneven-rate joined recovery and full dependent I1 report and artifact reconstruction",
+            "remaining historical I1 study stationary, real-source and corner reports, and legacy audition gain serialization",
+            "full dependent I1 report and artifact reconstruction including lifecycle retirement",
         ];
         evidence::atomic(
             &dir.join("unqualified.json"),

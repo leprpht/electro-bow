@@ -1,6 +1,7 @@
 //! Independent fixed-bin Stage 08 monitor used for the previous-stationary audition.
 use crate::{Result, ensure};
 use rustfft::num_complex::Complex64;
+use serde_json::{Value, json};
 use std::f64::consts::TAU;
 fn power(x: &[f64]) -> f64 {
     x.iter().map(|v| v * v).sum::<f64>() / x.len() as f64
@@ -30,6 +31,14 @@ fn allowed(x: &[f64], phase: &[Complex64], m5: f64, base: f64, recovery: bool) -
         && p <= base * factor
 }
 pub fn scales(frames: &[[f64; 20]], output: &[[f64; 20]], fs: f64) -> Result<Vec<f64>> {
+    Ok(monitor(frames, output, fs)?.0)
+}
+pub(super) fn monitor(
+    frames: &[[f64; 20]],
+    output: &[[f64; 20]],
+    fs: f64,
+) -> Result<(Vec<f64>, Vec<Value>)> {
+    let mut log = Vec::new();
     let mut scale = vec![0.; frames.len()];
     let mut next = 0f64;
     let mut target = 0f64;
@@ -63,9 +72,10 @@ pub fn scales(frames: &[[f64; 20]], output: &[[f64; 20]], fs: f64) -> Result<Vec
         let (lo, hi) = window.iter().fold((f64::INFINITY, 0f64), |(l, h), r| {
             (l.min(r[0]), h.max(r[0]))
         });
-        let mut usable = 1200. * (hi / lo).log2() <= 25.
-            && window.iter().all(|r| r[18] != 0.)
-            && allowed(&m5, &phase, mp, mp, false);
+        let conditioned = 1200. * (hi / lo).log2() <= 25.;
+        let observable = window.iter().all(|r| r[18] != 0.);
+        let bridge_ok = conditioned && allowed(&m5, &phase, mp, mp, false);
+        let available = observable && bridge_ok;
         let test = |amount: Option<f64>, recovery: bool| {
             let mut wet = [vec![], vec![], vec![]];
             for j in 0..3 {
@@ -87,7 +97,9 @@ pub fn scales(frames: &[[f64; 20]], output: &[[f64; 20]], fs: f64) -> Result<Vec
                 .collect::<Vec<_>>();
             power(&diff) <= 10f64.powf(if recovery { -2.85 } else { -2.8 }) * power(&wet[0])
         };
-        usable &= test(None, false) && test(Some(0.), true);
+        let realized_ok = conditioned && test(None, false);
+        let neutral_ok = conditioned && test(Some(0.), true);
+        let usable = available && realized_ok && neutral_ok;
         ready = if usable { (ready + 1).min(2) } else { 0 };
         next = 0.;
         if ready == 2 {
@@ -97,11 +109,12 @@ pub fn scales(frames: &[[f64; 20]], output: &[[f64; 20]], fs: f64) -> Result<Vec
                 .find(|s| test(Some(*s), true))
                 .ok_or("neutral admissible ray")?;
         }
+        log.push(json!({"start":start,"end":end,"conditioned":conditioned,"observable":observable,"trusted":true,"available":available,"bridge_ok":bridge_ok,"neutral_ok":neutral_ok,"realized_ok":realized_ok,"veto":ready!=2,"scale":next}));
         start = end;
     }
     ensure(
         scale.iter().all(|v| (0. ..=1.).contains(v)),
         "fixed-bin monitor scale",
     )?;
-    Ok(scale)
+    Ok((scale, log))
 }

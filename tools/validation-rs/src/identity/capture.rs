@@ -7,7 +7,7 @@ use std::{
     f64::consts::{LN_10, TAU},
 };
 pub type Updates = Vec<(usize, [f64; 12])>;
-fn stimulus(rate: usize, hz: f64, kind: &str) -> Vec<f64> {
+pub(super) fn stimulus(rate: usize, hz: f64, kind: &str) -> Vec<f64> {
     (0..rate)
         .map(|i| {
             let t = i as f64 / rate as f64;

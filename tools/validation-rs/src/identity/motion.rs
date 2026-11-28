@@ -311,6 +311,16 @@ fn case(
         "retired-window dispositions",
     )?;
     let mut row = json!({"frames":n,"windows":windows,"hashes":digests,"full_window_slew_error":slew_error,"full_window_wet_error":wet_error,"max_bank_error":maximum,"monitor_sha256":c.monitor_sha256});
+    if kind == "steady" {
+        let tail = n - fs as usize;
+        let power = frames[tail..]
+            .iter()
+            .zip(&output[tail..])
+            .zip(&legacy_scale[tail..])
+            .map(|((r, d), s)| ((r[2] + s * d[0]) - r[2]).powi(2))
+            .sum::<f64>();
+        row["historical_stationary_calibration"] = (power / rate).sqrt().into();
+    }
     row["old_scale_sha256"] = legacy_hash.into();
     if kind == "vibrato" {
         let historical: Vec<_> = frames

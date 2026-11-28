@@ -82,7 +82,15 @@ fn truth(t: f64, bend: bool) -> f64 {
 pub(crate) fn tracking(c: &Case, signal: &[f64]) -> Result<(Vec<f64>, Vec<f64>, i32)> {
     let filters: BTreeMap<String, Filter> =
         serde_json::from_str(include_str!("../../contracts/guide-phase-filter.json"))?;
-    let phase = analytic_phase(signal, &filters[&c.hz.to_string()]);
+    let rate_filters: BTreeMap<String, Filter> =
+        serde_json::from_str(include_str!("../../contracts/vibrato-filters.json"))?;
+    let f = if c.rate == 48000 {
+        filters.get(&c.hz.to_string())
+    } else {
+        rate_filters.get(&format!("{}/{}", c.rate, c.hz))
+    }
+    .ok_or("unregistered phase filter")?;
+    let phase = analytic_phase(signal, f);
     let fs = c.rate as f64;
     let n = c.rate as usize;
     let h = (0.006 * fs).round_ties_even() as usize;

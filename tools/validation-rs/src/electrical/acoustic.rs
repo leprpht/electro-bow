@@ -51,7 +51,7 @@ fn corrected(raw: &[[f64; 30]], c: &Case, vector: usize) -> Result<Vec<[f64; 4]>
         })
         .collect()
 }
-fn pluck(f: f64) -> Vec<f64> {
+pub(crate) fn pluck(f: f64) -> Vec<f64> {
     let mut x: Vec<_> = (0..144000)
         .map(|i| {
             let t = i as f64 / 48000.;

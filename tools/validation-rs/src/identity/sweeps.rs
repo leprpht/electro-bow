@@ -12,7 +12,7 @@ use std::{
     fs,
     path::Path,
 };
-fn transfer(rate: f64, pitch: f64, hz: f64, coeff: &[f64; 12]) -> C {
+pub(super) fn transfer(rate: f64, pitch: f64, hz: f64, coeff: &[f64; 12]) -> C {
     let rho = (-TAU * 0.22 * pitch / rate).exp();
     let fa = rate / (rate / 16000.).floor();
     let z = C::from_polar(1., -TAU * hz / rate);

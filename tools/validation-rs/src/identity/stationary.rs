@@ -11,18 +11,18 @@ use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path};
 
 #[derive(Deserialize)]
-struct Contract {
-    cases: Vec<Case>,
-    schedules: BTreeMap<String, Schedule>,
+pub(super) struct Contract {
+    pub(super) cases: Vec<Case>,
+    pub(super) schedules: BTreeMap<String, Schedule>,
 }
-type Schedule = (Option<[f64; 12]>, Vec<(usize, [f64; 12])>);
+pub(super) type Schedule = (Option<[f64; 12]>, Vec<(usize, [f64; 12])>);
 #[derive(Deserialize)]
-struct Case {
-    case: String,
-    rate: u32,
-    hz: f64,
-    physical: String,
-    schedule: String,
+pub(super) struct Case {
+    pub(super) case: String,
+    pub(super) rate: u32,
+    pub(super) hz: f64,
+    pub(super) physical: String,
+    pub(super) schedule: String,
     smoother: f64,
     wet: String,
     correction: String,

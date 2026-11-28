@@ -58,6 +58,12 @@ const SUITES: &[&str] = &[
     "i1-transaction-mutants",
     "i1-clock-compare",
     "i1-stationary-compare",
+    "i1-joined-motion",
+    "i1-stream-compare",
+    "i1-uneven",
+    "i1-faults",
+    "i1-study",
+    "i1-study-compare",
     "i1-stereo",
     "i1-sources",
     "i1-listening",
@@ -106,6 +112,21 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
             dir.parent().and_then(Path::parent).ok_or("suite root")?,
         ),
         "i1-sources" => identity::sources::run(dir),
+        "i1-joined-motion" => identity::stereo::joined_motion(
+            dir,
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
+        "i1-stream-compare" => identity::stereo::stream_compare(
+            reference,
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
+        "i1-uneven" => identity::stereo::uneven(dir),
+        "i1-faults" => identity::stereo::faults(dir),
+        "i1-study" => identity::study::run(dir),
+        "i1-study-compare" => identity::study::differential(
+            reference,
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
         "i1-stereo" => identity::stereo::run(dir),
         "i1-transaction-mutants" => identity::transaction_mutants::run(dir),
         "i1-evidence" => identity::evidence_controls::run(
@@ -221,6 +242,8 @@ fn run() -> Result<()> {
                     | "repeatability"
                     | "i1-stationary-compare"
                     | "i1-clock-compare"
+                    | "i1-study-compare"
+                    | "i1-stream-compare"
                     | "o1-compare"
                     | "guide-compare"
                     | "o2-electrical-compare"

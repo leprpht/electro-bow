@@ -110,6 +110,16 @@ struct Job {
     alpha: f64,
 }
 fn replay(c: &Case, parts: &[usize]) -> Result<Vec<Value>> {
+    replay_input(c, parts, |t| {
+        (1..=10)
+            .map(|k| {
+                0.08 * (TAU * f64::from(k) * 196. * (t as f64 / c.rate)).cos()
+                    / f64::from(k).powf(0.65)
+            })
+            .sum()
+    })
+}
+fn replay_input(c: &Case, parts: &[usize], sample: impl Fn(usize) -> f64) -> Result<Vec<Value>> {
     let rate = c.rate;
     let d = (rate / 16000.).floor() as usize;
     let fa = rate / d as f64;
@@ -216,12 +226,7 @@ fn replay(c: &Case, parts: &[usize]) -> Result<Vec<Value>> {
                 phase = "idle";
                 note.push("expired");
             }
-            let x = (1..=10)
-                .map(|k| {
-                    0.08 * (TAU * f64::from(k) * 196. * (t as f64 / rate)).cos()
-                        / f64::from(k).powf(0.65)
-                })
-                .sum::<f64>();
+            let x = sample(t);
             let x = if c.constant_after.is_some_and(|at| t >= at) {
                 -0.9
             } else {
@@ -587,4 +592,118 @@ pub fn event_controls() -> Result<Value> {
         "stale feature publication",
     )?;
     Ok(json!({"deadlines":checks,"duplicate_types":5,"collisions":3,"hold":3300}))
+}
+
+pub(super) fn fault_schedule(fault: Option<usize>) -> Result<super::stereo_clock::Schedule> {
+    let mut c = event_fixture(48000., 479);
+    c.count = 8500;
+    let base = c.frames[&239].clone();
+    c.frames = (239..c.count)
+        .step_by(240)
+        .map(|t| {
+            let mut f = base.clone();
+            if fault.is_some() && t >= 6000 {
+                f.owner = [0, 2];
+            }
+            (t, f)
+        })
+        .collect();
+    c.stamps = (239..c.count).step_by(240).map(|t| (0, t)).collect();
+    if let Some(t) = fault {
+        // The numerical fault takes place after the normal capture/commit at t.
+        c.events.insert(
+            t + 1,
+            vec![
+                json!({"kind":"fault"}),
+                json!({"kind":"dispose","epoch":1,"energy":0.}),
+            ],
+        );
+        c.events.insert(6000, vec![json!({"kind":"pick"})]);
+        c.events.insert(
+            6479,
+            vec![
+                json!({"kind":"confirm","token":[0,2],"valid_through":8000}),
+                json!({"kind":"launch","token":[0,2],"epoch":2,"energy":0.}),
+            ],
+        );
+    }
+    let mut schedule = Vec::new();
+    for row in replay_input(&c, &[0, 1, 127, 8193], super::stereo_clock::input)? {
+        let entry = (
+            row["tick"].as_u64().ok_or("capture tick")? as usize,
+            row["epoch"].as_u64().map(|i| i as usize),
+            serde_json::from_value::<[f64; 12]>(row["target"].clone())?,
+        );
+        if schedule
+            .last()
+            .is_none_or(|previous: &(usize, Option<usize>, [f64; 12])| {
+                previous.1 != entry.1 || previous.2 != entry.2
+            })
+        {
+            schedule.push(entry);
+        }
+    }
+    Ok(schedule)
+}
+
+pub(super) fn uneven(kind: &str) -> Result<Vec<Value>> {
+    let mut c = event_fixture(47001., 2614);
+    c.count = 14500;
+    c.events = [
+        (19, vec![json!({"kind":"reset"})]),
+        (20, vec![json!({"kind":"pick"})]),
+        (
+            488,
+            vec![json!({"kind":"confirm","token":[1,1],"valid_through":5000})],
+        ),
+        (
+            2614,
+            vec![json!({"kind":"launch","token":[1,1],"epoch":1,"energy":0.})],
+        ),
+    ]
+    .into();
+    let mut base = c.frames.values().next().unwrap().clone();
+    base.owner = [1, 1];
+    c.frames = (253..2604)
+        .step_by(235)
+        .map(|t| (t, base.clone()))
+        .collect();
+    c.stamps = (19 + 236 - 1..c.count)
+        .step_by(236)
+        .map(|t| (1, t))
+        .collect();
+    match kind {
+        "missing-A2" => {
+            c.frames.remove(&2603);
+        }
+        "missing-I1" => {
+            c.stamps.remove(&(1, 2614));
+        }
+        "complete" => {}
+        _ => return Err("uneven fixture".into()),
+    }
+    replay_input(&c, &[0, 1, 255, 19], |t| {
+        (1..=10)
+            .map(|k| {
+                0.12 * (TAU * 196. * f64::from(k) * (t as f64 / c.rate)).cos()
+                    / f64::from(k).powf(0.7)
+            })
+            .sum()
+    })
+}
+pub(super) fn registered(rate: f64, launch: usize) -> Result<super::stereo_clock::Schedule> {
+    let mut case = event_fixture(rate, launch);
+    case.count = launch + 1;
+    case.frames.retain(|&t, _| t == launch);
+    let r = replay_input(&case, &[0, 1, 4097], |_| 0.)?;
+    ensure(
+        r.last()
+            .is_some_and(|r| r["epoch"] == 1 && r["tick"] == launch),
+        "registered held-control launch",
+    )?;
+    Ok(vec![(
+        launch,
+        Some(1),
+        std::array::from_fn(|j| [-0.4376586748096509, 0.7782794100389229][j % 2]),
+    )])
 }
