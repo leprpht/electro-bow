@@ -15,11 +15,14 @@ const REGRESSION: &[&str] = &[
     "o2-bench",
     "o2-acoustic",
     "o2-sweep",
+    "o2-records",
     "o2-carrier",
     "o2-mutants",
     "i1-stationary",
     "i1-motion",
     "i1-qr",
+    "i1-path-mutants",
+    "i1-layout",
     "i1-capture",
     "i1-review82",
     "pitch",
@@ -71,7 +74,7 @@ pub fn run(dir: &Path, reference: &Path, complete: bool, historical: bool) -> Re
         let pending = [
             "complete O2 dependent evidence and 54-control inventory",
             "joined I1 capture, signed A4, cached stereo lifecycle and behavioral mutants",
-            "controlled recording protocol and source discrimination scorer",
+            "cross-suite qualification of source-discrimination and joined recording controls",
         ];
         evidence::atomic(
             &dir.join("unqualified.json"),

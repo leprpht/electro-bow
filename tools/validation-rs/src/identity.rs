@@ -2,7 +2,9 @@
 pub mod capture;
 pub mod deadlines;
 pub mod epoch;
+pub mod layout;
 pub mod motion;
+pub mod paths;
 pub mod qr;
 pub mod stationary;
 use crate::{Result, ensure, evidence};

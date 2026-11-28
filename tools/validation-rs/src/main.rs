@@ -33,6 +33,7 @@ fn ensure(condition: bool, message: &str) -> Result<()> {
 const SUITES: &[&str] = &[
     "fixtures",
     "recordings",
+    "repeatability",
     "recording-controls",
     "contact",
     "pitch",
@@ -47,6 +48,8 @@ const SUITES: &[&str] = &[
     "contact-mutants",
     "i1-bank-compare",
     "i1-qr",
+    "i1-layout",
+    "i1-path-mutants",
     "i1-capture",
     "i1-review82",
     "signed-compare",
@@ -57,6 +60,7 @@ const SUITES: &[&str] = &[
     "o2-acoustic",
     "o2-acoustic-compare",
     "o2-sweep",
+    "o2-records",
     "o2-mutants",
     "o2-timing",
     "o1-state",
@@ -69,6 +73,7 @@ const DEFAULT_OUT: &str = "build/validation-migration/rust";
 
 fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
     match suite {
+        "repeatability" => recordings::scoring::run(dir, reference),
         "recordings" => recordings::preflight(dir, reference),
         "recording-controls" => recordings::controls(dir),
         "fixtures" => audio::fixtures(),
@@ -80,9 +85,12 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
         "signed-compare" => identity::deadlines::signed(reference),
         "i1-review82" => identity::deadlines::run(dir),
         "i1-capture" => identity::capture::run(),
+        "i1-path-mutants" => identity::paths::run(dir),
+        "i1-layout" => identity::layout::run(),
         "i1-qr" => identity::qr::run(dir),
         "i1-motion" => identity::motion::run(dir),
         "i1-stationary" => identity::stationary::run(dir),
+        "o2-records" => electrical::records::run(dir),
         "o2-sweep" => electrical::sweep::run(dir),
         "o2-acoustic-compare" => electrical::acoustic::differential(
             reference,
@@ -162,12 +170,13 @@ fn run() -> Result<()> {
         "unknown validation suite (use list)",
     )?;
     ensure(
-        (args.len() == 1 && suite != "recordings")
+        (args.len() == 1 && !matches!(suite, "recordings" | "repeatability"))
             || (matches!(
                 suite,
                 "compare"
                     | "pitch-compare"
                     | "recordings"
+                    | "repeatability"
                     | "guide-compare"
                     | "o2-acoustic-compare"
                     | "signed-compare"

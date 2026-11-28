@@ -15,6 +15,9 @@ pub struct Kernel {
 }
 impl Kernel {
     pub fn build(out: &Path) -> Result<Self> {
+        Self::from_source(out, Path::new("tools/validation/i1_stream.cpp"))
+    }
+    pub(super) fn from_source(out: &Path, source: &Path) -> Result<Self> {
         let path = out
             .canonicalize()?
             .join(format!("epoch{}", std::env::consts::DLL_SUFFIX));
@@ -29,9 +32,9 @@ impl Kernel {
                     "-Werror",
                     "-shared",
                     "-fPIC",
-                    "tools/validation/i1_stream.cpp",
-                    "-o",
                 ])
+                .arg(source)
+                .arg("-o")
                 .arg(&path),
         )?;
         // SAFETY: this library was built above from the fixed, non-shipping C ABI.

@@ -1,6 +1,7 @@
 pub mod acoustic;
 pub mod carrier;
 pub mod oracle;
+pub mod records;
 pub mod sweep;
 mod timing;
 use crate::{Result, ensure, evidence, numerics, process, replay};

@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-fn basis(angles: &[f64]) -> DMatrix<f64> {
+pub(super) fn basis(angles: &[f64]) -> DMatrix<f64> {
     DMatrix::from_fn(angles.len(), 6, |i, j| match j {
         0 => 1.,
         1 => angles[i].cos(),
@@ -70,18 +70,32 @@ fn moments(b: &DMatrix<f64>, x: &DMatrix<f64>, out: &[[f64; 20]]) -> Vec<f64> {
     ]);
     sums
 }
-struct Projection {
+pub(super) struct Projection {
     basis: DMatrix<f64>,
     qt: DMatrix<f64>,
     r: DMatrix<f64>,
 }
 impl Projection {
+    pub(super) fn new(basis: DMatrix<f64>) -> Self {
+        let (q, r) = basis.clone().qr().unpack();
+        Self {
+            basis,
+            qt: q.transpose(),
+            r,
+        }
+    }
     fn fit(&self, x: &DVector<f64>) -> Result<DVector<f64>> {
         self.r
             .solve_upper_triangular(&(&self.qt * x))
             .ok_or_else(|| "singular QR".into())
     }
-    fn passes(&self, x: &DVector<f64>, neutral: f64, m5: f64, recovery: bool) -> Result<bool> {
+    pub(super) fn passes(
+        &self,
+        x: &DVector<f64>,
+        neutral: f64,
+        m5: f64,
+        recovery: bool,
+    ) -> Result<bool> {
         let n = x.len() as f64;
         let a = self.fit(x)?;
         let residual = (x - &self.basis * &a).norm() / n.sqrt();
@@ -95,7 +109,7 @@ impl Projection {
             && h(1) >= margin * h(3).max(SQRT_2 * a[5].abs()).max(residual) + 1e-12)
     }
 }
-fn case(kernel: &Kernel, fs: f64, kind: &str, ratio: f64) -> Result<Value> {
+pub(super) fn case(kernel: &Kernel, fs: f64, kind: &str, ratio: f64) -> Result<Value> {
     let frequency = if kind == "degenerate" { 1320. } else { 196. };
     let n = 2 * ((4. * fs / frequency + 0.5).floor() as usize);
     let mut angles = Vec::new();

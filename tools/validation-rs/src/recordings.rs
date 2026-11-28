@@ -1,4 +1,5 @@
 //! Controlled recording preflight. Hash decoded source, interval and attack before any wet processing.
+pub mod scoring;
 use crate::{Result, ensure, evidence, observation};
 use hound::{SampleFormat, WavReader};
 use serde_json::{Value, json};
@@ -255,10 +256,15 @@ pub fn controls(dir: &Path) -> Result<Value> {
         "duplicate containers",
         "duplicate captures",
         "overlapping attacks",
+        "withheld wet cue",
     ] {
         let dest = dir.join(scenario);
         fs::create_dir(&dest)?;
-        let rate = 16000;
+        let rate = if scenario == "withheld wet cue" {
+            48000
+        } else {
+            16000
+        };
         let mut classes = json!({});
         let mut session = vec![];
         let mut log = vec![];
@@ -273,6 +279,24 @@ pub fn controls(dir: &Path) -> Result<Value> {
             let mut x: Vec<_> = (0..5000)
                 .map(|t| ((0.1 + base as f64 / 100.) * (t as f64 * 0.01).cos()) as f32)
                 .collect();
+            if scenario == "withheld wet cue" {
+                let factor = if label == "A" { 3. } else { 0.22 };
+                x = (0..17280)
+                    .map(|n| {
+                        let t = n as f64 / 48000.;
+                        (1..=12)
+                            .map(f64::from)
+                            .map(|k| {
+                                let amplitude = 0.12 / k * if k == 6. { factor } else { 1. };
+                                amplitude
+                                    * (std::f64::consts::TAU * k * 196. * t
+                                        + 0.002 * (i / 2) as f64 * k)
+                                        .cos()
+                            })
+                            .sum::<f64>() as f32
+                    })
+                    .collect();
+            }
             if scenario == "duplicate captures" {
                 x[4999] = i as f32 * 0.01;
             }
@@ -339,6 +363,32 @@ pub fn controls(dir: &Path) -> Result<Value> {
             },
             &format!("recording control {scenario}: {errors:?}"),
         )?;
+        if scenario == "withheld wet cue" {
+            let scored = scoring::evaluate_cell(&dest, &manifest)?;
+            ensure(
+                scored["status"] == "held discrimination failed"
+                    && scored["failures"] == json!(["withheld wet signed cue"])
+                    && scored["registered_signs"] == json!([1, 1]),
+                "synthetic withheld disposition",
+            )?;
+            for (group, split, want) in [
+                ("di", "calibration", 6.272483631480569),
+                ("di", "withheld", 6.272484490268842),
+                ("score", "calibration", 2.0510318994384766),
+                ("score", "withheld", 2.0510330924123585),
+            ] {
+                ensure(
+                    (scored[group][split]["margin"]
+                        .as_f64()
+                        .ok_or("missing split margin")?
+                        - want)
+                        .abs()
+                        <= 1e-9,
+                    "historical calibration/withheld margin",
+                )?;
+            }
+            evidence::atomic(&dest.join("controlled.json"), &scored)?;
+        }
         rows.push(json!({"scenario":scenario,"actual":verdict,"synthetic":true}));
     }
     Ok(json!({"controls":rows}))

@@ -30,7 +30,7 @@ pub(super) fn interp(t: f64, x: &[f64], y: &[f64]) -> f64 {
     let i = edge - 1;
     ((y[edge] - y[i]) / (x[edge] - x[i])).mul_add(t - x[i], y[i])
 }
-fn schedule(kind: &str, fs: u32) -> (Vec<f64>, Vec<f64>, Vec<u8>) {
+pub(super) fn schedule(kind: &str, fs: u32) -> (Vec<f64>, Vec<f64>, Vec<u8>) {
     let n = fs as usize * if kind == "lift" { 7 } else { 3 };
     let rate = f64::from(fs);
     let mut pitch = Vec::with_capacity(n);
@@ -162,6 +162,7 @@ fn case(kind: &str, fs: u32, c: &Contract, exe: &Path, kernel: &Kernel) -> Resul
     let mut bank = Bank::new(rate)?;
     let mut maximum = 0.0f64;
     let mut delta = Vec::with_capacity(n);
+    let mut corrections = Vec::with_capacity(n);
     let mut monitor = Sha256::new();
     let mut start = 0;
     let mut windows = 0;
@@ -171,6 +172,7 @@ fn case(kind: &str, fs: u32, c: &Contract, exe: &Path, kernel: &Kernel) -> Resul
         b[0] = f[0];
         b[1..].copy_from_slice(&f[2..18]);
         let independent = bank.apply(&b)?;
+        corrections.push(independent[..4].try_into().unwrap());
         for j in 0..4 {
             let err = (independent[j] - r[j]).abs();
             ensure(err <= 2e-11, "fourth-bank correction")?;
@@ -211,6 +213,33 @@ fn case(kind: &str, fs: u32, c: &Contract, exe: &Path, kernel: &Kernel) -> Resul
             windows += 1;
         }
     }
+    let oracle = super::paths::drive(&frames, &corrections, rate)?;
+    let mut slew_error = 0f64;
+    let mut wet_error = 0f64;
+    for (i, r) in output.iter().enumerate() {
+        let e = (r[8] - oracle.scale[i]).abs();
+        ensure(
+            e <= 2e-12,
+            &format!(
+                "{kind}/{fs} independent permission at {i}, expected {}, actual {}",
+                oracle.scale[i], r[8]
+            ),
+        )?;
+        slew_error = slew_error.max(e);
+        for j in 0..4 {
+            let e = (r[4 + j] - oracle.wet[i][j]).abs();
+            ensure(e <= 2e-11, "independent motion wet trajectory")?;
+            wet_error = wet_error.max(e);
+        }
+    }
+    ensure(
+        oracle.decisions.len() == windows
+            && oracle
+                .decisions
+                .iter()
+                .all(|(end, ok)| output[end - 1][10] != 0. && ((output[end - 1][11] != 0.) == *ok)),
+        "full-window realized decisions",
+    )?;
     let digests: BTreeMap<_, _> = ["pitch", "depth", "request", "q", "d", "scale", "wet"]
         .into_iter()
         .zip(hashes)
@@ -223,7 +252,7 @@ fn case(kind: &str, fs: u32, c: &Contract, exe: &Path, kernel: &Kernel) -> Resul
         format!("{:x}", monitor.finalize()) == c.monitor_sha256 && windows == c.windows,
         "retired-window dispositions",
     )?;
-    let mut row = json!({"frames":n,"windows":windows,"hashes":digests,"max_bank_error":maximum,"monitor_sha256":c.monitor_sha256});
+    let mut row = json!({"frames":n,"windows":windows,"hashes":digests,"full_window_slew_error":slew_error,"full_window_wet_error":wet_error,"max_bank_error":maximum,"monitor_sha256":c.monitor_sha256});
     if kind == "vibrato" {
         row["off"] = witness(
             &delta,
