@@ -1,6 +1,8 @@
 # Ordered migration from the six-control instrument
 
-Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+Rust provides the authoritative validation commands. Review 8.2 governs DSP qualification and stage authorizations. [Qualification commands](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
+The next authorized change is Review 8.2’s single offline transaction and qualification revision. [Review 8.2 increment](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
 
 Begin from the audited six-control `EbInstrument` graph. Each increment below has a buildable end state. The first production audio routing change is step 6. A separately reviewable host-only rate guard can follow step 1. Current independent work permissions are in [specification sign-off](status/SPECIFICATION_SIGNOFF.md). A temporarily unconnected module may be compiled under `#[cfg(test)]` until its consumer is ready. Keep the existing C ABI usable throughout. Sections M1–M7 refer to the [mathematics](../architecture/BOWED_STRING_MATHEMATICS.md), A1–A4 to the [control and integration contracts](../architecture/ELECTROBOW_TARGET_ARCHITECTURE.md), and V01–V22 to the [validation cases](DSP_VALIDATION_PLAN.md).
 

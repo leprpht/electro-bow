@@ -24,7 +24,7 @@ Exact seeds, input schedules, field names, threshold predicates, fixture manifes
 
 Use a separate Cargo workspace at `tools/validation-rs`. The root manifest and lockfile are inputs to both the native build and historical mutation scripts that copy only `rust/dsp` into temporary roots. A nested workspace preserves those callers and keeps all validation dependencies outside the shipping dependency graph. Production execution occurs in existing replay processes. Oracle calculations have no Cargo dependency on the DSP crate.
 
-Freeze original executable outputs and fixtures, verify numeric and evidence primitives, then port the carrier, observation, electrical, analysis/controller and identity suites. Qualify each normal exit and its real defective variants before advancing authority. The [equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) records which work has reached each boundary. [Review V1](status/REVIEW_V1_RUST_VALIDATION_MIGRATION.md) records the cutover disposition.
+Freeze original executable outputs and fixtures, verify numeric and evidence primitives, then port the carrier, observation, electrical, analysis/controller and identity suites. Qualify each normal exit and its real defective variants before advancing authority. The [equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) records which work has reached each boundary. [Review V1.1](status/REVIEW_V1_1_RUST_VALIDATION_CLOSURE.md) records the final cutover decision.
 
 ## Dependency and arithmetic decisions
 
@@ -49,9 +49,9 @@ The locked metadata declares MIT or Apache 2.0 choices for RustFFT, the num crat
 
 ## Historical references
 
-The owner retains all existing Python validation and independent offline C++ references in place. Their frozen comparison revision is `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0`. The `retirement` column of the per-file inventory records the original migration proposal. The owner decision supersedes its deletion proposals. After cutover the historical implementations serve comparison and replay only, with no synchronization requirement. Unclosed families retain their existing executable authority pending cutover. Permanent attributed audio, native/ABI tests and actual-code adapters retain their roles. [Per-file inventory](validation-inventory.tsv) · [Frozen replay instructions](VALIDATION_RUST_GUIDE.md#frozen-comparison-and-review)
+The owner retains all existing Python validation and independent offline C++ references in place. Their frozen comparison revision is `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0`. The `retirement` column of the per-file inventory records the original migration proposal. The owner decision supersedes its deletion proposals. The historical implementations serve comparison and replay and have no synchronization requirement. Permanent attributed audio, native/ABI tests and actual-code adapters retain their roles. [Per-file inventory](validation-inventory.tsv) · [Frozen replay instructions](VALIDATION_RUST_GUIDE.md#frozen-comparison-and-review)
 
-### Exceptions submitted for independent review
+### Retained research and platform evidence
 
 The historical Stage 04 identity/gesture listening experiment, string-parameter exploration and ledger replay retain their entry programs so reviewers can reproduce the reports cited by earlier design decisions. The current offline study, moving identity, stationary V17, original observation and electrical reports have separate Rust owners. The original NumPy/SciPy extractors run only when rebuilding frozen evidence. The host and offline C++ epoch exercise actual native boundaries. Real controlled takes, listening responses and native platform attestations require their respective external owners.
 

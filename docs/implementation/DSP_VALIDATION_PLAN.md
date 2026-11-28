@@ -1,6 +1,6 @@
 # Validation, latency and real-time budget
 
-Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+Rust provides the authoritative validation commands. Review 8.2 governs DSP qualification and stage authorizations. [Qualification commands](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
 
 Use the [equations M1–M7](../architecture/BOWED_STRING_MATHEMATICS.md) as the oracle for a single voice and [A1–A4](../architecture/ELECTROBOW_TARGET_ARCHITECTURE.md) for control behavior. Numbers marked **measured** below are isolated research checks or explicitly attributed baseline measurements. Numbers in the acceptance matrix are proposed gates for future Rust and VST3 implementations.
 
@@ -104,7 +104,7 @@ Stage entry, observation points and ownership of every clause are specified in t
 2. **Player control.** Use `Bend-Slide G.wav`, `Hammer-Pull High E.wav` and `GStaccato.wav` as one short annotated passage. Judge bend lag, repick distinction, note stops and zipper/clicks on headphone and small speaker. Include an actual live monophonic phrase on acoustic or mic'd guitar and an electric DI to cover handling/room noise and tactile latency.
 3. **Identity and fallback.** Compare a bright bridge pickup and warm guitar through factory settings, followed by a staggered D chord into a single note and bypass. Check if they remain distinguishable and if ambiguous material gives way gracefully to the next identifiable note. Include inverted stereo and a spatial stereo recording. Log the actual host/plugin identity and route.
 
-Use `cargo test --workspace --locked --offline` and the repository's normal CMake build followed by `ctest --test-dir <build> -C Release --output-on-failure`. For the binary-level fixtures run `python tools/render_guitar_comparisons.py <built.vst3> <output-dir>` with its optional Python packages. Extend that tool's silence padding to at least 1.3 s for active-note tail tests. Keep measurements in build artifacts; the [migration plan](ELECTROBOW_MIGRATION_PLAN.md) assigns each gate to a change.
+Use `cargo test --workspace --locked --offline` and the repository's normal CMake build followed by `ctest --test-dir <build> -C Release --output-on-failure`. For binary-level fixtures run the Rust `package` suite against the configured native build. The recorded guitar fixture command replays the four historical auditions and checks preset recall across block sizes. Use at least 1.3 s of silence for active-note tail tests. Keep measurements in build artifacts. [Packaged fixture commands](VALIDATION_RUST_GUIDE.md#frozen-comparison-and-review) · [Migration plan and gate ownership](ELECTROBOW_MIGRATION_PLAN.md)
 
 ## V02 stored-graph comparison
 
@@ -116,7 +116,9 @@ Replay all 80,500 grid, knot and history cases and the signed fold neighborhoods
 
 ## Executable reference for the low E energy check
 
-For routine replay run [the standalone string oracle](../../tools/validation/string_oracle.py), which also checks the 90-case spectral grid and the paired seven-second release windows. The following Python 3 block runs the scalar calculation with the reviewed M3b endpoint rule. It prepares knot loads and eagerly evaluates the initial history to give the Rust implementation a small, independently organized oracle. Its returned statistic is standard deviation of the last second of the uncolored bridge **velocity**. Change `lift` only between the two runs. Do not put this reference loop on an audio thread.
+Use the Rust `guide` suite for routine replay. The historical standalone string oracle also checks the 90-case spectral grid and the paired seven-second release windows. [Rust commands](VALIDATION_RUST_GUIDE.md#reproduction-and-results) · [Historical oracle](../../tools/validation/string_oracle.py)
+
+The following Python 3 block runs the scalar calculation with the reviewed M3b endpoint rule. It prepares knot loads and eagerly evaluates the initial history to give the Rust implementation a small, independently organized oracle. Its returned statistic is standard deviation of the last second of the uncolored bridge **velocity**. Change `lift` only between the two runs. Do not put this reference loop on an audio thread.
 
 ```python
 from math import exp, floor, ceil, isfinite

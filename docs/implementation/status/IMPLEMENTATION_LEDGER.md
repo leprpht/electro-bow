@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Review V1.1 closes the Rust validation cutover
+
+Reviewed `3905767..dd13710`. The Stage 08 archive differs only by the authorized one-ULP gain, float64 preflight retains decoded identity and duplicate rejection, and coherent provenance and stale producer substitutions fail schema 3 inspection. Python-blocked O2 and complete frozen qualification exited 0 and passed receipt reinspection. All 43 regression producers and 14 frozen comparisons passed. Rust becomes authoritative for validation. Retain the existing Python and independent offline C++ files without parallel maintenance. Resume the narrow offline Review 8.2 remediation with all DSP and shipping boundaries preserved. [Independent closure and evidence](REVIEW_V1_1_RUST_VALIDATION_CLOSURE.md)
+
 ## 2026-11-28 · Stage V1.1 submits the three validation corrections for independent review
 
 At `000bd410`, Python-blocked O2 and complete Rust qualification both exited 0. All 43 regression producers and 14 frozen comparisons passed. Stage 08 retains its canonical archive with one owner-authorized gain disposition. The float64 eight-take control retains its decoded identities and withheld wet-cue failure. The coherently rehashed fixtures counterexample now fails at inspection. Review V1.1 owns the proposed validation cutover. Existing DSP and release gates remain in force. [Runs, digests and review scope](STAGE_V1_1_RUST_VALIDATION_CLOSURE.md)

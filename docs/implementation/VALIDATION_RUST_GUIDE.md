@@ -16,7 +16,20 @@ v=tools/validation-rs/target/release/electrobow-validation
 
 On Windows use the corresponding `.exe`. Native packaging needs a configured Release CMake tree and JUCE. Set `JUCE_PATH` when JUCE is outside the default `JUCE` directory. Historical O1 state comparison needs Git history including `0c98f608`. The C++ offline epoch comparison needs a C++17 compiler available as `clang++`. Platform availability is recorded in the [stage handoff](status/STAGE_V1_RUST_VALIDATION_MIGRATION.md).
 
-Use Cargo and [direct CMake](../../README.md#build) for local development without Python. The Rust validation executable also runs without Python. Existing stage exits retain their reviewed authority pending independent Review V1.1. Extend future permanent validation in Rust. [V1.1 cutover submission](status/STAGE_V1_1_RUST_VALIDATION_CLOSURE.md)
+The standalone Rust workspace is ElectroBow’s authoritative validation infrastructure and the default for permanent validation. Use Cargo and direct CMake for local development without Python. Review 8.2 governs DSP qualification and implementation authority. [Direct CMake build](../../README.md#build) · [Cutover decision](status/REVIEW_V1_1_RUST_VALIDATION_CLOSURE.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
+## Qualification commands
+
+Run the electrical exit and the full frozen comparison from the repository root with the release executable above and the configured native build. The complete command consumes the existing frozen reference directory.
+
+```sh
+"$v" o2-qualification
+"$v" inspect o2-qualification
+"$v" qualification build/validation-migration/reference
+"$v" inspect qualification
+```
+
+Use `"$v" regression` for the fresh regression producers when the historical comparison data is unavailable. The full qualification also requires the frozen comparisons and canonical artifact gate. Review `comparisons.json` for the completed comparison inventory and unresolved artifact differences. The equivalence matrix maps the Rust suites to the existing stage criteria. [Frozen reference preparation](#frozen-comparison-and-review) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md)
 
 ## Workspace ownership
 
@@ -90,6 +103,6 @@ The existing Python validation and independent offline C++ sources are retained 
 
 The default comparison directory is `build/validation-migration/reference`. On arm64 macOS install the six pinned packages in the Python 3.9.6 environment named by `ELECTROBOW_REFERENCE_PYTHON`, build the original Release package, then run `sh tools/validation-rs/reference/reproduce.sh` from the project root. This checks out the entry revision, runs the historical suites, exercises the surviving half-product variant and exports comparison data. Freeze scripts are reference-side extraction tools. Run `"$v" differential` to execute both new producers and comparisons. The nested invocation uses a single copied executable throughout and writes one child inventory per aggregate. `qualification` checks the fresh artifact audit and returns nonzero for an unresolved canonical difference. Its invocation keeps `inventory.json`, `electrical.json`, the child receipts and, on an unresolved difference, `unqualified.json`. The complete half-product and carrier mutation controls require the named subordinate predicate to be the first failing boundary. [Historical environment](../../tools/validation-rs/reference/requirements-macos-arm64.txt) · [Disposition and open owners](status/STAGE_V1_RUST_VALIDATION_MIGRATION.md)
 
-The Build and test workflow compiles and exercises the validation workspace on each platform. A manual workflow dispatch also runs the full Rust regression on macOS with Git history for O1 private-state replay. Its artifact contains the aggregate receipt, child inventory and failure logs. A local `differential` additionally requires the original frozen run. Use `"$v" qualification build/validation-migration/reference` to grade fresh Rust producers, run every historical comparison on those same subordinate receipts, and then apply the canonical artifact gate. Review `comparisons.json` in that invocation for the completed comparison inventory even when the canonical gate fails. Hosted execution of the new workflow is pending.
+The Build and test workflow compiles and exercises the validation workspace on each platform. A manual workflow dispatch also runs the full Rust regression on macOS with Git history for O1 private-state replay. Its artifact contains the aggregate receipt, child inventory and failure logs. A local `differential` additionally requires the original frozen run. Hosted execution of the new workflow is pending.
 
 On macOS, after `"$v" package`, run the optional recorded guitar regression with `cargo test --release --locked --offline --manifest-path tools/validation-rs/Cargo.toml --test packaged_recordings -- --ignored --nocapture`. It recreates all four original auditions from the recorded sources, checks all eight PCM24 containers against frozen SHA-256 values, reloads each fresh state at two other block sizes and prints the directory containing the WAVs and comparison receipt. The original cross-host generator runs as part of the frozen replay.

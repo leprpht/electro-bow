@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-28 · Authorize Rust as ElectroBow’s validation infrastructure
+
+Accept V1-1, V1-2 and V1-3. Use Rust by default for all future permanent validation. Use the Rust O2 and complete frozen qualification commands as the authoritative exits. Keep every existing Python validation and independent offline C++ file in place for historical replay and comparison. Future Rust validation changes carry no parallel maintenance requirement. The Stage 08 canonical ZIP and its one authorized equivalence disposition stand. O2 and Stage 08.2 retain exact archive equality.
+
+Resume Review 8.2’s single offline transaction and qualification revision for signed pre-link output and fault fade, exact withdrawal, prepared field ownership and strict dependent evidence ingestion. Preserve all existing DSP failures, stage authorizations, holds and shipping behavior. [Cutover decision](REVIEW_V1_1_RUST_VALIDATION_CLOSURE.md) · [Qualification commands](../VALIDATION_RUST_GUIDE.md#qualification-commands) · [Review 8.2 authorization](REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
+
 ## 2026-11-28 · Scope the Stage 08 archive equivalence to one historical gain
 
 Preserve the canonical frozen ZIP at SHA-256 `90222fb6bd1590713f287527607771d1db7d1f36122da5d0020bad70d96c9809`. The owner permits the measured Rust ZIP `0f6a5e212c3d751702ae6e3c16bf8d43db45fc1095b2ef1d05e3a9c42dd5a89c` for historical equivalence. Its techs-P2-60-held gain is 0.48111582544669923 versus the original 0.4811158254466993, exactly one binary64 ULP lower. Require all 17 members, all 14 WAV byte streams, attribution, instructions and the other six gains. Stage 08.2 and O2 retain exact ZIP requirements. The independent reviewer owns the cutover decision. [Stage V1.1 submission](STAGE_V1_1_RUST_VALIDATION_CLOSURE.md)

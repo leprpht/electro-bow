@@ -1,6 +1,6 @@
 # Proposed acoustic validation and listening gate
 
-Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+Rust provides the authoritative validation commands. Review 8.2 governs DSP qualification and stage authorizations. [Qualification commands](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
 
 Stage 08 proposes an [executable I1 matrix](I1_ACCEPTANCE_MATRIX.md) and [registered held-source protocol](../research/I1_SOURCE_REPEATABILITY_EVIDENCE.md). The Stage 07 neutral evidence and historical unsafe stress vectors remain separate references. Review 8 retained the carrier and held I1. Independent Review 8.1 owns the remediation disposition. Original V17–V22 and owner hearing retain their stage ownership.
 
@@ -10,7 +10,11 @@ The Stage 07 renderer compares actual Rust intermediate taps to independent conv
 
 ## Replay and corpus
 
-Run from the repository root with the pinned Rust toolchain on PATH and Python with NumPy/SciPy. The saved reference WAVs and hashes below allow an offline replay. No network, ignored Review 3 script, host or pitch selector is required. The qualification writes approximately 4.5 GB to the ignored build directory.
+Use the Rust `guide`, `guide-negative`, `research-observation` and `o2-qualification` suites for current validation of the covered boundaries. Stage 04 identity and gesture auditions retain their historical experiment record. [Rust commands and comparison owners](VALIDATION_RUST_GUIDE.md#reproduction-and-results)
+
+### Historical Stage 03 and 04 replay
+
+Run this historical replay from the repository root with the pinned Rust toolchain on PATH and Python with NumPy/SciPy. The saved reference WAVs and hashes below allow an offline replay. No network, ignored Review 3 script, host or pitch selector is required. The qualification writes approximately 4.5 GB to the ignored build directory.
 
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"

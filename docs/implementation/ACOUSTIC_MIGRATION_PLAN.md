@@ -1,6 +1,6 @@
 # Proposed ordered acoustic migration
 
-Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+Rust provides the authoritative validation commands. Review 8.2 governs DSP qualification and stage authorizations. [Qualification commands](VALIDATION_RUST_GUIDE.md#qualification-commands) · [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) · [Review 8.2 authorization](status/REVIEW_08_2_I1_STREAMING_QUALIFICATION.md#final-authorization)
 
 The owner selected the magnetic reference. Review 5 qualified isolated Rust O1. Review 6 authorized isolated O2. Review 7 qualified private Rust O2 in isolation. Independent Review 8 retained the carrier and blocked isolated I1 implementation. Stage 08.1 submits the offline phase monitor, joined transaction and replay-bound exit for independent Review 8.1. The original [migration and V-number ownership](ELECTROBOW_MIGRATION_PLAN.md#validation-ownership) and existing stage authorizations still apply. No live routing follows from completion of this document.
 
