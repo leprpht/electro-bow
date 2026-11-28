@@ -63,6 +63,135 @@ const COMPARISONS: &[&str] = &[
     "pitch-compare",
     "i1-bank-compare",
 ];
+fn child_link(receipt: &Value) -> Value {
+    json!({"id":receipt["run_id"],"executable":receipt["executable_sha256"],"revision":receipt["revision"],"elapsed_seconds":receipt["elapsed_seconds"],"evidence":receipt["artifacts"]["evidence.json"]})
+}
+
+pub fn validate_children(
+    dir: &Path,
+    suite: &str,
+    results: &Value,
+    revision: &str,
+    executable: &str,
+) -> Result<()> {
+    if !matches!(
+        suite,
+        "qualification" | "regression" | "differential" | "o2-qualification"
+    ) {
+        return Ok(());
+    }
+    ensure(
+        evidence::digest(&dir.join(format!("runner{}", std::env::consts::EXE_SUFFIX)))?
+            == executable,
+        "run-local executable digest",
+    )?;
+    let historical = results["historical_comparisons"]
+        .as_bool()
+        .ok_or("historical comparison flag")?;
+    ensure(
+        match suite {
+            "differential" => historical,
+            "qualification" => true,
+            _ => !historical,
+        },
+        "aggregate comparison mode",
+    )?;
+    let root = dir.join("children");
+    let mut links = BTreeMap::new();
+    let mut receipts = BTreeMap::new();
+    for &name in REGRESSION
+        .iter()
+        .filter(|s| suite != "o2-qualification" || s.starts_with("o2-"))
+        .chain(COMPARISONS.iter().filter(|_| historical))
+    {
+        let receipt = publication::inspect(&root.join(name), name)?;
+        ensure(
+            receipt["schema"] == 3
+                && receipt["status"] == "passed"
+                && receipt["revision"] == revision
+                && receipt["executable_sha256"] == executable,
+            "aggregate child provenance",
+        )?;
+        links.insert(name, child_link(&receipt));
+        receipts.insert(name, receipt);
+    }
+    let read = |path| evidence::strict(&fs::read(path)?);
+    let inventory = json!(links);
+    ensure(
+        results["suites"] == inventory && read(dir.join("inventory.json"))? == inventory,
+        "run-local producer inventory",
+    )?;
+    if historical {
+        let comparisons: BTreeMap<_, _> = COMPARISONS
+            .iter()
+            .map(|&name| (name, &links[name]))
+            .collect();
+        ensure(
+            read(dir.join("comparisons.json"))?["completed_comparisons"] == json!(comparisons),
+            "run-local comparison links",
+        )?;
+    }
+    if suite != "o2-qualification" {
+        let payload = |name: &str| {
+            read(
+                root.join(name)
+                    .join(links[name]["id"].as_str().ok_or("producer id")?)
+                    .join("evidence.json"),
+            )
+        };
+        let sources = payload("i1-evidence")?;
+        let sources = sources["results"]["sources"]
+            .as_object()
+            .ok_or("evidence sources")?;
+        ensure(
+            sources.len() == crate::identity::evidence_controls::PRODUCERS.len()
+                && crate::identity::evidence_controls::PRODUCERS
+                    .iter()
+                    .all(|s| sources.get(*s) == Some(&links[s]["id"])),
+            "run-local I1 evidence links",
+        )?;
+        let audit = payload("i1-artifacts")?;
+        let artifacts = audit["results"]["artifacts"]
+            .as_object()
+            .ok_or("I1 artifacts")?;
+        ensure(artifacts.len() == 105, "I1 artifact inventory")?;
+        for (name, row) in artifacts {
+            let receipt = receipts
+                .get(row["producer"].as_str().ok_or("artifact producer")?)
+                .ok_or("unknown artifact producer")?;
+            ensure(
+                row["run"] == receipt["run_id"]
+                    && receipt["artifacts"].get(name) == Some(&row["actual"]),
+                "run-local I1 artifact link",
+            )?;
+        }
+        let listening = payload("i1-listening")?;
+        let rows = listening["results"]["sources"]
+            .as_array()
+            .ok_or("listening sources")?;
+        ensure(rows.len() == 9, "listening sources inventory")?;
+        let mut names = std::collections::BTreeSet::new();
+        for row in rows {
+            let name = row["filename"].as_str().ok_or("listening filename")?;
+            let owner = if name.starts_with("techs-") {
+                "i1-sources"
+            } else {
+                "i1-motion"
+            };
+            ensure(
+                names.insert(name)
+                    && row["suite"] == owner
+                    && row["run"] == links[owner]["id"]
+                    && receipts[owner]["artifacts"]
+                        .get(format!("{name}.f64le"))
+                        .is_some(),
+                "run-local listening source link",
+            )?;
+        }
+    }
+    Ok(())
+}
+
 pub fn run(
     dir: &Path,
     reference: &Path,
@@ -97,12 +226,13 @@ pub fn run(
         )?;
         let receipt = publication::inspect(&children.join(suite), suite)?;
         ensure(
-            receipt["status"] == "passed"
+            receipt["schema"] == 3
+                && receipt["status"] == "passed"
                 && receipt["executable_sha256"] == expected_hash
                 && receipt["revision"] == revision,
             "unsuccessful child receipt",
         )?;
-        reports.insert(suite,json!({"id":receipt["run_id"],"executable":receipt["executable_sha256"],"revision":receipt["revision"],"elapsed_seconds":receipt["elapsed_seconds"],"evidence":receipt["artifacts"]["evidence.json"]}));
+        reports.insert(suite, child_link(&receipt));
         evidence::atomic(&dir.join("inventory.json"), &json!(reports))?;
     }
     let electrical_report = crate::electrical::aggregate::run(&children)?;
@@ -118,7 +248,12 @@ pub fn run(
             .as_object()
             .ok_or("missing measured artifact inventory")?
         {
-            if row["entry"] != row["actual"]
+            let stage08 = name == "listening.zip"
+                && row["entry"] == crate::identity::artifacts::STAGE08_ENTRY_ZIP
+                && row["actual"] == crate::identity::artifacts::STAGE08_RUST_ZIP
+                && row["equivalence"] == crate::identity::artifacts::STAGE08_DISPOSITION;
+            if !stage08
+                && row["entry"] != row["actual"]
                 && row["equivalence"] != "same measured fields, invocation-local renderer identity"
             {
                 differences.insert(name.clone(), row.clone());

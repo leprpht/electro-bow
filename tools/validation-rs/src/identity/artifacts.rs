@@ -71,6 +71,20 @@ pub(super) fn physical(
     evidence::atomic(&path.with_extension("json"), &record)
 }
 
+pub const STAGE08_DISPOSITION: &str = "historical Stage 08 techs-P2-60-held gain one ULP lower";
+pub const STAGE08_RUST_ZIP: &str =
+    "0f6a5e212c3d751702ae6e3c16bf8d43db45fc1095b2ef1d05e3a9c42dd5a89c";
+pub const STAGE08_ENTRY_ZIP: &str =
+    "90222fb6bd1590713f287527607771d1db7d1f36122da5d0020bad70d96c9809";
+
+pub(super) fn check_gain(key: &str, old: f64, new: f64, identical: bool) -> Result<()> {
+    let distance = u64::from(!identical && key == "techs-P2-60-held");
+    ensure(
+        new.is_finite() && new > 0. && old.to_bits().checked_sub(new.to_bits()) == Some(distance),
+        "historical Stage 08 gain representation",
+    )
+}
+
 pub fn inventory(root: &Path) -> Result<serde_json::Value> {
     use crate::publication;
     use std::io::Read;
@@ -133,6 +147,11 @@ pub fn inventory(root: &Path) -> Result<serde_json::Value> {
             )?;
             row["equivalence"] = "same measured fields, invocation-local renderer identity".into();
         } else if name == "listening.zip" {
+            ensure(
+                expected["sha256"] == STAGE08_ENTRY_ZIP
+                    && matches!(actual, STAGE08_ENTRY_ZIP | STAGE08_RUST_ZIP),
+                "historical Stage 08 archive digest",
+            )?;
             let mut z = zip::ZipArchive::new(fs::File::open(&path)?)?;
             let members = expected["members"]
                 .as_object()
@@ -152,7 +171,11 @@ pub fn inventory(root: &Path) -> Result<serde_json::Value> {
                     for (k, a) in old {
                         let a = a.as_f64().ok_or("original gain")?;
                         let b = new[k].as_f64().ok_or("fresh gain")?;
-                        ensure((a - b).abs() <= 2e-11, "recomputed audition gain")?;
+                        check_gain(k, a, b, actual == STAGE08_ENTRY_ZIP)?;
+                        if k == "techs-P2-60-held" {
+                            row["frozen_gain"] = json!(a);
+                            row["measured_gain"] = json!(b);
+                        }
                         distances.insert(k, a.to_bits().abs_diff(b.to_bits()));
                     }
                 } else {
@@ -165,7 +188,7 @@ pub fn inventory(root: &Path) -> Result<serde_json::Value> {
             row["equivalence"] = if expected["sha256"] == actual {
                 "bitwise"
             } else {
-                "audio bitwise, gain serialization differs"
+                STAGE08_DISPOSITION
             }
             .into();
             row["gain_ulp_distances"] = json!(distances);

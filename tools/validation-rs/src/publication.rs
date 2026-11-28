@@ -64,6 +64,60 @@ fn sha(text: &str, digits: usize) -> bool {
             .bytes()
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
+fn runtime_inputs() -> Result<BTreeMap<String, String>> {
+    let output = crate::process::check(std::process::Command::new("git").args([
+        "ls-files",
+        "-z",
+        "rust/dsp",
+        "tools/validation",
+        "Source",
+        "CMakeLists.txt",
+        "Cargo.toml",
+        "Cargo.lock",
+        "rust-toolchain.toml",
+    ]))?;
+    let mut inputs = BTreeMap::new();
+    for raw in output.stdout.split(|v| *v == 0).filter(|s| !s.is_empty()) {
+        let name = std::str::from_utf8(raw)?;
+        inputs.insert(name.to_owned(), evidence::digest(Path::new(name))?);
+    }
+    ensure(!inputs.is_empty(), "empty runtime input inventory")?;
+    Ok(inputs)
+}
+
+fn validate_environment(source: &Value, receipt: &Receipt) -> Result<()> {
+    let rustc = source["rustc"].as_str().ok_or("missing rustc identity")?;
+    let target = source["target"]
+        .as_str()
+        .ok_or("missing compilation target")?;
+    let profile = source["profile"]
+        .as_str()
+        .ok_or("missing compilation profile")?;
+    ensure(
+        rustc
+            .strip_prefix("rustc ")
+            .is_some_and(|v| v.starts_with(|c: char| c.is_ascii_digit()))
+            && target.split('-').count() >= 2
+            && target.split('-').all(|s| {
+                !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            })
+            && matches!(profile, "debug" | "release"),
+        "invalid Rust build identity",
+    )?;
+    if receipt.executable_sha256 == evidence::digest(&std::env::current_exe()?)? {
+        ensure(
+            rustc == env!("VALIDATION_RUSTC")
+                && target == env!("VALIDATION_TARGET")
+                && profile == env!("VALIDATION_PROFILE")
+                && source["source_sha256"] == env!("VALIDATION_SOURCE_SHA256"),
+            "provenance differs from inspecting executable",
+        )?;
+    }
+    ensure(
+        source["inputs"] == serde_json::to_value(runtime_inputs()?)?,
+        "runtime input inventory or digest mismatch",
+    )
+}
 pub fn inspect(dir: &Path, suite: &str) -> Result<Value> {
     let lock = fs::OpenOptions::new()
         .read(true)
@@ -105,9 +159,18 @@ pub fn inspect(dir: &Path, suite: &str) -> Result<Value> {
             evidence::strict(&fs::read(run.join("receipt.json"))?)? == value,
             "published run receipt",
         )?;
-        let inventory = r.artifacts.ok_or("missing artifact inventory")?;
+        if r.schema == 2 {
+            // Some schema 2 snapshots were produced by the prior executable on the transition commit.
+            crate::process::check(std::process::Command::new("git").args([
+                "merge-base",
+                "--is-ancestor",
+                &r.revision,
+                "61227ae8b3b95662fbcabfd665fbd83731dbd105",
+            ]))?;
+        }
+        let inventory = r.artifacts.as_ref().ok_or("missing artifact inventory")?;
         ensure(
-            inventory.contains_key("evidence.json") && files(&run)? == inventory,
+            inventory.contains_key("evidence.json") && &files(&run)? == inventory,
             "published artifact inventory or digest mismatch",
         )?;
         ensure(
@@ -116,6 +179,7 @@ pub fn inspect(dir: &Path, suite: &str) -> Result<Value> {
         )?;
         if inventory.contains_key("provenance.json") {
             let source = evidence::strict(&fs::read(run.join("provenance.json"))?)?;
+            validate_environment(&source, &r)?;
             ensure(
                 source["run_id"] == r.run_id
                     && source["suite"] == suite
@@ -134,6 +198,15 @@ pub fn inspect(dir: &Path, suite: &str) -> Result<Value> {
                     .is_some_and(|v| v.is_object() || v.is_array()),
             "dependent evidence run/suite/schema",
         )?;
+        if r.schema == 3 {
+            crate::qualification::validate_children(
+                &run,
+                suite,
+                &payload["results"],
+                &r.revision,
+                &r.executable_sha256,
+            )?;
+        }
     }
     Ok(value)
 }
@@ -178,15 +251,11 @@ pub fn run(suite: &str, root: &Path, body: impl FnOnce(&Path) -> Result<Value>) 
     let result = (|| -> Result<Value>{
         let compiled=env!("VALIDATION_SOURCE_SHA256");
         ensure(crate::source_identity::calculate(Path::new("tools/validation-rs"))?==compiled,"validation executable built from different sources")?;
-        let output=crate::process::check(std::process::Command::new("git").args(["ls-files","-z","rust/dsp","tools/validation","Source","CMakeLists.txt","Cargo.toml","Cargo.lock","rust-toolchain.toml"]))?;
-        let mut inputs=BTreeMap::new();
-        for raw in output.stdout.split(|v|*v==0).filter(|s|!s.is_empty()){
-            let name=std::str::from_utf8(raw)?;
-            inputs.insert(name,evidence::digest(Path::new(name))?);
-        }
+        let inputs = runtime_inputs()?;
         evidence::atomic(&path.join("provenance.json"),&json!({"source_sha256":compiled,"revision":receipt.revision,"executable_sha256":receipt.executable_sha256,"run_id":id,"suite":suite,"rustc":env!("VALIDATION_RUSTC"),"target":env!("VALIDATION_TARGET"),"profile":env!("VALIDATION_PROFILE"),"inputs":inputs}))?;
         body(&path)
     })().and_then(|v| {
+        crate::qualification::validate_children(&path, suite, &v, &receipt.revision, &receipt.executable_sha256)?;
         evidence::atomic(
             &path.join("evidence.json"),
             &json!({"suite":suite,"run_id":id,"results":v}),

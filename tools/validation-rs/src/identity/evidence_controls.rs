@@ -3,6 +3,22 @@ use crate::{Result, ensure, evidence, publication};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, fs, path::Path};
+pub(crate) const PRODUCERS: &[&str] = &[
+    "i1-stationary",
+    "i1-motion",
+    "i1-stereo",
+    "i1-sources",
+    "i1-clock",
+    "i1-events",
+    "i1-path-mutants",
+    "i1-transaction-mutants",
+    "i1-layout",
+    "i1-qr",
+    "i1-capture",
+    "i1-review82",
+    "i1-listening",
+    "recording-controls",
+];
 const CASE: &str = "48000/196/0.1/1.8/opposed";
 fn grade(
     candidate: &Value,
@@ -35,22 +51,7 @@ pub fn run(root: &Path) -> Result<Value> {
     let mut reports = BTreeMap::new();
     let mut paths = BTreeMap::new();
     let mut sources = BTreeMap::new();
-    for s in [
-        "i1-stationary",
-        "i1-motion",
-        "i1-stereo",
-        "i1-sources",
-        "i1-clock",
-        "i1-events",
-        "i1-path-mutants",
-        "i1-transaction-mutants",
-        "i1-layout",
-        "i1-qr",
-        "i1-capture",
-        "i1-review82",
-        "i1-listening",
-        "recording-controls",
-    ] {
+    for &s in PRODUCERS {
         let receipt = publication::inspect(&root.join(s), s)?;
         ensure(
             receipt["status"] == "passed",

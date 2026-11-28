@@ -1,4 +1,5 @@
 //! Controlled recording preflight. Hash decoded source, interval and attack before any wet processing.
+mod float64;
 pub mod scoring;
 use crate::{Result, ensure, evidence, observation};
 use hound::{SampleFormat, WavReader};
@@ -17,12 +18,18 @@ fn hash(x: &[f64]) -> String {
     format!("{:x}", h.finalize())
 }
 pub(crate) fn read(path: &Path) -> Result<(u32, Vec<f64>)> {
-    let mut wav = WavReader::open(path)?;
+    let mut wav = match WavReader::open(path) {
+        Ok(wav) => wav,
+        Err(_) => return float64::read(path),
+    };
     let spec = wav.spec();
     ensure(
         spec.channels == 1 && spec.sample_rate >= 16000,
         "invalid mono recording or unsupported DI decimator rate",
     )?;
+    if spec.sample_format == SampleFormat::Float && spec.bits_per_sample == 64 {
+        return float64::read(path);
+    }
     let data = match spec.sample_format {
         SampleFormat::Float => wav
             .samples::<f32>()
@@ -248,6 +255,59 @@ pub fn preflight(dir: &Path, manifest: &Path) -> Result<Value> {
     )?;
     Ok(result)
 }
+fn same_sample_control(dest: &Path, config: &Value, scored: &Value) -> Result<Value> {
+    let copy = dest.join("binary64");
+    fs::create_dir(&copy)?;
+    let mut config = config.clone();
+    for label in ["A", "B"] {
+        for take in config["classes"][label]["takes"]
+            .as_array_mut()
+            .ok_or("takes")?
+        {
+            let name = take["original"].as_str().ok_or("original")?;
+            let file = copy.join(name);
+            if name == "A1.wav" {
+                let (rate, samples) = read(&dest.join(name))?;
+                let size = u32::try_from(samples.len() * 8)?;
+                let mut bytes = b"RIFF".to_vec();
+                bytes.extend((36 + size).to_le_bytes());
+                bytes.extend(b"WAVEfmt ");
+                bytes.extend(16u32.to_le_bytes());
+                bytes.extend([3, 0, 1, 0]);
+                bytes.extend(rate.to_le_bytes());
+                bytes.extend((rate * 8).to_le_bytes());
+                bytes.extend([8, 0, 64, 0]);
+                bytes.extend(b"data");
+                bytes.extend(size.to_le_bytes());
+                bytes.extend(samples.iter().flat_map(|s| s.to_le_bytes()));
+                fs::write(&file, bytes)?;
+                take["original_sha256"] = evidence::digest(&file)?.into();
+            } else {
+                fs::copy(dest.join(name), file)?;
+            }
+        }
+    }
+    let manifest = copy.join("manifest.json");
+    evidence::atomic(&manifest, &config)?;
+    let preflight = preflight(&copy, &manifest)?;
+    let actual = scoring::evaluate_cell(&copy, &manifest)?;
+    let mut expected = scored.clone();
+    let identity = &config["classes"]["A"]["takes"][0]["original_sha256"];
+    ensure(
+        expected["takes"]["A1"]["original"] != *identity,
+        "distinct container identity",
+    )?;
+    expected["takes"]["A1"]["metadata"]["original_sha256"] = identity.clone();
+    expected["takes"]["A1"]["original"] = identity.clone();
+    expected["manifest_sha256"] = preflight["manifest_sha256"].clone();
+    ensure(
+        actual == expected,
+        "binary64 same-sample preflight and repeatability",
+    )?;
+    Ok(
+        json!({"original":identity,"decoded":preflight["takes"]["A1"]["decoded"],"status":actual["status"]}),
+    )
+}
 pub fn controls(dir: &Path) -> Result<Value> {
     let mut rows = Vec::new();
     for scenario in [
@@ -387,6 +447,10 @@ pub fn controls(dir: &Path) -> Result<Value> {
                     "historical calibration/withheld margin",
                 )?;
             }
+            let same = same_sample_control(&dest, &config, &scored)?;
+            rows.push(
+                json!({"scenario":"same samples in binary64 A1","actual":same,"synthetic":true}),
+            );
             evidence::atomic(&dest.join("controlled.json"), &scored)?;
         }
         rows.push(json!({"scenario":scenario,"actual":verdict,"synthetic":true}));

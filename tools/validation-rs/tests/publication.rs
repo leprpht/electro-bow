@@ -121,3 +121,52 @@ fn interrupted_writer_and_concurrent_attempt() {
         interrupted
     );
 }
+
+#[test]
+fn inspect_rejects_coherently_rehashed_incomplete_provenance() {
+    use sha2::{Digest, Sha256};
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path();
+    assert!(cmd(out, &["fixtures"]).output().unwrap().status.success());
+    let original = current(out, "fixtures");
+    let copy = out.join("copy");
+    let suite = copy.join("fixtures");
+    let id = original["run_id"].as_str().unwrap();
+    let run = suite.join(id);
+    fs::create_dir_all(&run).unwrap();
+    fs::copy(out.join("fixtures/runner.lock"), suite.join("runner.lock")).unwrap();
+    for file in fs::read_dir(out.join("fixtures").join(id)).unwrap() {
+        let file = file.unwrap();
+        fs::copy(file.path(), run.join(file.file_name())).unwrap();
+    }
+    let path = run.join("provenance.json");
+    let valid: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    for missing in [
+        &["inputs", "rustc", "target", "profile"][..],
+        &["inputs"],
+        &["rustc"],
+        &["target"],
+        &["profile"],
+    ] {
+        let mut source = valid.clone();
+        for key in missing {
+            source.as_object_mut().unwrap().remove(*key);
+        }
+        let bytes = serde_json::to_vec(&source).unwrap();
+        let mut receipt = original.clone();
+        receipt["artifacts"]["provenance.json"] = format!("{:x}", Sha256::digest(&bytes)).into();
+        fs::write(&path, bytes).unwrap();
+        let receipt = serde_json::to_vec(&receipt).unwrap();
+        fs::write(run.join("receipt.json"), &receipt).unwrap();
+        fs::write(suite.join("current.json"), receipt).unwrap();
+        let result = cmd(&copy, &["inspect", "fixtures"]).output().unwrap();
+        assert!(!result.status.success());
+        let reason = String::from_utf8(result.stderr).unwrap();
+        assert!(
+            reason.contains("rustc identity")
+                || reason.contains("compilation")
+                || reason.contains("runtime input inventory"),
+            "{reason}"
+        );
+    }
+}

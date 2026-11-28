@@ -285,6 +285,20 @@ pub fn differential(reference: &Path, root: &Path) -> Result<Value> {
     }
     let historical = reference.join("checkout/build/i1/listening.zip");
     let fresh = publication::current_artifact(root, "i1-study", "listening.zip")?;
+    let original_digest = evidence::digest(&historical)?;
+    ensure(
+        original_digest == super::artifacts::STAGE08_ENTRY_ZIP,
+        "frozen Stage 08 archive digest",
+    )?;
+    let fresh_digest = evidence::digest(&fresh)?;
+    ensure(
+        result["archive"] == fresh_digest
+            && matches!(
+                fresh_digest.as_str(),
+                super::artifacts::STAGE08_ENTRY_ZIP | super::artifacts::STAGE08_RUST_ZIP
+            ),
+        "measured Stage 08 archive digest",
+    )?;
     let mut old_zip = zip::ZipArchive::new(fs::File::open(&historical)?)?;
     let mut new_zip = zip::ZipArchive::new(fs::File::open(&fresh)?)?;
     ensure(
@@ -312,10 +326,7 @@ pub fn differential(reference: &Path, root: &Path) -> Result<Value> {
             )?;
             for (k, v) in expected {
                 let x = actual[&k];
-                ensure(
-                    x.is_finite() && x > 0. && (v - x).abs() <= 2e-11,
-                    "legacy measured matching gain",
-                )?;
+                super::artifacts::check_gain(&k, v, x, original_digest == fresh_digest)?;
                 gain_distances.insert(k, v.to_bits().abs_diff(x.to_bits()));
             }
         } else {
