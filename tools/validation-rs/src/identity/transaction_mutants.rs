@@ -87,6 +87,10 @@ fn cases() -> [Mutant<'static>; 9] {
     ]
 }
 pub fn run(out: &Path) -> Result<Value> {
+    ensure(
+        std::env::var_os("ELECTROBOW_EXPECT_EARLY_MUTANT_REJECTION").is_none(),
+        "complete mutant escaped its nominated behavioral boundary",
+    )?;
     let original = Path::new("tools/validation-rs");
     let temp = tempfile::tempdir()?;
     let root = temp.path();
@@ -144,15 +148,48 @@ pub fn run(out: &Path) -> Result<Value> {
             std::env::consts::EXE_SUFFIX
         ));
         let output = root.join("receipts");
-        let command = Command::new(&binary)
-            .arg(variant.suite)
+        let complete = [
+            "Review 8.2 half product",
+            "wrong M5 denominator",
+            "shifted wet pair",
+        ]
+        .contains(&variant.name);
+        let entry = if complete {
+            "qualification"
+        } else {
+            variant.suite
+        };
+        let mut child = Command::new(&binary);
+        child
+            .arg(entry)
             .current_dir(root)
             .env("GIT_DIR", git)
             .env("GIT_WORK_TREE", root)
-            .env("ELECTROBOW_VALIDATION_OUT", &output)
-            .output()?;
-        let receipt =
-            evidence::strict(&fs::read(output.join(variant.suite).join("current.json"))?)?;
+            .env("ELECTROBOW_VALIDATION_OUT", &output);
+        if complete {
+            child.env("ELECTROBOW_EXPECT_EARLY_MUTANT_REJECTION", "1");
+        }
+        let command = child.output()?;
+        let parent = evidence::strict(&fs::read(output.join(entry).join("current.json"))?)?;
+        let receipt = if complete {
+            ensure(
+                parent["status"] == "failed"
+                    && parent["error"]
+                        .as_str()
+                        .is_some_and(|s| s.starts_with(&format!("{}:", variant.suite))),
+                "complete mutant exited outside the producing suite",
+            )?;
+            let invocation = parent["run_id"].as_str().ok_or("failed aggregate run")?;
+            let child = output
+                .join(entry)
+                .join(invocation)
+                .join("children")
+                .join(variant.suite)
+                .join("current.json");
+            evidence::strict(&fs::read(child)?)?
+        } else {
+            parent.clone()
+        };
         ensure(
             command.status.code() == Some(1)
                 && receipt["status"] == "failed"
@@ -163,7 +200,7 @@ pub fn run(out: &Path) -> Result<Value> {
                 String::from_utf8_lossy(&command.stderr)
             ),
         )?;
-        measured.insert(variant.name,json!({"source":variant.file,"before":variant.old,"after":variant.new,"source_sha256":evidence::digest(&source)?,"executable_sha256":evidence::digest(&binary)?,"suite":variant.suite,"expected":variant.predicate,"actual":receipt,"exit":command.status.code()}));
+        measured.insert(variant.name,json!({"source":variant.file,"before":variant.old,"after":variant.new,"source_sha256":evidence::digest(&source)?,"executable_sha256":evidence::digest(&binary)?,"suite":variant.suite,"entry_point":entry,"entry_receipt":parent,"expected":variant.predicate,"actual":receipt,"exit":command.status.code()}));
         evidence::atomic(&out.join("mutations.json"), &json!(measured))?;
         fs::write(source, before)?;
     }

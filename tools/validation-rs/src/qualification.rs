@@ -3,8 +3,9 @@ use crate::{Result, ensure, evidence, publication};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::Path, process::Command};
 const REGRESSION: &[&str] = &[
-    "fixtures",
     "i1-stereo",
+    "o2-records",
+    "fixtures",
     "recording-controls",
     "contact",
     "contact-mutants",
@@ -18,7 +19,6 @@ const REGRESSION: &[&str] = &[
     "o2-bench",
     "o2-acoustic",
     "o2-sweep",
-    "o2-records",
     "o2-carrier",
     "o2-mutants",
     "i1-stationary",
