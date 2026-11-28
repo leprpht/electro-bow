@@ -1,5 +1,7 @@
 # Proposed acoustic validation and listening gate
 
+Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+
 Stage 08 proposes an [executable I1 matrix](I1_ACCEPTANCE_MATRIX.md) and [registered held-source protocol](../research/I1_SOURCE_REPEATABILITY_EVIDENCE.md). The Stage 07 neutral evidence and historical unsafe stress vectors remain separate references. Review 8 retained the carrier and held I1. Independent Review 8.1 owns the remediation disposition. Original V17–V22 and owner hearing retain their stage ownership.
 
 The signed-off V01–V22 matrix remains in force. The [Stage 06 matrix](O2_ACCEPTANCE_MATRIX.md) fixes intermediate diagnostics and preserves the converted-M5-to-final wet denominator. It defines strict JSON nulls for ineligible O1 phase and partial ratios, including lift tails below the 1e−12 m/s diagnostic floor. A physics pass, source-feature discrimination, acoustic reference match and a human preference are different deliverables. [Existing qualification criteria](DSP_VALIDATION_PLAN.md) · [Proposed specification](../architecture/ELECTROBOW_ACOUSTIC_OUTPUT_SPECIFICATION.md)

@@ -1,5 +1,7 @@
 # Validation, latency and real-time budget
 
+Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+
 Use the [equations M1–M7](../architecture/BOWED_STRING_MATHEMATICS.md) as the oracle for a single voice and [A1–A4](../architecture/ELECTROBOW_TARGET_ARCHITECTURE.md) for control behavior. Numbers marked **measured** below are isolated research checks or explicitly attributed baseline measurements. Numbers in the acceptance matrix are proposed gates for future Rust and VST3 implementations.
 
 ## Measured during this investigation

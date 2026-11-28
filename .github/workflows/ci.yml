@@ -52,6 +52,18 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --all-targets --locked --offline -- -D warnings
 
+      - name: Check non-shipping validation workspace
+        shell: bash
+        run: |
+          validation_manifest=tools/validation-rs/Cargo.toml
+          cargo fetch --locked --manifest-path "$validation_manifest"
+          cargo fmt --all --manifest-path "$validation_manifest" -- --check
+          cargo clippy --all-targets --locked --offline --manifest-path "$validation_manifest" -- -D warnings
+          cargo test --locked --offline --manifest-path "$validation_manifest"
+          cargo run --release --locked --offline --manifest-path "$validation_manifest" -- fixtures
+          cargo run --release --locked --offline --manifest-path "$validation_manifest" -- contact
+          cargo run --release --locked --offline --manifest-path "$validation_manifest" -- ring
+
       - name: Check out JUCE
         uses: actions/checkout@v4
         with:
@@ -171,6 +183,13 @@ jobs:
       - name: Run tests
         timeout-minutes: 10
         run: ctest --test-dir build --build-config Release --verbose --timeout 180 --no-tests=error
+
+      - name: Verify packaged macOS audio and state in the Rust validation host
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          JUCE_PATH: .ci/JUCE
+        run: cargo run --manifest-path tools/validation-rs/Cargo.toml --release --locked --offline -- package
 
       - name: Verify repeated Windows editor startup
         if: runner.os == 'Windows'

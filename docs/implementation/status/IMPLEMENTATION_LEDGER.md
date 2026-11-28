@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Stage V1 migrates validation measurements and retains the original complete exits
+
+The independent Rust workspace now reproduces the contact, ring, guide, O1/O2, pitch and offline I1 measurements listed in the stage matrix. The O2 listening ZIP and packaged wet payloads match their original bytes. Complete Rust qualification remains open on dependent evidence, joined transactions and mutation coverage. Awaiting independent Review V1. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
+
 ## 2026-11-28 · Review 8.2 retains the packed I1 contract and holds isolated Rust I1
 
 Reviewed `9a54cd7..f0bce623` from a clean tree. Fresh complete O2 and I1 runs passed. The independent audit retained exact guide/O1/O2 and shipping behavior, all 108 revised stationary rows, all nine historical unsafe rejections and 700 active moving cells on each of off and actual delivery. Independent QR verified the packed fit and scheduled candidate decisions. Exact acquisition expiry and the original fourth-bank, producer, timing and numerical-fault counterexamples produced the required dispositions. Signed stereo probes preserved detection-tick commits and the unaffected lane across 18 genuine fault cases.

@@ -27,3 +27,7 @@ Earlier architecture notes describe prior instruments. The audit pins the base r
 An agent can accept an equation or a regression test with numerical evidence. Accepting the *sound* requires the three brief V22 listening comparisons. Record failures against the named fixture before tuning a threshold or changing the physical model.
 
 Current decisions and replay commands are in [specification sign-off](status/SPECIFICATION_SIGNOFF.md). The [validation ownership matrix](ELECTROBOW_MIGRATION_PLAN.md#validation-ownership) governs dependencies.
+
+## Permanent validation tooling
+
+Use Rust for production DSP and by default for permanent validation and independent numerical references. Integrate new authoritative qualification into the [validation workspace](VALIDATION_RUST_GUIDE.md). Preserve independent expected-value mathematics, full fixture inventories and existing acceptance bounds. Each new requirement needs an executable check and behavioral negative controls. Document and obtain explicit approval for a new permanent Python qualification dependency. Disposable research, notebooks, plots and temporary independent Python comparisons are appropriate. Record dependencies if exploratory results become evidence. JUCE, native interfaces and independently justified C++ references keep their language boundaries. Keep generated artifacts outside tracked source. Mathematical correctness and independent evidence govern language choices. The [migration matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) and independent reviews govern retirement.

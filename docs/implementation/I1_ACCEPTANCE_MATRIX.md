@@ -1,5 +1,7 @@
 # I1 offline acceptance matrix · submission for Review 8
 
+Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+
 Frozen before corrected-output scoring. Distances and events below apply to binary64 before direct, E, Out or protection. All measurements keep individual failures. Synthetic controls exercise a mechanism. Independent natural identity and V22 remain separate decisions.
 
 | Case inventory | Drive and schedule | Reference, tap, window and decision |

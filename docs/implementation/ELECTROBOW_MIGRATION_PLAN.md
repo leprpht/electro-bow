@@ -1,5 +1,7 @@
 # Ordered migration from the six-control instrument
 
+Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+
 Begin from the audited six-control `EbInstrument` graph. Each increment below has a buildable end state. The first production audio routing change is step 6. A separately reviewable host-only rate guard can follow step 1. Current independent work permissions are in [specification sign-off](status/SPECIFICATION_SIGNOFF.md). A temporarily unconnected module may be compiled under `#[cfg(test)]` until its consumer is ready. Keep the existing C ABI usable throughout. Sections M1–M7 refer to the [mathematics](../architecture/BOWED_STRING_MATHEMATICS.md), A1–A4 to the [control and integration contracts](../architecture/ELECTROBOW_TARGET_ARCHITECTURE.md), and V01–V22 to the [validation cases](DSP_VALIDATION_PLAN.md).
 
 ## 1. Establish the production baseline

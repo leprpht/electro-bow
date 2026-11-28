@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-28 · Retain existing qualification authority during the Rust migration
+
+Use the standalone Rust workspace for new validation calculations. Keep the frozen Python and offline C++ implementations and the original complete qualification commands through independent Review V1. The migrated differential is scoped to its recorded child inventory. Review 8.2 remains the engineering authority. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
+
 ## 2026-11-28 · Hold isolated Rust I1 on signed delivery and exact transaction gates
 
 Retain the qualified S2a/S2b, O1 and O2 code, the original M5 denominator, the I1 source projection and bank, the packed 123-word statistic layout and the 17-tick retired-block schedule. Accept the offline stationary and moving evidence, normalized fourth path, pre-confirm expiry, and demonstrated lane-local retirement. The original O2 provenance and timing substitutions reject. Complete retained-reader sign-off still requires strict JSON ingestion.

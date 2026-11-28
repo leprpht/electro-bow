@@ -1,5 +1,7 @@
 # O2 acceptance matrix
 
+Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+
 The [O2 specification](../architecture/ELECTROBOW_O2_PICKUP_RESPONSE_SPECIFICATION.md) names the sample taps. The [signed-off V01–V22 matrix](DSP_VALIDATION_PLAN.md#automated-cases-and-acceptance-criteria) retains authority. Stage 06 recorded the offline candidate. Stage 07 replays the same observations through Rust and extends the common-band high note to all seven rates. Independent Review 7 owns the isolated exit. S5 owns complete coloration. S6R owns real streaming, A4 routing, fault recovery and linked output evidence. Each individual failed predicate or missing eligible required observation holds its stage, even if every other case passes. An expected stress failure remains visible by name in strict JSON. [Runner](../../tools/validation/o2_qualification.py) · [Independent transfer reference](../../tools/validation/o2_response.py) · [Rust measurements](../../build/stage-07/results.json)
 
 ## Levels, windows and eligibility

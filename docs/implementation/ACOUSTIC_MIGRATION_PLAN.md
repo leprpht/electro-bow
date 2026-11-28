@@ -1,5 +1,7 @@
 # Proposed ordered acoustic migration
 
+Current Rust comparison commands and per-component dispositions are recorded in the [V1 equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md). Historical stage exits retain their reviewed authority pending independent cutover.
+
 The owner selected the magnetic reference. Review 5 qualified isolated Rust O1. Review 6 authorized isolated O2. Review 7 qualified private Rust O2 in isolation. Independent Review 8 retained the carrier and blocked isolated I1 implementation. Stage 08.1 submits the offline phase monitor, joined transaction and replay-bound exit for independent Review 8.1. The original [migration and V-number ownership](ELECTROBOW_MIGRATION_PLAN.md#validation-ownership) and existing stage authorizations still apply. No live routing follows from completion of this document.
 
 Use the [output specification](../architecture/ELECTROBOW_ACOUSTIC_OUTPUT_SPECIFICATION.md) for algorithms and Rust interfaces, [acoustics](../research/BOWED_TIMBRE_ACOUSTIC_RESEARCH.md) and [identity](../research/GUITAR_TIMBRE_PRESERVATION.md) for evidence, and the [acoustic validation plan](ACOUSTIC_VALIDATION_PLAN.md) for frozen observations. Each increment below has one reviewable change. Maintain the ledger, decisions and a dated stage report recording revision, source hashes, exact commands, corpus, outcomes and still-open gates at each exit.

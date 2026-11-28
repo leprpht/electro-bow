@@ -25,3 +25,24 @@ Exact seeds, input schedules, field names, threshold predicates, fixture manifes
 Use a separate Cargo workspace at `tools/validation-rs`. The root manifest and lockfile are inputs to both the native build and historical mutation scripts that copy only `rust/dsp` into temporary roots. A nested workspace preserves those callers and keeps all validation dependencies outside the shipping dependency graph. Production execution occurs in existing replay processes. Oracle calculations have no Cargo dependency on the DSP crate.
 
 Freeze original executable outputs and fixtures, verify numeric and evidence primitives, then port the carrier, observation, electrical, analysis/controller and identity suites. Qualify each normal exit and its real defective variants before advancing authority. Preserve the offline C++ kernels through independently approved equivalence. Retire only through a subsequent Review V1 cutover. The [equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) records which work has reached each boundary.
+
+## Dependency and arithmetic decisions
+
+The standalone Cargo.lock pins all transitive versions. Cargo metadata records source and license per package. The locked toolchain is Rust 1.100.0, edition 2024. Validation uses the host allocator and filesystem. The shipping lockfile remains independent.
+
+| Dependency | Reason and numerical boundary |
+|---|---|
+| rustfft 6.4.1 | Complex f64 forward FFT uses negative phase and no normalization. Explicitly truncate to the one-sided spectrum, keep Nyquist and divide by transform length after inverse convolution. [RustFFT normalization](https://docs.rs/rustfft/6.4.1/rustfft/) |
+| num-rational 0.4.2, num-traits 0.2.19 | Convert stored binary64 line endpoints and queries to exact rationals. Select all admissible intersections before rounding the chosen answer. [Rational arithmetic](https://docs.rs/num-rational/0.4.2/num_rational/) |
+| nalgebra 0.34.1 | Rectangular QR on the actual complete window provides a separate solver from the C++ packed streaming normal equations. [QR decomposition](https://docs.rs/nalgebra/0.34.1/nalgebra/linalg/struct.QR.html) |
+| hound 3.5.1 | Read WAV metadata and integer/float payloads. The Stage 03 writer recreates the original float RIFF/fact layout when container bytes are contractual. [Hound](https://docs.rs/hound/3.5.1/hound/) |
+| serde, serde_json, csv | Schema-bound records, round-trip decimal input and streaming pitch rows. A custom recursive visitor rejects duplicate keys and overflowing/invalid numbers. [serde_json features](https://docs.rs/crate/serde_json/1.0.145/features) |
+| sha2, tempfile, libloading | Streaming SHA-256, isolated builds and atomic artifacts, checked native offline ABI. [SHA-2](https://docs.rs/sha2/0.10.9/sha2/) · [Native library binding](https://docs.rs/libloading/0.8.9/libloading/) |
+
+Use standard library argument handling for the finite suite inventory. Authoritative timing invokes the original callback probe. Its frame counts, warmup, batches, terminal tests and pass thresholds remain in the original contract. Test threshold decisions at the real boundary. Binary32 conversion occurs only at the declared audio or ABI step. Freeze ties-to-even, exact interval endpoints, DC exclusion, subnormal eligibility and signed-zero conventions per suite. The stationary smoother uses the multiply-add order observed in the pinned SciPy build. Preserve failed trial receipts when a numerical discrepancy is investigated. The matrix records qualified surfaces and pending comparisons. [Equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md)
+
+The listening writer uses zip 2.4.2 with its zlib backend. The historical archive fixes entry order, timestamps, compression and file attributes. Compare the complete ZIP, key, individual WAV containers and decoded sample identities separately. Use `cargo metadata --locked --offline --format-version 1 --manifest-path tools/validation-rs/Cargo.toml` for the resolved versions, features and license expressions.
+
+## Retirement and historical replay
+
+The inventory columns `replacement`, `equivalence_evidence`, `migration_status`, `historical_dependencies` and `retirement` form the per-file proposed retirement manifest. Keep all original owners and historical reviews in this submission. After independent approval, remove only approved superseded implementation rows in a dedicated cutover. Retain permanent attributed audio, existing native/ABI tests and actual-code Rust replay boundaries. A C++ adapter that hosts JUCE or measures the reviewed kernel remains necessary until the corresponding independent comparison is approved. Unclosed family rows retain the existing executable authority. The historical revision and pinned replay command remain available after any future cutover. [Per-file retirement manifest](validation-inventory.tsv) · [Frozen replay instructions](VALIDATION_RUST_GUIDE.md#frozen-comparison-and-review)
