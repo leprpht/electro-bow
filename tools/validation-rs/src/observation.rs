@@ -1,5 +1,6 @@
 //! Compare each committed observation against an unbounded chronological history.
 pub mod measures;
+pub mod research;
 use crate::{Result, ensure, evidence, process, replay};
 use serde::Deserialize;
 use serde_json::{Value, json};

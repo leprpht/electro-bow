@@ -10,6 +10,7 @@ const REGRESSION: &[&str] = &[
     "ring",
     "guide",
     "guide-negative",
+    "research-observation",
     "mutations",
     "o1-replay",
     "o1-state",
@@ -48,6 +49,7 @@ const REGRESSION: &[&str] = &[
 const COMPARISONS: &[&str] = &[
     "compare",
     "guide-compare",
+    "research-observation-compare",
     "i1-clock-compare",
     "i1-study-compare",
     "i1-stream-compare",

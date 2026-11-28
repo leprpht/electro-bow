@@ -23,7 +23,7 @@ fn rms(x: &[f64]) -> f64 {
 fn column(r: &[[f64; 30]], j: usize) -> Vec<f64> {
     r.iter().map(|s| s[j]).collect()
 }
-fn harmonics(x: &[f64], fs: u32, f: f64) -> Value {
+pub(crate) fn harmonics(x: &[f64], fs: u32, f: f64) -> Value {
     let h = numerics::partials(x, fs as f64, f, 12);
     let m = x.iter().sum::<f64>() / x.len() as f64;
     let voiced = (x.iter().map(|v| (v - m).powi(2)).sum::<f64>() / x.len() as f64).sqrt() > 1e-12
