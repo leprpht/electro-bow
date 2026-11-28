@@ -103,7 +103,7 @@ fn rms(x: &[f64]) -> f64 {
     (p.chunks(8192).map(numerics::sum_numpy).sum::<f64>() / x.len() as f64).sqrt()
 }
 type Clip = (String, Vec<f64>, std::ops::Range<usize>);
-fn dynamics(exe: &Path, clips: &mut Vec<Clip>) -> Result<Value> {
+fn dynamics(exe: &Path, out: &Path, clips: &mut Vec<Clip>) -> Result<Value> {
     let cases = carrier::cases()?;
     let mut rows = BTreeMap::new();
     for name in [
@@ -141,6 +141,7 @@ fn dynamics(exe: &Path, clips: &mut Vec<Clip>) -> Result<Value> {
                 }
             }
             let raw = carrier::scheduled(exe, RATE as u32, pitch.len(), &controls)?;
+            super::artifacts::write_rows(&out.join(format!("{name}.f64le")), &raw)?;
             let mut h = Sha256::new();
             for r in &raw {
                 h.update(r.map(f64::to_le_bytes).as_flattened());
@@ -211,10 +212,10 @@ fn dynamics(exe: &Path, clips: &mut Vec<Clip>) -> Result<Value> {
 pub fn run(out: &Path) -> Result<Value> {
     let exe = replay::build(out, None)?;
     let mut clips = Vec::new();
-    let real = sources::run(&exe, &mut clips)?;
+    let real = sources::run(&exe, out, &mut clips)?;
     let grid = stationary::run(&exe)?;
     let inversion = sources::inversion(&exe)?;
-    let dynamic = dynamics(&exe, &mut clips)?;
+    let dynamic = dynamics(&exe, out, &mut clips)?;
     let mut entries = Vec::new();
     let mut gains = Vec::new();
     for (name, x, anchor) in clips {
@@ -261,6 +262,15 @@ pub fn differential(reference: &Path, root: &Path) -> Result<Value> {
     let result = &measured["results"];
     let mut stats = (0, 0., 0.);
     acoustic::compare(&old["dynamic"], &result["dynamic"], "dynamic", &mut stats)?;
+    let source_clock = evidence::strict(&fs::read(publication::current_artifact(
+        root,
+        "i1-study",
+        "source-clock.json",
+    )?)?)?;
+    let recorded = evidence::strict(&fs::read(
+        reference.join("checkout/build/i1/source-clock.json"),
+    )?)?;
+    acoustic::compare(&recorded, &source_clock, "source-clock", &mut stats)?;
     for key in ["real", "inversion"] {
         acoustic::compare(&old[key], &result[key], key, &mut stats)?;
     }

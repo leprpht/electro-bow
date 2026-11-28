@@ -12,10 +12,20 @@ const LISTEN: &str = "Hear the physical low-E stroke, then matched A/B at low, m
 
 // Keep the reviewed Python ZipInfo header encoding. zlib supplies the real compressed stream.
 pub(crate) fn canonical_archive(entries: &[(String, Vec<u8>)], path: &Path) -> Result<()> {
+    canonical_zip(entries, path, false)
+}
+pub(crate) fn canonical_npz(entries: &[(String, Vec<u8>)], path: &Path) -> Result<()> {
+    canonical_zip(entries, path, true)
+}
+fn canonical_zip(entries: &[(String, Vec<u8>)], path: &Path, npy: bool) -> Result<()> {
     let mut zipped = ZipWriter::new(Cursor::new(Vec::new()));
-    let options = SimpleFileOptions::default()
-        .compression_method(CompressionMethod::Deflated)
-        .compression_level(Some(6));
+    let options = if npy {
+        SimpleFileOptions::default().compression_method(CompressionMethod::Stored)
+    } else {
+        SimpleFileOptions::default()
+            .compression_method(CompressionMethod::Deflated)
+            .compression_level(Some(6))
+    };
     for (name, data) in entries {
         zipped.start_file(name, options)?;
         zipped.write_all(data)?;
@@ -34,17 +44,23 @@ pub(crate) fn canonical_archive(entries: &[(String, Vec<u8>)], path: &Path) -> R
         data.extend(0x04034b50u32.to_le_bytes());
         central.extend(0x02014b50u32.to_le_bytes());
         central.extend(0x0314u16.to_le_bytes());
-        for b in [&mut data, &mut central] {
-            for v in [20u16, 0, 8, 0, 33] {
+        for (b, extra_len) in [(&mut data, if npy { 20u16 } else { 0 }), (&mut central, 0)] {
+            for v in [20u16, 0, if npy { 0 } else { 8 }, 0, 33] {
                 b.extend(v.to_le_bytes());
             }
             for v in [crc, cs, sz] {
                 b.extend(v.to_le_bytes());
             }
             b.extend(len.to_le_bytes());
-            b.extend(0u16.to_le_bytes());
+            b.extend(extra_len.to_le_bytes());
         }
         data.extend(&name);
+        if npy {
+            data.extend(1u16.to_le_bytes());
+            data.extend(16u16.to_le_bytes());
+            data.extend(u64::from(sz).to_le_bytes());
+            data.extend(u64::from(cs).to_le_bytes());
+        }
         member.read_to_end(&mut data)?;
         for v in [0u16, 0, 0] {
             central.extend(v.to_le_bytes());

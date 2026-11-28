@@ -97,7 +97,7 @@ pub(super) fn inversion(exe: &Path) -> Result<Value> {
     )?;
     Ok(json!({"updates":count,"gains":g,"peak":peak,"ratios":ratios}))
 }
-pub(super) fn run(exe: &Path, clips: &mut Vec<Clip>) -> Result<Value> {
+pub(super) fn run(exe: &Path, out: &Path, clips: &mut Vec<Clip>) -> Result<Value> {
     let raw = carrier_g3(exe)?;
     let f = anchor(&raw)?;
     let i = raw.len() - RATE;
@@ -135,6 +135,22 @@ pub(super) fn run(exe: &Path, clips: &mut Vec<Clip>) -> Result<Value> {
                 if a > best.0 {
                     best = (a, hz);
                 }
+            }
+            if player == 1 && passage == 60 {
+                let mut actions = crate::identity::clock::recorded_source(x)?;
+                for action in &mut actions {
+                    let t = action["tick"].as_u64().ok_or("source tick")? as usize;
+                    let last = y
+                        .log
+                        .iter()
+                        .rev()
+                        .find(|r| r["end"].as_u64().is_some_and(|end| end + 17 <= t as u64));
+                    action["applied_scale"] = y.scale[t].into();
+                    action["veto"] = last.map_or(Value::Bool(true), |r| r["veto"].clone());
+                    action["wet_FS"] = y.wet[t][0].into();
+                    action["carrier_FS"] = raw[t][25].into();
+                }
+                evidence::atomic(&out.join("source-clock.json"), &json!(actions))?;
             }
             let h = harmonics(di, best.1);
             let level = rms(&x[2880..10560]);

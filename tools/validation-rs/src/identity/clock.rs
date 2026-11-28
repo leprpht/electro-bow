@@ -707,3 +707,63 @@ pub(super) fn registered(rate: f64, launch: usize) -> Result<super::stereo_clock
         std::array::from_fn(|j| [-0.4376586748096509, 0.7782794100389229][j % 2]),
     )])
 }
+
+pub(super) fn recorded_source(x: &[f64]) -> Result<Vec<Value>> {
+    let mut c = event_fixture(48000., 479);
+    c.count = 15120;
+    c.events.get_mut(&479).unwrap()[0]["valid_through"] = c.count.into();
+    let base = c.frames[&239].clone();
+    c.frames.clear();
+    c.stamps = (239..c.count).step_by(240).map(|t| (0, t)).collect();
+    let samples = |t: usize| if t < 14400 { x[t] } else { 0. };
+    let hp = (-TAU * 30. / 48000.).exp();
+    let alpha = -(-1f64 / (0.004 * 48000.)).exp_m1();
+    let mut delay = 0.;
+    let mut energy = 0.;
+    for t in 0..c.count {
+        let a = hp.mul_add(samples(t), delay);
+        delay = (-hp).mul_add(samples(t), hp * a);
+        let power = alpha.mul_add(a * a, energy);
+        energy = (1. - alpha) * power;
+        if (t + 1) % 240 == 0 {
+            let mut f = base.clone();
+            f.amplitude = power.sqrt();
+            f.supported = t < 14400;
+            c.frames.insert(t, f);
+        }
+    }
+    replay_input(&c, &[127], samples)
+}
+
+pub(super) fn retire_clock() -> Result<Value> {
+    let make = |pick: usize| {
+        let expiry = 5760 + pick;
+        let mut c = event_fixture(48000., expiry);
+        let start = c.events.remove(&0).unwrap();
+        c.events.insert(pick, start);
+        c
+    };
+    let mut phases = Vec::new();
+    for pick in [0, 120] {
+        let expiry = 5760 + pick;
+        let rows = replay_input(&make(pick), &[127], super::stereo_clock::input)?;
+        let end = rows
+            .iter()
+            .find(|r| r["tick"] == expiry)
+            .ok_or("expiry row")?;
+        ensure(
+            end["epoch"].is_null()
+                && end["job"].is_null()
+                && end["published"].as_array().unwrap().iter().all(|v| v == 0.),
+            "expired scheduled work",
+        )?;
+        let prev = rows
+            .iter()
+            .rev()
+            .find(|r| r["tick"].as_u64().unwrap() < (expiry as u64) && r["window"].is_array())
+            .ok_or("pending window")?;
+        phases.push(prev["window"][3].as_u64().unwrap() < expiry as u64);
+    }
+    ensure(phases == [false, true], "expiry work phases")?;
+    Ok(json!(phases))
+}

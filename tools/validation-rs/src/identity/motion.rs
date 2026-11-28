@@ -119,6 +119,9 @@ fn case(
     )?;
     let raw = carrier::scheduled(exe, fs, n, &controls)?;
     ensure(digest_rows(&raw) == c.physical, "physical trace identity")?;
+    let directory = out.join("motion");
+    let name = format!("{kind}-{fs}");
+    super::artifacts::physical(&directory, &name, exe, fs, &controls, &raw)?;
     let velocity: Vec<_> = raw.iter().map(|r| r[21]).collect();
     let delivery = scheduled_taps(exe, rate, &velocity, |i| depth[i])?;
     let mut hashes: [Sha256; 7] = std::array::from_fn(|_| Sha256::new());
@@ -175,6 +178,48 @@ fn case(
         c.hashes["old_scale"] == legacy_hash,
         "historical fixed-bin permission",
     )?;
+    {
+        use super::artifacts::array;
+        let request = if kind == "veto" {
+            array(
+                "request",
+                n,
+                Some(12),
+                frames.iter().flat_map(|r| r[6..18].iter().copied()),
+            )?
+        } else {
+            array("request", 12, None, alt)?
+        };
+        let entries = [
+            array("pitch", n, None, pitch.iter().copied())?,
+            array("depth", n, None, depth.iter().copied())?,
+            request,
+            array(
+                "q",
+                n,
+                Some(4),
+                frames.iter().flat_map(|r| r[2..6].iter().copied()),
+            )?,
+            array(
+                "d",
+                n,
+                Some(4),
+                output.iter().flat_map(|r| r[..4].iter().copied()),
+            )?,
+            array(
+                "wet",
+                n,
+                Some(4),
+                output.iter().flat_map(|r| r[4..8].iter().copied()),
+            )?,
+            array("scale", n, None, output.iter().map(|r| r[8]))?,
+            array("old_scale", n, None, legacy_scale.iter().copied())?,
+        ];
+        crate::electrical::acoustic::listening::canonical_npz(
+            &entries,
+            &directory.join(format!("{name}.npz")),
+        )?;
+    }
     if fs == 48000 && matches!(kind, "steady" | "vibrato" | "bend" | "veto") {
         let n = 2 * fs as usize;
         let mut clips = Vec::new();
@@ -224,6 +269,7 @@ fn case(
     let mut monitor = Sha256::new();
     let mut start = 0;
     let mut windows = 0;
+    let mut timeline = Vec::new();
     for (i, r) in output.iter().enumerate() {
         let f = &frames[i];
         let mut b = [0.; 17];
@@ -253,6 +299,8 @@ fn case(
                 ensure(next[9] == j as f64, "candidate schedule")?;
             }
             let selected = output.get(done);
+            let observable = frames[start..end].iter().all(|row| row[18] != 0.);
+            timeline.push(json!({"start":start,"end":end,"conditioned":r[12]!=0.,"bridge_ok":r[13]!=0.,"available":r[14]!=0.,"realized_ok":r[11]!=0.,"observable":observable,"trusted":true,"selection_tick":selected.map(|_|done),"veto":selected.map(|s|s[15]!=0.),"scale":selected.map(|s|s[16])}));
             words(
                 &mut monitor,
                 &[
@@ -321,6 +369,27 @@ fn case(
             .sum::<f64>();
         row["historical_stationary_calibration"] = (power / rate).sqrt().into();
     }
+    let mut ccase = carrier::cases()?
+        .remove("steady_48000_196_R1.8_V0.1_3s")
+        .ok_or("diagnostic template")?;
+    ccase.rate = fs;
+    ccase.trajectory = kind.into();
+    let mut metrics =
+        super::motion_report::measures(kind, &ccase, &frames, &output, &legacy_scale)?;
+    metrics["monitor"] = timeline.into();
+    metrics["physical"] = c.physical.clone().into();
+    metrics["trace"] = crate::evidence::digest(&directory.join(format!("{name}.npz")))?.into();
+    if kind == "steady" {
+        metrics["prerequisite"] = super::motion_report::prerequisite(&raw, fs, true)?;
+        ensure(
+            metrics["prerequisite"]["passed"] == true,
+            "nominal upstream prerequisite",
+        )?;
+        if fs == 48000 {
+            metrics["upstream_controls"] = super::motion_report::defects(&raw, kernel)?;
+        }
+    }
+    row["measurements"] = metrics;
     row["old_scale_sha256"] = legacy_hash.into();
     if kind == "vibrato" {
         let historical: Vec<_> = frames

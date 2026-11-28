@@ -29,7 +29,10 @@ pub fn hann(n: usize) -> Vec<f64> {
         return vec![1.0];
     }
     (0..n)
-        .map(|i| 0.5 - 0.5 * (TAU * i as f64 / (n - 1) as f64).cos())
+        .map(|i| {
+            0.5 + 0.5
+                * (std::f64::consts::PI * (2. * i as f64 - (n - 1) as f64) / (n - 1) as f64).cos()
+        })
         .collect()
 }
 
@@ -42,23 +45,57 @@ pub fn spectrum(x: &[f64]) -> Vec<Complex64> {
     data
 }
 
+// The pinned arm64 reference uses an unconjugated Accelerate dot. Very weak eligible
+// high orders after near cancellation expose different reductions in dBr and phase.
+#[cfg(target_os = "macos")]
+fn dot(a: &[Complex64], b: &[Complex64]) -> Complex64 {
+    #[link(name = "Accelerate", kind = "framework")]
+    unsafe extern "C" {
+        fn cblas_zdotu_sub(
+            n: i32,
+            x: *const Complex64,
+            incx: i32,
+            y: *const Complex64,
+            incy: i32,
+            out: *mut Complex64,
+        );
+    }
+    let mut result = Complex64::ZERO;
+    // SAFETY: Complex<f64> has a C-compatible pair layout. Both live slices contain n elements.
+    unsafe {
+        cblas_zdotu_sub(
+            i32::try_from(a.len()).expect("projection length"),
+            a.as_ptr(),
+            1,
+            b.as_ptr(),
+            1,
+            &mut result,
+        )
+    };
+    result
+}
+#[cfg(not(target_os = "macos"))]
+fn dot(a: &[Complex64], b: &[Complex64]) -> Complex64 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
 pub fn partials(x: &[f64], rate: f64, hz: f64, count: usize) -> Vec<Complex64> {
     let weights = hann(x.len());
-    let mean = x.iter().sum::<f64>() / x.len() as f64;
-    let weight = weights.iter().sum::<f64>();
+    let sum = |v: &[f64]| v.chunks(8192).map(sum_numpy).sum::<f64>();
+    let mean = sum(x) / x.len() as f64;
+    let weight = sum(&weights);
+    let centered: Vec<_> = x
+        .iter()
+        .zip(weights)
+        .map(|(&v, w)| Complex64::new((v - mean) * w, 0.))
+        .collect();
     (1..=count)
-        .map(|k| hz * k as f64)
-        .take_while(|f| *f < rate / 2.)
-        .map(|f| {
-            2. * x
-                .iter()
-                .zip(&weights)
-                .enumerate()
-                .map(|(i, (&v, &w))| {
-                    Complex64::from_polar(w * (v - mean), -TAU * f * (i as f64 / rate))
-                })
-                .sum::<Complex64>()
-                / weight
+        .take_while(|&k| hz * (k as f64) < rate / 2.)
+        .map(|k| {
+            let omega = -TAU * k as f64 * hz;
+            let phasors: Vec<_> = (0..x.len())
+                .map(|i| Complex64::from_polar(1., omega * (i as f64 / rate)))
+                .collect();
+            2. * dot(&centered, &phasors) / weight
         })
         .collect()
 }

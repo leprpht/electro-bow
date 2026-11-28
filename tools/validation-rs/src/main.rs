@@ -58,6 +58,10 @@ const SUITES: &[&str] = &[
     "i1-transaction-mutants",
     "i1-clock-compare",
     "i1-stationary-compare",
+    "i1-motion-compare",
+    "i1-integrity",
+    "i1-artifacts",
+    "i1-retirement",
     "i1-joined-motion",
     "i1-stream-compare",
     "i1-uneven",
@@ -112,6 +116,17 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
             dir.parent().and_then(Path::parent).ok_or("suite root")?,
         ),
         "i1-sources" => identity::sources::run(dir),
+        "i1-motion-compare" => identity::motion_report::compare(
+            reference,
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
+        "i1-integrity" => {
+            identity::integrity::run(dir.parent().and_then(Path::parent).ok_or("suite root")?)
+        }
+        "i1-artifacts" => {
+            identity::artifacts::inventory(dir.parent().and_then(Path::parent).ok_or("suite root")?)
+        }
+        "i1-retirement" => identity::stereo::retirement(dir),
         "i1-joined-motion" => identity::stereo::joined_motion(
             dir,
             dir.parent().and_then(Path::parent).ok_or("suite root")?,
@@ -244,6 +259,7 @@ fn run() -> Result<()> {
                     | "i1-clock-compare"
                     | "i1-study-compare"
                     | "i1-stream-compare"
+                    | "i1-motion-compare"
                     | "o1-compare"
                     | "guide-compare"
                     | "o2-electrical-compare"

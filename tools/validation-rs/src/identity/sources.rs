@@ -35,6 +35,7 @@ pub fn run(out: &Path) -> Result<Value> {
     )
     .peak
     .ok_or("M5 anchor")?;
+    let mut audition = Vec::new();
     let mut features = BTreeMap::new();
     let mut reports = BTreeMap::new();
     let mut pairs = BTreeMap::new();
@@ -121,6 +122,12 @@ pub fn run(out: &Path) -> Result<Value> {
         }
         features.insert(name.clone(), ftr);
         if name.ends_with("-60") {
+            audition.push(super::artifacts::array(
+                &format!("{name}-held"),
+                held.len(),
+                None,
+                held.iter().copied(),
+            )?);
             let di = x[..19200]
                 .iter()
                 .map(|v| f64::from(*v as f32))
@@ -136,6 +143,10 @@ pub fn run(out: &Path) -> Result<Value> {
         }
         reports.insert(name,json!({"source_sha256":evidence::digest(&file)?,"attack":attack,"publications":computed.len(),"wet_sha256":sha,"max_feature_error":largest,"max_wet_error":error,"depths":depths}));
     }
+    crate::electrical::acoustic::listening::canonical_npz(
+        &audition,
+        &out.join("revised-held.npz"),
+    )?;
     ensure(reports.len() == 6 && pairs.len() == 15, "source inventory")?;
     Ok(json!({"sources":reports,"pairs":pairs}))
 }

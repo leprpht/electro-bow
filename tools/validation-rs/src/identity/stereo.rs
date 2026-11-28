@@ -20,6 +20,7 @@ struct Fixture {
     right: Option<String>,
 }
 struct Carrier {
+    controls: Vec<u8>,
     rows: Vec<[f64; 30]>,
     delivery: Vec<[f64; 8]>,
     pitch: Vec<f64>,
@@ -56,6 +57,7 @@ fn render_at(exe: &Path, epoch: usize, count: usize, rate: f64) -> Result<Carrie
     let velocity = rows.iter().map(|r| r[21]).collect::<Vec<_>>();
     let delivery = scheduled_taps(exe, rate, &velocity, |i| depths[i])?;
     Ok(Carrier {
+        controls: input,
         rows,
         delivery,
         pitch,
@@ -107,6 +109,20 @@ struct Challenge {
     operand: Operand,
 }
 
+struct Eligibility {
+    owner: Option<usize>,
+    issued: usize,
+    through: usize,
+    min_pitch: f64,
+    max_pitch: f64,
+}
+impl Eligibility {
+    fn permits(&self, epoch: usize, tick: usize, pitch: f64) -> bool {
+        self.owner.is_none_or(|e| e == epoch)
+            && (self.issued..=self.through).contains(&tick)
+            && (self.min_pitch..=self.max_pitch).contains(&pitch)
+    }
+}
 struct Lane<'a> {
     kernel: &'a Kernel,
     current: Option<super::epoch::Epoch<'a>>,
@@ -123,6 +139,9 @@ struct Lane<'a> {
     registered_launch: Option<usize>,
     envelope: fn(usize) -> f64,
     challenge: Option<Challenge>,
+    receipt: Option<Eligibility>,
+    character: fn(usize) -> f64,
+    mix: f32,
     failed_epoch: Option<usize>,
 }
 impl<'a> Lane<'a> {
@@ -143,6 +162,15 @@ impl<'a> Lane<'a> {
             registered_launch: None,
             envelope,
             challenge: None,
+            receipt: Some(Eligibility {
+                owner: None,
+                issued: 0,
+                through: usize::MAX,
+                min_pitch: 65.,
+                max_pitch: 1320.,
+            }),
+            character: |_| 1.,
+            mix: 0.,
             failed_epoch: None,
         }
     }
@@ -247,7 +275,11 @@ impl<'a> Lane<'a> {
                         || self.registered_launch.is_some()
                         || !(6200..7100).contains(&t),
                 );
-                frame[19] = 1.;
+                frame[19] = f64::from(
+                    self.receipt
+                        .as_ref()
+                        .is_some_and(|r| r.permits(epoch, t, path.pitch[i])),
+                );
                 state.run(&[frame], &mut output, probe)
             };
             let result = result.and_then(|()| {
@@ -304,6 +336,10 @@ impl<'a> Lane<'a> {
         }
         row[4] = self.losses as f64;
         row[11..13].copy_from_slice(&self.held);
+        let c = (self.character)(t);
+        let direct = super::stereo_clock::input(t);
+        self.mix = ((1. - c * row[9]) * direct + c * row[10]) as f32;
+        ensure(self.mix.is_finite(), "invalid emitted pre-link mix")?;
         Ok((row, gains))
     }
 }
@@ -313,6 +349,17 @@ pub fn run(out: &Path) -> Result<Value> {
     let exe = replay::build(out, None)?;
     let kernel = Kernel::build(out)?;
     let paths = [render(&exe, 1)?, render(&exe, 2)?, render(&exe, 3)?];
+    let joined = out.join("joined");
+    for (label, path) in ["lifted", "replacement", "fresh"].iter().zip(&paths) {
+        super::artifacts::physical(
+            &joined,
+            &format!("{label}-48000-18500"),
+            &exe,
+            48000,
+            &path.controls,
+            &path.rows,
+        )?;
+    }
     let mut reports = BTreeMap::new();
     for (name, fixture) in &fixtures {
         let computed = super::stereo_clock::schedule(fault(name).map(|(t, _)| t))?;
@@ -343,14 +390,34 @@ pub fn run(out: &Path) -> Result<Value> {
         let mut rows = Vec::with_capacity(N);
         let mut other = Vec::with_capacity(N);
         let mut gains = Vec::with_capacity(N);
+        let mut peer_gains = Vec::with_capacity(N);
         for t in 0..N {
             let (sample, coeff) = left.tick(t, &fixture.schedule, &paths, name, 1.)?;
-            let (peer, _) =
+            let (peer, peer_coeff) =
                 right.tick(t, &fixtures["reference"].schedule, &paths, "reference", 1.)?;
             rows.push(sample);
             gains.push(coeff);
             other.push(peer);
+            peer_gains.push(peer_coeff);
         }
+        let entries = if name == "reference" {
+            vec![
+                super::artifacts::matrix("samples", &rows)?,
+                super::artifacts::matrix("coefficients", &gains)?,
+                super::artifacts::array("di", N, None, (0..N).map(super::stereo_clock::input))?,
+            ]
+        } else {
+            vec![
+                super::artifacts::matrix("left", &rows)?,
+                super::artifacts::matrix("right", &other)?,
+                super::artifacts::matrix("left_coefficients", &gains)?,
+                super::artifacts::matrix("right_coefficients", &peer_gains)?,
+            ]
+        };
+        crate::electrical::acoustic::listening::canonical_npz(
+            &entries,
+            &joined.join(format!("{name}.npz")),
+        )?;
         let mut data =
             std::io::BufWriter::new(std::fs::File::create(out.join(format!("{name}.f64le")))?);
         use std::io::Write;
@@ -391,14 +458,17 @@ pub fn run(out: &Path) -> Result<Value> {
             "unaffected stereo peer",
         )?;
         let mut signed_runs = Vec::new();
-        for gain in [-0.75, 0.625] {
+        for (gain, automated) in [(-0.75, false), (0.625, false), (-0.75, true), (0.625, true)] {
             let mut lane = Lane::new(&kernel);
+            if automated {
+                lane.character = |t| 0.5 + 0.45 * (TAU * t as f64 / 1703.).sin();
+            }
             let mut mixed = Vec::with_capacity(N * 4);
             let mut worst = 0f64;
             for (t, reference) in rows.iter().enumerate() {
                 let (s, _) = lane.tick(t, &computed, &paths, name, gain)?;
                 let direct = super::stereo_clock::input(t);
-                let actual = ((1. - s[9]) * direct + s[10]) as f32;
+                let actual = lane.mix;
                 let when = fault(name).map(|(tick, _)| tick);
                 let (energy, product) =
                     if let Some(start) = when.filter(|start| (*start..*start + 240).contains(&t)) {
@@ -416,7 +486,12 @@ pub fn run(out: &Path) -> Result<Value> {
                         let e = envelope(t);
                         (e, e * (gain * reference[8]))
                     };
-                let expected = ((1. - energy) * direct + product) as f32;
+                let c = if automated {
+                    0.5 + 0.45 * (TAU * t as f64 / 1703.).sin()
+                } else {
+                    1.
+                };
+                let expected = ((1. - c * energy) * direct + c * product) as f32;
                 worst = worst.max((s[10] - product).abs());
                 ensure(
                     s[9] == energy
@@ -427,11 +502,12 @@ pub fn run(out: &Path) -> Result<Value> {
                 mixed.extend(actual.to_le_bytes());
             }
             let file = format!(
-                "{name}-{}.f32le",
-                if gain < 0. { "negative" } else { "positive" }
+                "{name}-{}{}.f32le",
+                if gain < 0. { "negative" } else { "positive" },
+                if automated { "-character" } else { "" }
             );
             std::fs::write(out.join(&file), &mixed)?;
-            signed_runs.push(json!({"gain":gain,"max_product_error":worst,"a4_file":file,"mix_sha256":format!("{:x}",Sha256::digest(&mixed))}));
+            signed_runs.push(json!({"gain":gain,"automated_character":automated,"max_product_error":worst,"a4_file":file,"mix_sha256":format!("{:x}",Sha256::digest(&mixed))}));
         }
         reports.insert(name,json!({"samples":fixture.samples,"gains":fixture.gains,"other":hash(&other),"fault":fault(name),"ticks":N,"maximum_capture_error":max_capture_error,"signed_runs":signed_runs}));
     }
@@ -566,7 +642,17 @@ pub fn uneven(out: &Path) -> Result<Value> {
             "uneven neutral prerequisite",
         )?;
     }
-    let paths = [render_at(&exe, 2, count, rate)?];
+    let paths = [render_at(&exe, 2, 3 * 47001, rate)?];
+    let joined = out.join("joined");
+    super::artifacts::physical(
+        &joined,
+        "uneven-47001-141003",
+        &exe,
+        47001,
+        &paths[0].controls,
+        &paths[0].rows,
+    )?;
+    let mut entries = Vec::new();
     let original: Value = serde_json::from_str(include_str!("../../contracts/uneven.json"))?;
     let mut results = BTreeMap::new();
     for kind in ["complete", "missing-A2", "missing-I1"] {
@@ -610,8 +696,11 @@ pub fn uneven(out: &Path) -> Result<Value> {
             original[kind]["samples"] == hash(&samples) && original[kind]["gains"] == hash(&gains),
             &format!("{kind} historical uneven trace"),
         )?;
+        entries.push(super::artifacts::matrix(kind, &samples)?);
+        entries.push(super::artifacts::matrix(&format!("{kind}_gains"), &gains)?);
         results.insert(kind,json!({"changed":changed,"capture":rows,"samples":hash(&samples),"coefficients":hash(&gains),"maximum_error":max_error}));
     }
+    crate::electrical::acoustic::listening::canonical_npz(&entries, &joined.join("uneven.npz"))?;
     Ok(json!({"cases":results,"rate":rate}))
 }
 
@@ -635,6 +724,7 @@ pub fn joined_motion(out: &Path, root: &Path) -> Result<Value> {
         let v = physical.iter().map(|r| r[21]).collect::<Vec<_>>();
         let delivery = scheduled_taps(&exe, fs, &v, |i| depths[i])?;
         let paths = [Carrier {
+            controls,
             rows: physical,
             delivery,
             pitch,
@@ -721,6 +811,10 @@ pub fn stream_compare(reference: &Path, root: &Path) -> Result<Value> {
         )
     };
     let mut stats = (0, 0., 0.);
+    let retired = read("i1-retirement")?;
+    for key in ["lifecycle", "retirement"] {
+        acoustic::compare(&stream[key], &retired[key], key, &mut stats)?;
+    }
     let motion = read("i1-joined-motion")?;
     acoustic::compare(
         &stream["joined_motion"],
@@ -767,5 +861,137 @@ pub fn stream_compare(reference: &Path, root: &Path) -> Result<Value> {
     }
     Ok(
         json!({"rates":7,"numerical_faults":16,"uneven_cases":3,"fields":stats.0,"largest_scaled_difference":stats.1}),
+    )
+}
+
+pub fn retirement(out: &Path) -> Result<Value> {
+    let exe = replay::build(out, None)?;
+    let kernel = Kernel::build(out)?;
+    let paths = [render_at(&exe, 3, 16000, RATE)?];
+    let schedule = super::clock::fault_schedule(None)?;
+    let signature = |r: [f64; 22]| r.map(f64::to_bits);
+    let mut nominal = Lane::new(&kernel);
+    let mut baseline = Vec::new();
+    for t in 0..16000 {
+        baseline.push(nominal.tick(t, &schedule, &paths, "reference", 1.)?.0);
+    }
+    let close = baseline
+        .iter()
+        .position(|r| r[16] != 0.)
+        .ok_or("closed window")?;
+    let trial = close + 4;
+    for reset in [false, true] {
+        let mut actor = Lane::new(&kernel);
+        let mut right = Lane::new(&kernel);
+        let mut retired = schedule.clone();
+        retired.retain(|r| r.0 < trial);
+        retired.push((trial, None, [0.; 12]));
+        for (t, nominal) in baseline.iter().enumerate() {
+            let a = actor.tick(t, &retired, &paths, "reference", 1.)?.0;
+            let b = right
+                .tick(
+                    t,
+                    if reset { &retired } else { &schedule },
+                    &paths,
+                    "reference",
+                    1.,
+                )?
+                .0;
+            if t >= trial {
+                ensure(a[2] == 0. && a[15] < 0., "retired epoch reuse")?;
+            }
+            if reset && t >= trial {
+                ensure(b[2] == 0., "transport generation reset")?;
+            } else {
+                ensure(
+                    signature(b) == signature(*nominal),
+                    "independent peer progression",
+                )?;
+            }
+        }
+    }
+    let mut actor = Lane::new(&kernel);
+    actor.challenge = Some(Challenge {
+        tick: 6100,
+        probe: 3,
+        site: 3,
+        operand: Operand::Native,
+    });
+    let mut reset_schedule = schedule.clone();
+    reset_schedule.retain(|r| r.0 < 6101);
+    reset_schedule.push((6101, None, [0.; 12]));
+    let mut peer = Lane::new(&kernel);
+    for t in 0..16000 {
+        // A transport generation reset discards both lane-local fades before rendering this sample.
+        if t == 6101 {
+            for lane in [&mut actor, &mut peer] {
+                lane.fade = None;
+                lane.held = [0.; 2];
+            }
+        }
+        let a = actor.tick(t, &reset_schedule, &paths, "reference", 1.)?.0;
+        let b = peer.tick(t, &reset_schedule, &paths, "reference", 1.)?.0;
+        if t >= 6101 {
+            ensure(
+                a[4] == 1. && a[13] == -1. && a[10] == 0. && b[0] == 0.,
+                "reset during cached fade",
+            )?;
+        }
+    }
+    let mut rec = Lane::new(&kernel);
+    rec.fault_trial = true;
+    let permit = |owner, issued, through, min_pitch, max_pitch| {
+        Some(Eligibility {
+            owner: Some(owner),
+            issued,
+            through,
+            min_pitch,
+            max_pitch,
+        })
+    };
+    for t in 0..16000 {
+        match t {
+            7100 => rec.receipt = None,
+            7800 => rec.receipt = permit(2, 0, 16000, 65., 1320.),
+            8100 => rec.receipt = permit(1, 0, 8000, 65., 1320.),
+            8200 => rec.receipt = permit(1, 8200, 16000, 430., 450.),
+            8500 => rec.receipt = permit(1, 8500, 16000, 65., 1320.),
+            _ => {}
+        }
+        let r = rec.tick(t, &schedule, &paths, "reference", 1.)?.0;
+        if t == 7000 || t == 15999 {
+            ensure(r[7] > 0., "causal receipt recovery")?;
+        }
+        if (7400..8500).contains(&t) {
+            ensure(r[7] == 0., "revocation or wrong receipt")?;
+        }
+    }
+    let paths = [render_at(&exe, 2, 16000, RATE)?];
+    let mut alter = render_at(&exe, 2, 16000, RATE)?;
+    for i in 7001..alter.rows.len() {
+        alter.delivery[i][3] *= -2.;
+        alter.pitch[i] *= 1.2;
+        alter.depths[i] = 0.;
+        alter.rows[i][11] = 0.;
+    }
+    let altered = [alter];
+    let mut a = Lane::new(&kernel);
+    let mut b = Lane::new(&kernel);
+    let mut changed = false;
+    for t in 0..16000 {
+        let x = a.tick(t, &schedule, &paths, "reference", 1.)?.0;
+        let y = b.tick(t, &schedule, &altered, "reference", 1.)?.0;
+        if t < 479 + 7001 {
+            ensure(
+                signature(x) == signature(y),
+                "physical carrier causal prefix",
+            )?;
+        } else {
+            changed |= x[8] != y[8];
+        }
+    }
+    ensure(changed, "carrier suffix took effect")?;
+    Ok(
+        json!({"retirement":{"trial":trial,"reset":6101,"revoked":7100,"renewed":8500},"lifecycle":super::clock::retire_clock()?}),
     )
 }
