@@ -360,5 +360,7 @@ pub fn run(dir: &Path) -> Result<Value> {
         .position(|(r, d)| (f64::from_le_bytes(r[24..32].try_into().unwrap()) - d[3]).abs() > 2e-11)
         .ok_or("historical fourth bank survived")?;
     controls.push(json!({"name":"Review 8.1 fourth source","predicate":"fourth-bank correction","first":first,"executable":evidence::digest(&exe)?}));
-    Ok(json!({"cases":controls,"frames":f.frames.len(),"retired_decisions":trajectory.decisions}))
+    Ok(
+        json!({"cases":controls,"frames":f.frames.len(),"retired_decisions":trajectory.decisions,"behavior":{"parity":[0,0.5,1],"vetoed":trajectory.decisions.iter().filter(|(_,ok)|!*ok).count()}}),
+    )
 }

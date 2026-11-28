@@ -185,5 +185,5 @@ pub fn run() -> Result<Value> {
         updates(&vec![0.; 16000], 48000, 196.)?.len() == 1,
         "unvoiced capture publication",
     )?;
-    Ok(json!({"injected_sources":rows}))
+    Ok(json!({"injected_sources":rows,"projection":super::clock::joined::projection()?}))
 }

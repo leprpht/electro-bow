@@ -125,6 +125,20 @@ pub fn run(
             }
         }
     }
+    if historical {
+        let comparisons: BTreeMap<_, _> = COMPARISONS
+            .iter()
+            .filter_map(|suite| reports.get(suite).map(|r| (*suite, r)))
+            .collect();
+        ensure(
+            comparisons.len() == COMPARISONS.len(),
+            "missing differential evidence",
+        )?;
+        evidence::atomic(
+            &dir.join("comparisons.json"),
+            &json!({"completed_comparisons":comparisons,"unresolved_artifact_differences":differences}),
+        )?;
+    }
     if complete && !differences.is_empty() {
         evidence::atomic(
             &dir.join("unqualified.json"),

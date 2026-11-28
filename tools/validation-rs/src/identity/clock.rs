@@ -1,5 +1,6 @@
 //! Independent host-sample controller, capture support and publication replay.
 mod controls;
+pub(super) mod joined;
 use super::capture;
 use crate::{Result, ensure, evidence, pitch};
 use serde::Deserialize;
@@ -121,6 +122,14 @@ fn replay(c: &Case, parts: &[usize]) -> Result<Vec<Value>> {
     })
 }
 fn replay_input(c: &Case, parts: &[usize], sample: impl Fn(usize) -> f64) -> Result<Vec<Value>> {
+    replay_with_fault(c, parts, sample, None)
+}
+fn replay_with_fault(
+    c: &Case,
+    parts: &[usize],
+    sample: impl Fn(usize) -> f64,
+    fault: Option<usize>,
+) -> Result<Vec<Value>> {
     let rate = c.rate;
     let d = (rate / 16000.).floor() as usize;
     let fa = rate / d as f64;
@@ -160,7 +169,12 @@ fn replay_input(c: &Case, parts: &[usize], sample: impl Fn(usize) -> f64) -> Res
         let end = c.count.min(start + part);
         for t in start..end {
             let group = c.events.get(&t).map_or(&[][..], Vec::as_slice);
-            let actions = decode(group, generation);
+            let mut actions = decode(group, generation);
+            if fault.is_some_and(|f| t > f && t < f + (0.005 * rate).round_ties_even() as usize)
+                && !group.iter().any(|v| v["kind"] == "reset")
+            {
+                actions = Some(Actions::default());
+            }
             let mut note = Vec::new();
             if actions.is_none() {
                 note.push("invalid frame");
@@ -412,6 +426,18 @@ fn replay_input(c: &Case, parts: &[usize], sample: impl Fn(usize) -> f64) -> Res
             if !group.is_empty() || due || !note.is_empty() {
                 rows.push(json!({"tick":t,"generation":generation,"event":gesture,"phase":phase,"owner":owner,"live":live,"epoch":epoch,"confirmed":confirmed,"pending":if matches!(phase,"pending"|"confirmed"){owner}else{None},"consumed":consumed,"actions":note,"window":window,"held":held,"target":held.map(|v|10f64.powf(v/20.)-1.),"job":job.as_ref().map(|j|(j.owner[0],j.owner[1],j.start)),"held_without_support":live.is_some() && (phase!="active" || last.is_none_or(|f|!f.good())),"published":published}));
             }
+            if fault == Some(t) {
+                owner = None;
+                confirmed = None;
+                live = None;
+                epoch = None;
+                job = None;
+                published_end = None;
+                phase = "idle";
+                held = [0.; 12];
+                published = [0.; 12];
+                history.clear();
+            }
         }
         start = end;
     }
@@ -523,6 +549,7 @@ fn event_fixture(rate: f64, launch: usize) -> Case {
 }
 pub fn event_controls() -> Result<Value> {
     let mut checks = BTreeMap::new();
+    let mut collisions = BTreeMap::new();
     for (fs, t, ok) in [
         (48000., 5759, true),
         (48000., 5760, false),
@@ -540,6 +567,12 @@ pub fn event_controls() -> Result<Value> {
             "elapsed acquisition eligibility",
         )?;
         checks.insert(format!("{fs}/{t}"), json!(row["epoch"]));
+        let epoch = row["epoch"].as_u64().unwrap_or(0);
+        if fs == 48000. {
+            collisions.insert(t.to_string(), json!([epoch, row["actions"]]));
+        } else {
+            collisions.insert(format!("fractional/{t}"), json!(epoch));
+        }
     }
     for (name, t) in [("timeout", 5760), ("reset", 5759), ("lost support", 5759)] {
         let mut c = event_fixture(48000., t);
@@ -593,7 +626,9 @@ pub fn event_controls() -> Result<Value> {
             .all(|r| !r["actions"].as_array().unwrap().contains(&json!("publish"))),
         "stale feature publication",
     )?;
-    Ok(json!({"deadlines":checks,"duplicate_types":5,"collisions":3,"hold":3300}))
+    Ok(
+        json!({"historical_collisions":collisions,"deadlines":checks,"duplicate_types":5,"collisions":3,"hold":3300}),
+    )
 }
 
 pub(super) fn fault_schedule(fault: Option<usize>) -> Result<super::stereo_clock::Schedule> {

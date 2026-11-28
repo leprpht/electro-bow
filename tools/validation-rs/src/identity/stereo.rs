@@ -361,6 +361,8 @@ pub fn run(out: &Path) -> Result<Value> {
         )?;
     }
     let mut reports = BTreeMap::new();
+    let mut historical = json!({"columns":["epoch","physical_index","guide_commit","o2_commit","invalidation_count","depth","q","lambda","wet","E","product","cached_E","cached_product","fade_index","veto","trial","window_closed","phase","target","off_wet","factory_wet","full_wet"],"fs":48000,"clocks":super::clock::joined::controls()?,"faults":{}});
+
     for (name, fixture) in &fixtures {
         let computed = super::stereo_clock::schedule(fault(name).map(|(t, _)| t))?;
         ensure(
@@ -457,6 +459,68 @@ pub fn run(out: &Path) -> Result<Value> {
                     .as_str(),
             "unaffected stereo peer",
         )?;
+        let capture = super::clock::joined::records(fault(name).map(|(tick, _)| tick))?;
+        if let Some((tick, site)) = fault(name) {
+            let r = rows[tick];
+            let e = r[0] as usize;
+            let i = r[1] as usize;
+            let path = &paths[e - 1];
+            let raw = &path.rows[i];
+            let q = [raw[25], raw[26], raw[27], path.delivery[i][3]];
+            let label = match site {
+                2 => "COEFFICIENT",
+                3 => "BANK",
+                5 => "MOMENT",
+                9 => "WET",
+                10 => "CONVERSION",
+                20 => "PHYSICAL",
+                21 => "ELECTRICAL",
+                _ => return Err("unknown historical fault site".into()),
+            };
+            let cache = if i == 0 {
+                [0.; 2]
+            } else {
+                [rows[tick - 1][11], rows[tick - 1][12]]
+            };
+            let first_zero = rows[tick..]
+                .iter()
+                .position(|s| s[13] == 239.)
+                .ok_or("retirement endpoint")?
+                + tick;
+            historical["faults"][name] = json!({"transaction":{"tick":tick,"site":label,"epoch":e,"physical_index":i,"physical":(r[2]!=0.).then_some(&raw[..22]),"o2":(r[3]!=0.).then_some(q),"preceding_cache":cache},"capture":capture,"trace":hash(&rows),"other":hash(&other),"zero_tick":first_zero});
+        } else {
+            historical["capture"] = json!(capture);
+            historical["reference"] = hash(&rows).into();
+            historical["gain_hash"] = hash(&gains).into();
+            let tick = 9719;
+            let mut lane = Lane::new(&kernel);
+            lane.challenge = Some(Challenge {
+                tick,
+                probe: 3,
+                site: 3,
+                operand: Operand::Native,
+            });
+            let mut detected = Value::Null;
+            let schedule = super::stereo_clock::schedule(Some(tick))?;
+            for t in 0..=tick + 239 {
+                let (r, _) = lane.tick(t, &schedule, &paths, "reference", 1.)?;
+                if t == tick {
+                    ensure(
+                        r[0] == 2. && r[1] == 0. && r[2] == 1. && r[3] == 1. && lane.losses == 1,
+                        "fault at replacement launch",
+                    )?;
+                    detected =
+                        json!({"tick":t,"epoch":r[0] as usize,"physical_index":r[1] as usize});
+                }
+                if t >= tick {
+                    ensure(r[10] == 0. && lane.losses == 1, "replacement cache zero")?;
+                }
+                if r[13] == 239. {
+                    detected["zero"] = t.into();
+                }
+            }
+            historical["replacement_fault"] = detected;
+        }
         let mut signed_runs = Vec::new();
         for (gain, automated) in [(-0.75, false), (0.625, false), (-0.75, true), (0.625, true)] {
             let mut lane = Lane::new(&kernel);
@@ -511,6 +575,7 @@ pub fn run(out: &Path) -> Result<Value> {
         }
         reports.insert(name,json!({"samples":fixture.samples,"gains":fixture.gains,"other":hash(&other),"fault":fault(name),"ticks":N,"maximum_capture_error":max_capture_error,"signed_runs":signed_runs}));
     }
+    crate::evidence::atomic(&out.join("joined-report.json"), &historical)?;
     Ok(
         json!({"cases":reports,"bitwise_comparison_input":"frozen published features","signed_delivery_input":"independently computed joined DI clock"}),
     )
@@ -859,8 +924,97 @@ pub fn stream_compare(reference: &Path, root: &Path) -> Result<Value> {
             "uneven trajectory",
         )?;
     }
+    let layout = evidence::strict(&std::fs::read(old.join("layout.json"))?)?;
+    acoustic::compare(
+        &layout,
+        &read("i1-layout")?["maximum"],
+        "submitted layout",
+        &mut stats,
+    )?;
+    acoustic::compare(
+        &stream["collisions"],
+        &read("i1-events")?["historical_collisions"],
+        "event collisions",
+        &mut stats,
+    )?;
+    let integrity = evidence::strict(&std::fs::read(old.join("integrity.json"))?)?;
+    let audited = read("i1-integrity")?;
+    for (k, v) in audited["sample_controls"]
+        .as_object()
+        .ok_or("integrity samples")?
+    {
+        acoustic::compare(&integrity[k], v, k, &mut stats)?;
+    }
+    acoustic::compare(
+        &stream["paths"],
+        &read("i1-path-mutants")?["behavior"],
+        "fixed path parity and realized veto",
+        &mut stats,
+    )?;
+    let projection = read("i1-capture")?;
+    acoustic::compare(
+        &stream["capture_projection"]["publications"],
+        &projection["projection"]["publications"],
+        "projection publication count",
+        &mut stats,
+    )?;
+    ensure(
+        [&stream["capture_projection"], &projection["projection"]]
+            .iter()
+            .all(|r| {
+                r["max_db_error"]
+                    .as_f64()
+                    .is_some_and(|v| (0. ..=2e-11).contains(&v))
+            }),
+        "source projection error bound",
+    )?;
+    let qr = read("i1-qr")?;
+    let original_qr = stream["equivalence"].as_object().ok_or("original QR")?;
+    ensure(
+        qr.as_array()
+            .is_some_and(|cases| cases.len() == original_qr.len()),
+        "complete QR inventory",
+    )?;
+    for (key, row) in original_qr {
+        let kind = key.split("'").nth(1).ok_or("reference QR key")?;
+        let actual = qr
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["kind"] == kind)
+            .ok_or("missing fit comparison")?;
+        for (field, v) in row.as_object().ok_or("reference fit field")? {
+            if ["moment_error", "fit_error", "residual_error"].contains(&field.as_str()) {
+                let tolerance = if field == "fit_error" { 2e-10 } else { 2e-11 };
+                ensure(
+                    [v, &actual[field]]
+                        .iter()
+                        .all(|x| x.as_f64().is_some_and(|n| (0. ..=tolerance).contains(&n))),
+                    "independent solver error bound",
+                )?;
+            } else {
+                acoustic::compare(v, &actual[field], field, &mut stats)?;
+            }
+        }
+    }
+    let mut joined_report = evidence::strict(&std::fs::read(publication::current_artifact(
+        root,
+        "i1-stereo",
+        "joined-report.json",
+    )?)?)?;
+    for (name, r) in uneven["cases"].as_object().ok_or("uneven report")? {
+        let launch = r["capture"]
+            .as_array()
+            .ok_or("uneven capture")?
+            .iter()
+            .find(|v| v["epoch"] == 1)
+            .ok_or("uneven launch")?;
+        joined_report["uneven_delivery"][name] = json!({"launch":launch,"capture":r["capture"],"changed":r["changed"],"trace":r["samples"]});
+    }
+    let mut joined_stats = (0, 0., 0.);
+    acoustic::compare(&joined, &joined_report, "joined", &mut joined_stats)?;
     Ok(
-        json!({"rates":7,"numerical_faults":16,"uneven_cases":3,"fields":stats.0,"largest_scaled_difference":stats.1}),
+        json!({"complete_joined_fields":joined_stats.0,"complete_joined_max_scaled_error":joined_stats.1,"rates":7,"numerical_faults":16,"uneven_cases":3,"fields":stats.0,"largest_scaled_difference":stats.1}),
     )
 }
 

@@ -99,7 +99,7 @@ const SUITES: &[&str] = &[
 ];
 const DEFAULT_OUT: &str = "build/validation-migration/rust";
 
-fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
+fn execute(suite: &str, dir: &Path, reference: &Path, explicit_reference: bool) -> Result<Value> {
     match suite {
         "repeatability" => recordings::scoring::run(dir, reference),
         "recordings" => recordings::preflight(dir, reference),
@@ -205,7 +205,7 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
             dir,
             reference,
             suite == "qualification",
-            suite == "differential",
+            suite == "differential" || (suite == "qualification" && explicit_reference),
             suite == "o2-qualification",
         ),
         "guide-negative" => guide::negative(dir),
@@ -278,6 +278,7 @@ fn run() -> Result<()> {
                     | "o2-acoustic-compare"
                     | "signed-compare"
                     | "i1-bank-compare"
+                    | "qualification"
                     | "differential"
             ) && args.len() == 2),
         "unexpected argument",
@@ -286,7 +287,9 @@ fn run() -> Result<()> {
         args.get(1)
             .map_or("build/validation-migration/reference", String::as_str),
     );
-    publication::run(suite, &root, |dir| execute(suite, dir, &reference))
+    publication::run(suite, &root, |dir| {
+        execute(suite, dir, &reference, args.len() == 2)
+    })
 }
 fn main() -> ExitCode {
     match run() {
