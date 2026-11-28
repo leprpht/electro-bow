@@ -65,6 +65,24 @@ fn arena(fs: f64) -> (Arena, usize) {
             1,
             "transport",
         );
+        a.field::<f64>(
+            lane,
+            "a3_hop_amplitude",
+            7,
+            "last seven A1 level hops, independent of acquisition",
+        );
+        a.field::<f64>(
+            lane,
+            "mute_reference_amplitude",
+            1,
+            "latched first qualifying mute drop",
+        );
+        a.field::<u64>(
+            lane,
+            "level_head level_valid rise_armed mute_latched last_raw_above_threshold",
+            1,
+            "A3 lane",
+        );
         a.field::<u64>(lane, "support_head support_valid", 1, "acquisition");
         a.field::<u64>(
             lane,
@@ -115,7 +133,7 @@ fn arena(fs: f64) -> (Arena, usize) {
         );
         a.field::<u64>(lane,"event_generation gesture_tag confirm_tag confirm_generation confirm_serial confirm_through dispose_tag dispose_generation dispose_epoch launch_tag launch_generation launch_epoch launch_source_generation launch_serial a2_stamp_tag a2_stamp_generation a2_stamp_end i1_stamp_tag i1_stamp_generation i1_stamp_end receipt_update_tag",1,"current host frame");
         a.field::<f64>(lane,"dispose_energy launch_energy requested_hz requested_speed requested_force requested_depth",1,"current host frame");
-        a.field::<[f64; 4]>(lane, "o2_x1_y1_z1_z2", 4, "physical epoch");
+        a.field::<[f64; 4]>(lane, "o2_v_h_z1_z2", 4, "physical epoch");
         a.field::<Candidate>(lane, "epoch", 1, "physical epoch");
         a.field::<f64>(
             lane,
@@ -244,7 +262,9 @@ pub fn prepared() -> Result<Value> {
     );
     stack.field::<f32>("tick", "converted", 2, "one frame");
     ensure(
-        data["rate"] == 192000f64.next_down(),
+        data["rate"] == 192000f64.next_down()
+            && data["analysis_bytes"] == 60936
+            && data["total_bytes"] == 717384,
         "prepared rate extremum",
     )?;
     Ok(

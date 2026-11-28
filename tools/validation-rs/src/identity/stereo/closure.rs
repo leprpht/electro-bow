@@ -96,13 +96,9 @@ fn joined(out: &Path) -> Result<Value> {
         let detection = 9820;
         let after = stereo_clock::schedule(Some(detection))?;
         let after_wet = normalized(&after, &paths)?;
-        let mut lanes = [Lane::new(&kernel), Lane::new(&kernel)];
-        for l in &mut lanes {
-            l.character = character;
-        }
-        lanes[1].direct = right_direct;
+        let mut producer = StereoTransaction::new(&kernel);
         if let Some(j) = damaged {
-            lanes[j].challenge = Some(Challenge {
+            producer.lanes[j].challenge = Some(Challenge {
                 tick: detection,
                 probe: 0,
                 site: 1,
@@ -112,15 +108,10 @@ fn joined(out: &Path) -> Result<Value> {
         let mut writer = BufWriter::new(std::fs::File::create(out.join(format!("{case}.f64le")))?);
         let mut preceding = [[0.; 2]; 2];
         let mut witness = Value::Null;
+        let mut committed = Value::Null;
         let mut max_error = 0f64;
         for host in 0..N {
             if Some(host) == reset {
-                // Independent transport field wins before either lane processes the sample.
-                lanes = [Lane::new(&kernel), Lane::new(&kernel)];
-                for l in &mut lanes {
-                    l.character = character;
-                }
-                lanes[1].direct = right_direct;
                 preceding = [[0.; 2]; 2];
             }
             let tick = if let Some(at) = reset.filter(|at| host >= *at) {
@@ -128,13 +119,31 @@ fn joined(out: &Path) -> Result<Value> {
             } else {
                 host
             };
-            for (j, lane) in lanes.iter_mut().enumerate() {
+            let schedules = std::array::from_fn(|j| {
+                if damaged == Some(j) && reset.is_none_or(|at| host < at) {
+                    &after
+                } else {
+                    &nominal
+                }
+            });
+            let controls = std::array::from_fn(|j| HostMix {
+                direct: if j == 0 {
+                    stereo_clock::input(tick)
+                } else {
+                    right_direct(tick)
+                },
+                character: character(tick),
+                energy: envelope(tick),
+                signed_gain: gain(j, tick),
+            });
+            let emitted = producer.process(Some(host) == reset, schedules, controls, &paths)?;
+            for (j, emission) in emitted.iter().enumerate() {
                 let failing = damaged == Some(j) && reset.is_none_or(|at| host < at);
-                let schedule = if failing { &after } else { &nominal };
+
                 let independent = if failing { &after_wet } else { &nominal_wet };
                 let signed_gain = gain(j, tick);
-                let (r, _) = lane.tick(tick, schedule, &paths, "reference", signed_gain)?;
-                let sample = lane.emitted;
+                let r = emission.trace;
+                let sample = emission.sample;
                 let direct = if j == 0 {
                     stereo_clock::input(tick)
                 } else {
@@ -149,10 +158,14 @@ fn joined(out: &Path) -> Result<Value> {
                     ensure(
                         r[13] == index as f64
                             && r[4] == 1.
-                            && lane.site == if index == 0 { 1 } else { 0 },
+                            && emission.site == if index == 0 { 1 } else { 0 },
                         "PHASE fade and single retirement",
                     )?;
                     if index == 0 {
+                        let i = tick - 9719;
+                        let raw = &paths[1].rows[i];
+                        committed = json!({"tick":tick,"index":i,"physical":&raw[..22],"q":[raw[25],raw[26],raw[27],r[6]],"depth":r[5]});
+
                         ensure(
                             r[..4] == [2., (tick - 9719) as f64, 1., 1.]
                                 && r[6].to_bits() == paths[1].delivery[tick - 9719][3].to_bits(),
@@ -256,7 +269,7 @@ fn joined(out: &Path) -> Result<Value> {
                     f64::from(sample.output),
                     r[11],
                     r[12],
-                    f64::from(lane.site),
+                    f64::from(emission.site),
                     r[13],
                     r[2],
                     r[3],
@@ -273,7 +286,7 @@ fn joined(out: &Path) -> Result<Value> {
             }
         }
         writer.flush()?;
-        summaries.push(json!({"case":case,"damaged_lane":damaged,"ticks":N,"max_normalized_error":max_error,"witness":witness}));
+        summaries.push(json!({"case":case,"damaged_lane":damaged,"ticks":N,"max_normalized_error":max_error,"witness":witness,"detection_commit":committed}));
     }
     Ok(
         json!({"columns":["host","lane","normalized","signed_gain","signed_wet","emitted_E","character","direct","emitted_P","A4","converted_f32_exact_as_f64","cache_E","cache_P","fault_site","fade_index","guide_commit","o2_commit","invalidations","epoch","physical_index"],"cases":summaries}),

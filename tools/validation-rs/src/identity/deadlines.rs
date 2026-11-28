@@ -173,8 +173,6 @@ pub fn corrected() -> Result<Value> {
         let n = (0.005 * fs).round() as usize;
         let end = revoke + n - 1;
         let mut frames = withdrawal_frames(fs, end + 2, revoke);
-        // Distinct signs survive the exact zero path, even with live nonzero bank history.
-        frames[end][2..6].copy_from_slice(&[-0., 0., -0., -0.]);
         let mut output = vec![[0.; 20]; frames.len()];
         Kernel::Corrected.epoch(fs).run(&frames, &mut output, 0)?;
         ensure(output[revoke - 1][8] == 1., "corrected full-scale setup")?;
@@ -185,6 +183,15 @@ pub fn corrected() -> Result<Value> {
         ensure(
             (0..4).all(|j| output[end][4 + j].to_bits() == frames[end][2 + j].to_bits()),
             "first neutral q bits",
+        )?;
+        let original_neutral = output[end][7];
+        // Repeat the same complete ramp with signed zeros on the endpoint.
+        frames[end][2..6].copy_from_slice(&[-0., 0., -0., -0.]);
+        Kernel::Corrected.epoch(fs).run(&frames, &mut output, 0)?;
+        ensure(
+            output[end][8] == 0.
+                && (0..4).all(|j| output[end][4 + j].to_bits() == frames[end][2 + j].to_bits()),
+            "signed zero deadline sample",
         )?;
         let bound = 1. / n as f64 + 2. * f64::EPSILON;
         ensure(
@@ -229,7 +236,7 @@ pub fn corrected() -> Result<Value> {
                 reversals += 1;
             }
         }
-        rows.push(json!({"rate":fs,"revocation":revoke,"increments":n,"first_exact_neutral":end,"q_bits":frames[end][2..6].iter().map(|x|x.to_bits()).collect::<Vec<_>>(),"step_bound":bound,"interrupted_runs":reversals}));
+        rows.push(json!({"rate":fs,"revocation":revoke,"increments":n,"first_exact_neutral":end,"original_q":original_neutral,"q_bits":frames[end][2..6].iter().map(|x|x.to_bits()).collect::<Vec<_>>(),"step_bound":bound,"interrupted_runs":reversals}));
     }
     Ok(json!(rows))
 }

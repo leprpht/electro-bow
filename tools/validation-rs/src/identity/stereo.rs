@@ -144,7 +144,7 @@ struct Lane<'a> {
     receipt: Option<Eligibility>,
     character: fn(usize) -> f64,
     mix: f32,
-    direct: fn(usize) -> f64,
+    host_mix: Option<HostMix>,
     emitted: super::delivery::Sample,
     site: i32,
     failed_epoch: Option<usize>,
@@ -176,7 +176,7 @@ impl<'a> Lane<'a> {
             }),
             character: |_| 1.,
             mix: 0.,
-            direct: super::stereo_clock::input,
+            host_mix: None,
             emitted: Default::default(),
             site: 0,
             failed_epoch: None,
@@ -194,7 +194,10 @@ impl<'a> Lane<'a> {
             && at == t
         {
             self.schedule_index += 1;
-            if epoch != self.owner && (epoch.is_none() || epoch != self.failed_epoch) {
+            if epoch != self.owner
+                && (epoch.is_none() || epoch != self.failed_epoch)
+                && (self.fade.is_none() || matches!(self.kernel, Kernel::Historical(_)))
+            {
                 self.owner = epoch;
                 self.current = epoch.map(|_| self.kernel.epoch(self.rate));
                 self.pointer = 0;
@@ -205,8 +208,12 @@ impl<'a> Lane<'a> {
         }
         let corrected = matches!(self.kernel, Kernel::Corrected);
         self.site = 0;
-        let character = (self.character)(t);
-        let direct = (self.direct)(t);
+        let character = self
+            .host_mix
+            .map_or_else(|| (self.character)(t), |h| h.character);
+        let direct = self
+            .host_mix
+            .map_or_else(|| super::stereo_clock::input(t), |h| h.direct);
         let mut prospective = None;
         let mut row = [0.; 22];
         let mut gains = [0.; 24];
@@ -242,7 +249,8 @@ impl<'a> Lane<'a> {
             let mut energy = if self.fault_trial {
                 if t <= 479 || t == 6479 { 0. } else { 0.63 }
             } else {
-                (self.envelope)(t)
+                self.host_mix
+                    .map_or_else(|| (self.envelope)(t), |h| h.energy)
             };
             if let Some(launch) = self.registered_launch {
                 energy = f64::from(t > launch);
@@ -394,6 +402,63 @@ impl<'a> Lane<'a> {
         Ok((row, gains))
     }
 }
+#[derive(Clone, Copy)]
+struct HostMix {
+    direct: f64,
+    character: f64,
+    energy: f64,
+    signed_gain: f64,
+}
+#[derive(Default, Clone, Copy)]
+struct Emission {
+    trace: [f64; 22],
+    sample: super::delivery::Sample,
+    site: i32,
+}
+struct StereoTransaction<'a> {
+    kernel: &'a Kernel,
+    lanes: [Lane<'a>; 2],
+    tick: usize,
+}
+impl<'a> StereoTransaction<'a> {
+    fn new(kernel: &'a Kernel) -> Self {
+        Self {
+            kernel,
+            lanes: [Lane::new(kernel), Lane::new(kernel)],
+            tick: 0,
+        }
+    }
+    fn process(
+        &mut self,
+        reset: bool,
+        schedules: [&super::stereo_clock::Schedule; 2],
+        host: [HostMix; 2],
+        paths: &[Carrier],
+    ) -> Result<[Emission; 2]> {
+        if reset {
+            *self = Self::new(self.kernel);
+        }
+        let mut stereo = [Emission::default(); 2];
+        for (j, lane) in self.lanes.iter_mut().enumerate() {
+            lane.host_mix = Some(host[j]);
+            let (trace, _) = lane.tick(
+                self.tick,
+                schedules[j],
+                paths,
+                "reference",
+                host[j].signed_gain,
+            )?;
+            stereo[j] = Emission {
+                trace,
+                sample: lane.emitted,
+                site: lane.site,
+            };
+        }
+        self.tick += 1;
+        Ok(stereo)
+    }
+}
+
 pub fn run(out: &Path) -> Result<Value> {
     let fixtures: BTreeMap<String, Fixture> =
         serde_json::from_str(include_str!("../../contracts/stereo.json"))?;

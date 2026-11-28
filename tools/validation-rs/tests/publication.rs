@@ -170,3 +170,44 @@ fn inspect_rejects_coherently_rehashed_incomplete_provenance() {
         );
     }
 }
+
+#[test]
+fn dependent_layout_is_strict_after_coherent_rehash() {
+    use sha2::{Digest, Sha256};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let out = tmp.path();
+    let suite = "i1-layout";
+    assert!(cmd(out, &[suite]).output().unwrap().status.success());
+    let receipt = current(out, suite);
+    let run = out.join(suite).join(receipt["run_id"].as_str().unwrap());
+    let report = run.join("evidence.json");
+    let original = fs::read_to_string(&report).unwrap();
+    let mut wrong_type: Value = serde_json::from_str(&original).unwrap();
+    assert!(wrong_type["results"]["measured_allocations"].is_null());
+    wrong_type["results"]["maximum"]["analysis_bytes"] = "61376".into();
+    let mut inputs = vec![serde_json::to_string(&wrong_type).unwrap()];
+    for value in ["NaN", "Infinity", "-Infinity", "1e999", "?"] {
+        inputs.push(original.replacen(
+            "\"results\": {",
+            &format!("\"results\": {{\"extension\":{value},"),
+            1,
+        ));
+    }
+    inputs.push(original.replacen("\"results\": {", "\"results\": {}, \"results\": {", 1));
+    for bytes in inputs {
+        assert_ne!(bytes, original);
+        let mut coherent = receipt.clone();
+        coherent["artifacts"]["evidence.json"] = format!("{:x}", Sha256::digest(&bytes)).into();
+        fs::write(&report, bytes).unwrap();
+        let receipt_bytes = serde_json::to_vec(&coherent).unwrap();
+        fs::write(run.join("receipt.json"), &receipt_bytes).unwrap();
+        fs::write(out.join(suite).join("current.json"), receipt_bytes).unwrap();
+        let result = cmd(out, &["artifact", suite, "evidence.json"])
+            .output()
+            .unwrap();
+        assert!(!result.status.success());
+        let reason = String::from_utf8(result.stderr).unwrap();
+        assert!(!reason.contains("digest mismatch"), "{reason}");
+    }
+}

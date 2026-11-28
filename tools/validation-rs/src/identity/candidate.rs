@@ -393,17 +393,12 @@ impl Candidate {
         let scale = self.slew.advance(self.target, n);
         let mut y = [0.; 4];
         for j in 0..4 {
-            let q = frame[2 + j];
-            y[j] = finite(
-                if probe == 9 && j == 3 {
-                    f64::MAX + f64::MAX
-                } else if scale == 0. {
-                    q
-                } else {
-                    q + scale * d[j]
-                },
-                9,
-            )?;
+            let (q, weight, delta) = if probe == 9 && j == 3 {
+                (f64::MAX, 1., f64::MAX)
+            } else {
+                (frame[2 + j], scale, d[j])
+            };
+            y[j] = finite(if weight == 0. { q } else { q + weight * delta }, 9)?;
         }
         out[..4].copy_from_slice(&d);
         out[4..8].copy_from_slice(&y);
@@ -553,5 +548,9 @@ pub(super) fn field_offsets() -> serde_json::Value {
     field!(blocks:[Words;2],first:[[Complex64;12];4],second:[[Complex64;12];4],poles:[Complex64;12],taper:[f64;12],fs:f64,last_pitch:f64,radius:f64,phase:f64,slew:Slew,target:f64,selected:f64,current:usize,count:u32,length:u32,retired_n:u32,trial:i32,best:i32,clean:u32,observed:bool,valid:bool,bridge:bool,available:bool,live:bool,veto:bool,pending:bool);
     serde_json::json!({"fields":fields,"slew_offsets":{"value":offset_of!(Slew,value),"origin":offset_of!(Slew,origin),"destination":offset_of!(Slew,destination),"elapsed_u32":offset_of!(Slew,elapsed)},"bytes":size_of::<Candidate>(),"alignment":align_of::<Candidate>()})
 }
-const _: () =
-    assert!(std::mem::size_of::<Words>() == 984 && std::mem::align_of::<Candidate>() == 8);
+const _: () = {
+    use std::mem::{align_of, offset_of, size_of};
+    assert!(size_of::<Words>() == 984 && size_of::<Slew>() == 32);
+    assert!(align_of::<Candidate>() == 8 && size_of::<Candidate>() == 3912);
+    assert!(offset_of!(Candidate, phase) == 3816 && offset_of!(Candidate, slew) == 3824);
+};
