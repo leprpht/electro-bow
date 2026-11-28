@@ -2,7 +2,7 @@
 
 ## 2026-11-28 · Retain existing qualification authority during the Rust migration
 
-Use the standalone Rust workspace for new validation calculations. Keep the frozen Python and offline C++ implementations and the original complete qualification commands through independent Review V1. The migrated differential is scoped to its recorded child inventory. Review 8.2 remains the engineering authority. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
+Use the standalone Rust workspace for new validation calculations. Keep the frozen Python and offline C++ implementations and the original complete qualification commands through independent Review V1. Keep the entry audition ZIP available while Review V1 adjudicates the one-ULP normalization difference. The migrated differential is scoped to its recorded child inventory. Review 8.2 remains the engineering authority. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
 
 ## 2026-11-28 · Hold isolated Rust I1 on signed delivery and exact transaction gates
 

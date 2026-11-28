@@ -3,6 +3,7 @@ name: Build and test
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 env:
   JUCE_VERSION: 9.0.2
@@ -21,7 +22,7 @@ jobs:
   build-and-test:
     name: Build and test (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 90 || 45 }}
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +38,8 @@ jobs:
     steps:
       - name: Check out project
         uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && '0' || '1' }}
 
       - name: Set up pinned Rust toolchain
         shell: bash
@@ -189,7 +192,28 @@ jobs:
         shell: bash
         env:
           JUCE_PATH: .ci/JUCE
-        run: cargo run --manifest-path tools/validation-rs/Cargo.toml --release --locked --offline -- package
+        run: |
+          cargo run --manifest-path tools/validation-rs/Cargo.toml --release --locked --offline -- package
+          cargo test --manifest-path tools/validation-rs/Cargo.toml --release --locked --offline --test packaged_recordings -- --ignored --nocapture
+
+      - name: Exercise the complete Rust regression inventory on demand
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          JUCE_PATH: .ci/JUCE
+        run: cargo run --manifest-path tools/validation-rs/Cargo.toml --release --locked --offline -- regression
+
+      - name: Preserve Rust regression receipts on demand
+        if: always() && runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-validation-receipts
+          path: |
+            build/validation-migration/rust/regression/current.json
+            build/validation-migration/rust/regression/run-*/inventory.json
+            build/validation-migration/rust/regression/run-*/receipt.json
+            build/validation-migration/rust/regression/run-*/evidence.json
+            build/validation-migration/rust/regression/run-*/*.stderr
 
       - name: Verify repeated Windows editor startup
         if: runner.os == 'Windows'

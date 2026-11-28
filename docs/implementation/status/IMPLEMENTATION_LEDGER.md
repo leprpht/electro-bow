@@ -2,7 +2,7 @@
 
 ## 2026-11-28 · Stage V1 migrates validation measurements and retains the original complete exits
 
-The independent Rust workspace now reproduces the contact, ring, guide, O1/O2, pitch and offline I1 measurements listed in the stage matrix. The O2 listening ZIP and packaged wet payloads match their original bytes. Complete Rust qualification remains open on dependent evidence, joined transactions and mutation coverage. Awaiting independent Review V1. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
+The independent Rust workspace now reproduces the contact, ring, guide, O1/O2, pitch and offline I1 measurements listed in the stage matrix. The O2 listening ZIP and packaged wet payloads match their original bytes. All 105 historical I1 artifacts have measured dispositions. All 17 historical source defect classes, 16 I1 evidence controls, 13 study controls and eight acquisition controls have Rust owners. One legacy listening gain differs by one ULP and full combined report equivalence remains open. Awaiting independent Review V1. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)
 
 ## 2026-11-28 · Review 8.2 retains the packed I1 contract and holds isolated Rust I1
 

@@ -28,7 +28,7 @@ Freeze original executable outputs and fixtures, verify numeric and evidence pri
 
 ## Dependency and arithmetic decisions
 
-The standalone Cargo.lock pins all transitive versions. Cargo metadata records source and license per package. The locked toolchain is Rust 1.100.0, edition 2024. Validation uses the host allocator and filesystem. The shipping lockfile remains independent.
+The standalone Cargo.lock pins all transitive versions. The all-target metadata graph resolves 93 packages including development and target-specific packages. Cargo metadata records source and license per package. The locked toolchain is Rust 1.100.0, edition 2024. Validation uses the host allocator and filesystem. The shipping lockfile remains independent.
 
 | Dependency | Reason and numerical boundary |
 |---|---|
@@ -43,6 +43,14 @@ Use standard library argument handling for the finite suite inventory. Authorita
 
 The listening writer uses zip 2.4.2 with its zlib backend. The historical archive fixes entry order, timestamps, compression and file attributes. Compare the complete ZIP, key, individual WAV containers and decoded sample identities separately. Use `cargo metadata --locked --offline --format-version 1 --manifest-path tools/validation-rs/Cargo.toml` for the resolved versions, features and license expressions.
 
+The locked metadata declares MIT or Apache 2.0 choices for RustFFT, the num crates, Serde, serde_json, SHA-2 and tempfile. Hound and nalgebra declare Apache 2.0, libloading declares ISC, zip declares MIT and csv declares Unlicense/MIT. The graph also includes Unicode data terms and target-specific compiler support. The highest declared minimum Rust version among direct dependencies is nalgebra's 1.87. The tested toolchain is 1.100. The native host still requires the existing JUCE license and toolchain. No validation crate is linked into the shipping plugin.
+
 ## Retirement and historical replay
 
 The inventory columns `replacement`, `equivalence_evidence`, `migration_status`, `historical_dependencies` and `retirement` form the per-file proposed retirement manifest. Keep all original owners and historical reviews in this submission. After independent approval, remove only approved superseded implementation rows in a dedicated cutover. Retain permanent attributed audio, existing native/ABI tests and actual-code Rust replay boundaries. A C++ adapter that hosts JUCE or measures the reviewed kernel remains necessary until the corresponding independent comparison is approved. Unclosed family rows retain the existing executable authority. The historical revision and pinned replay command remain available after any future cutover. [Per-file retirement manifest](validation-inventory.tsv) · [Frozen replay instructions](VALIDATION_RUST_GUIDE.md#frozen-comparison-and-review)
+
+### Exceptions submitted for independent review
+
+The historical Stage 04 identity/gesture listening experiment, string-parameter exploration and ledger replay retain their entry programs so reviewers can reproduce the reports cited by earlier design decisions. The current offline study, moving identity, stationary V17, original observation and electrical reports have separate Rust owners. The original NumPy/SciPy extractors run only when rebuilding frozen evidence. The host and offline C++ epoch exercise actual native boundaries. Real controlled takes, listening responses and native platform attestations require their respective external owners.
+
+The independent harmonic projector uses a symmetric window and centered sample time. On macOS the original environment's non-conjugating complex dot reduction is available from Accelerate. Linux and Windows use the scalar implementation. In very weak harmonics different reduction orders can affect phase eligibility or reported phase. Independent platform differentials are still required. The original thresholds apply to every path.
