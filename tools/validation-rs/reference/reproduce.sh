@@ -48,6 +48,7 @@ measure pitch "$py" tools/validation/pitch_study.py
 measure pitch-results "$py" tools/validation/check_pitch_results.py
 measure freeze "$py" "$tools/freeze.py" "$ref"
 measure freeze-sources "$py" "$tools/freeze_sources.py" "$ref/sources.json"
+measure freeze-clock "$py" "$tools/freeze_clock.py" "$ref/clock" "$ref/clock.json"
 measure freeze-stereo "$py" "$tools/freeze_stereo.py" build/i1 "$ref/stereo.json"
 measure freeze-stationary "$py" "$tools/freeze_stationary.py" "$ref/stationary-contract.json"
 measure freeze-motion "$py" "$tools/freeze_motion.py" "$ref/motion.json"

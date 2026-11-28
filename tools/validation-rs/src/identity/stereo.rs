@@ -286,6 +286,15 @@ pub fn run(out: &Path) -> Result<Value> {
             data.write_all(row.map(f64::to_le_bytes).as_flattened())?;
         }
         data.flush()?;
+        if name == "reference" {
+            let mut coeff = std::io::BufWriter::new(std::fs::File::create(
+                out.join("reference-coefficients.f64le"),
+            )?);
+            for r in &gains {
+                coeff.write_all(r.map(f64::to_le_bytes).as_flattened())?;
+            }
+            coeff.flush()?;
+        }
         for (j, digest) in fixture.columns.iter().enumerate() {
             let mut h = Sha256::new();
             for r in &rows {

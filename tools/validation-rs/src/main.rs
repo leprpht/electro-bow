@@ -52,6 +52,12 @@ const SUITES: &[&str] = &[
     "i1-bank-compare",
     "i1-qr",
     "i1-layout",
+    "i1-clock",
+    "i1-events",
+    "i1-evidence",
+    "i1-transaction-mutants",
+    "i1-clock-compare",
+    "i1-stationary-compare",
     "i1-stereo",
     "i1-sources",
     "i1-listening",
@@ -68,6 +74,7 @@ const SUITES: &[&str] = &[
     "o2-sweep",
     "o2-records",
     "o2-qualification",
+    "o2-electrical-compare",
     "o2-mutants",
     "o2-timing",
     "o1-state",
@@ -100,12 +107,27 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
         ),
         "i1-sources" => identity::sources::run(dir),
         "i1-stereo" => identity::stereo::run(dir),
+        "i1-transaction-mutants" => identity::transaction_mutants::run(dir),
+        "i1-evidence" => identity::evidence_controls::run(
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
+        "i1-events" => identity::clock::event_controls(),
+        "i1-clock" => identity::clock::run(dir, None),
+        "i1-stationary-compare" => identity::sweeps::differential(
+            reference,
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
+        "i1-clock-compare" => identity::clock::run(dir, Some(reference)),
         "i1-layout" => identity::layout::run(),
         "i1-qr" => identity::qr::run(dir),
         "i1-motion" => identity::motion::run(dir),
         "i1-stationary" => identity::stationary::run(dir),
         "o2-records" => electrical::records::run(dir),
         "o2-sweep" => electrical::sweep::run(dir),
+        "o2-electrical-compare" => electrical::aggregate::differential(
+            reference,
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
         "o2-acoustic-compare" => electrical::acoustic::differential(
             reference,
             dir.parent()
@@ -197,8 +219,11 @@ fn run() -> Result<()> {
                     | "pitch-compare"
                     | "recordings"
                     | "repeatability"
+                    | "i1-stationary-compare"
+                    | "i1-clock-compare"
                     | "o1-compare"
                     | "guide-compare"
+                    | "o2-electrical-compare"
                     | "o2-acoustic-compare"
                     | "signed-compare"
                     | "i1-bank-compare"

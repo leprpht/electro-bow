@@ -13,7 +13,7 @@ fn sha(x: impl Iterator<Item = f64>) -> String {
     }
     format!("{:x}", h.finalize())
 }
-fn peaks(bins: &[(f64, f64)], spacing: f64) -> Vec<Value> {
+pub(crate) fn peaks(bins: &[(f64, f64)], spacing: f64) -> Vec<Value> {
     let mut result = vec![];
     let mut start = 0;
     for stop in 1..=bins.len() {
@@ -63,15 +63,19 @@ fn peaks(bins: &[(f64, f64)], spacing: f64) -> Vec<Value> {
     }
     result
 }
-pub fn run(out: &Path) -> Result<Value> {
-    let exe = replay::build(out, None)?;
-    let fs = 48000.;
+pub(crate) fn chirp(fs: f64) -> Vec<f64> {
     let factor = 4000f64 / 65.;
     let beta = 3. / factor.ln();
     let mut x: Vec<_> = (0..144000)
         .map(|i| 0.1 * (TAU * beta * 65. * (factor.powf((i as f64 / fs) / 3.) - 1.)).cos())
         .collect();
     x.resize(168000, 0.);
+    x
+}
+pub fn run(out: &Path) -> Result<Value> {
+    let exe = replay::build(out, None)?;
+    let fs = 48000.;
+    let x = chirp(fs);
     let excitation = sha(x.iter().copied());
     ensure(
         excitation == "1d5b2ef3816e77f36559ecd0d54d81b60e07371c459bc73a5d8434055c110bd3",

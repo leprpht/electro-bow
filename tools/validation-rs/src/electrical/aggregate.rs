@@ -238,3 +238,190 @@ pub fn run(root: &Path) -> Result<Value> {
     )?;
     Ok(json!({"measurements":fresh,"negative_controls":controls}))
 }
+
+/// Compare the two producers' full case inventories, including raw measured timing eligibility.
+pub fn differential(reference: &Path, root: &Path) -> Result<Value> {
+    use super::{acoustic, oracle};
+    let old = evidence::strict(&fs::read(reference.join("checkout/build/o2/results.json"))?)?;
+    ensure(
+        old["status"] == "passed"
+            && old["neutral_candidate_passed"] == true
+            && old["all_tested_vectors_passed"] == false,
+        "frozen O2 disposition",
+    )?;
+    let load = |s: &str| -> Result<Value> {
+        Ok(evidence::strict(&fs::read(publication::current_artifact(
+            root,
+            s,
+            "evidence.json",
+        )?)?)?["results"]
+            .take())
+    };
+    let bench = load("o2-bench")?;
+    let carrier = load("o2-carrier")?;
+    let acoustic_rows = load("o2-acoustic")?;
+    let chirps = load("o2-sweep")?;
+    let timing = load("o2-timing")?;
+    let mut stats = (0, 0., 0.);
+    let mut worst_bin_changes = Vec::new();
+    let mut timing_ratios = BTreeMap::new();
+    let mut call_count = 0;
+    ensure(
+        map(&old["electrical"])?.len() == array(&bench["rates"])?.len(),
+        "rate inventory",
+    )?;
+    for r in array(&bench["rates"])? {
+        let fs = r["rate"].as_f64().ok_or("rate")?;
+        let (_, ref_rate) = map(&old["electrical"])?
+            .iter()
+            .find(|(k, _)| k.parse::<f64>() == Ok(fs))
+            .ok_or("frozen electrical rate")?;
+        for k in [
+            "coefficients",
+            "poles",
+            "cutoff_hz",
+            "impulse_frames",
+            "differential",
+        ] {
+            acoustic::compare(&ref_rate[k], &r[k], k, &mut stats)?;
+        }
+        for (j, key) in ["0", "0.5", "1"].iter().enumerate() {
+            let mut step = r["long_step"][j].clone();
+            step.as_object_mut().unwrap().remove("depth");
+            acoustic::compare(&ref_rate["long_step"][key], &step, "long step", &mut stats)?;
+            let a = &ref_rate["response"][key];
+            let b = &r["response"][j];
+            acoustic::compare(&a["points"], &b["points"], "complex probes", &mut stats)?;
+            for k in ["max_complex_error", "terminal"] {
+                acoustic::compare(&a[k], &b[k], k, &mut stats)?;
+            }
+            // Worst-error bins can move between FFT implementations at roundoff. Check each chosen bin against the same transfer.
+            let mut locations = Vec::new();
+            for row in [a, b] {
+                let [hz, re, im]: [f64; 3] = serde_json::from_value(row["worst_bin"].clone())?;
+                let error = (rustfft::num_complex::Complex64::new(re, im)
+                    - oracle::transfer(fs, hz, j as f64 / 2.))
+                .norm();
+                ensure(
+                    error <= 1e-9 && row["max_complex_error"].as_f64().is_some_and(|v| v <= 1e-9),
+                    "worst-bin complex transfer",
+                )?;
+                locations.push(hz);
+            }
+            if locations[0] != locations[1] {
+                worst_bin_changes.push(
+                    json!({"rate":fs,"depth":key,"old_hz":locations[0],"rust_hz":locations[1]}),
+                );
+            }
+        }
+        if [32000., 48000., 192000.].contains(&fs) {
+            for line in r["lifecycle"].as_str().ok_or("lifecycle report")?.lines() {
+                let mut fields = line.split_whitespace();
+                let key = format!("{fs}/{}", fields.next().ok_or("lifecycle key")?);
+                let numbers = fields
+                    .map(str::parse::<i64>)
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
+                ensure(
+                    old["lifecycle"].get(&key) == Some(&json!(numbers)),
+                    "lifecycle counters",
+                )?;
+                call_count += 1;
+            }
+        }
+    }
+    ensure(
+        call_count == map(&old["lifecycle"])?.len(),
+        "lifecycle inventory",
+    )?;
+    ensure(
+        map(&carrier["cases"])?
+            .keys()
+            .eq(map(&old["replay"])?.keys()),
+        "physical replay inventory",
+    )?;
+    for (name, new) in map(&carrier["cases"])? {
+        let r = &old["replay"][name];
+        for k in [
+            "ticks",
+            "commits",
+            "calls",
+            "original_sha256",
+            "observed_sha256",
+        ] {
+            ensure(r[k] == new[k], &format!("{name} {k}"))?;
+        }
+        if let Some(digest) = r.get("sha256") {
+            ensure(digest == &new["full_sha256"], "retained 30-column identity")?;
+        }
+        for (j, k) in ["0", "0.5", "1"].iter().enumerate() {
+            acoustic::compare(
+                &r["max_error"][k],
+                &new["errors"][j],
+                "carrier taps",
+                &mut stats,
+            )?;
+        }
+    }
+    for (name, h) in map(&old["inputs"])? {
+        let k = name.split('/').collect::<Vec<_>>();
+        let p = match k.as_slice() {
+            ["lift", hz] => format!("lift_48000_{hz}_R1.8_V0.1_7s"),
+            [fs, hz, v, r] => format!("steady_{fs}_{hz}_R{r}_V{v}_3s"),
+            _ => return Err("source key".into()),
+        };
+        ensure(&acoustic_rows["sources"][&p] == h, "input carrier identity")?;
+    }
+    for (j, k) in ["0", "0.5", "1"].iter().enumerate() {
+        let a = &old["sweep"][k];
+        let b = &chirps["rows"][j];
+        for field in [
+            "rate",
+            "interval",
+            "depth",
+            "tap",
+            "excitation",
+            "returned",
+            "bins",
+            "peaks",
+            "complex_error",
+        ] {
+            acoustic::compare(&a[field], &b[field], field, &mut stats)?;
+        }
+        ensure(
+            array(&a["peaks_above_6dB"])?.is_empty() && a["maximum"] == a["peaks"][0],
+            "sweep maxima",
+        )?;
+    }
+    ensure(
+        old["nominal_mono_input"]["sha256_f32le"] == acoustic_rows["nominal_sha256"],
+        "nominal input identity",
+    )?;
+    for r in array(&timing["rates"])? {
+        let rate = r["rate"].as_u64().ok_or("timing rate")?.to_string();
+        let prior = &old["local_timing"]["rates"][&rate];
+        let a = array(&prior["records"])?;
+        let b = array(&r["records"])?;
+        ensure(a.len() == 25 && b.len() == 25, "timing batch inventory")?;
+        for (a, b) in a.iter().zip(b) {
+            ensure(
+                a[0] == b["workload"]
+                    && a[1] == b["batch"]
+                    && a[3].as_f64().map(f64::to_bits) == b["terminal"].as_f64().map(f64::to_bits),
+                "timing workload, batch or terminal",
+            )?;
+        }
+        ensure(
+            [prior, r]
+                .iter()
+                .all(|r| r["near_denormal_ratio"].as_f64().is_some_and(|v| v <= 2.)),
+            "measured timing disposition",
+        )?;
+        timing_ratios.insert(
+            rate,
+            json!({"reference":prior["near_denormal_ratio"],"rust":r["near_denormal_ratio"]}),
+        );
+    }
+    Ok(
+        json!({"fields":stats.0,"largest_scaled_error":stats.1,"largest_phase_difference_deg":stats.2,"lifecycle_cases":call_count,"timing":timing_ratios,"worst_fft_bin_changes":worst_bin_changes}),
+    )
+}

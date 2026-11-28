@@ -189,6 +189,16 @@ fn render_case(
     let fourth = replay_taps(exe, fs, &velocity, 0.5)?;
     let mut epoch = kernel.epoch(fs);
     let mut bank = Bank::new(fs)?;
+    let mut request = Sha256::new();
+    if let Some(constant) = schedule.0 {
+        for v in constant {
+            request.update(v.to_le_bytes());
+        }
+    }
+    let mut last = [0.; 12];
+    let mut last_scale = 0.;
+    let mut timeline: Vec<Value> = Vec::new();
+    let mut start = 0;
     let mut wet_hash = Sha256::new();
     let mut delta_hash = Sha256::new();
     let mut scale_hash = Sha256::new();
@@ -228,6 +238,12 @@ fn render_case(
                     z[k] = (1. - c.smoother) * gain;
                 }
             }
+            last.copy_from_slice(&frame[6..18]);
+            if schedule.0.is_none() {
+                for v in last {
+                    request.update(v.to_le_bytes());
+                }
+            }
             let mut bank_input = [0.; 17];
             bank_input[0] = c.hz;
             bank_input[1..].copy_from_slice(&frame[2..18]);
@@ -238,6 +254,20 @@ fn render_case(
         let mut output = vec![[0.; 20]; frames.len()];
         epoch.run(&frames, &mut output, 0)?;
         for (i, (v, independent)) in output.iter().zip(original).enumerate() {
+            let at = block * 8192 + i;
+            if v[10] != 0. {
+                let end = at + 1;
+                timeline.push(json!({"start":start,"end":end,"conditioned":v[12]!=0.,"bridge_ok":v[13]!=0.,"available":v[14]!=0.,"realized_ok":v[11]!=0.,"observable":true,"trusted":true,"selection_tick":null,"veto":null,"scale":null}));
+                start = end;
+            }
+            if let Some(last) = timeline.last_mut()
+                && at == start + 16
+            {
+                last["selection_tick"] = at.into();
+                last["veto"] = (v[15] != 0.).into();
+                last["scale"] = v[16].into();
+            }
+            last_scale = v[8];
             for j in 0..4 {
                 let error = (v[j] - independent[j]).abs();
                 ensure(error <= 2e-11, "fourth-bank correction")?;
@@ -260,7 +290,12 @@ fn render_case(
         hashes == [&c.wet, &c.correction, &c.scale].map(String::as_str),
         &format!("{} historical wet/correction/scale word identity", c.case),
     )?;
-    Ok((wet, json!({"hashes":hashes,"bank_max_error":max_error})))
+    let effective = last.map(|v| last_scale * v);
+    let peaks = super::sweeps::analytical(fs, c.hz, &effective)?;
+    Ok((
+        wet,
+        json!({"hashes":hashes,"bank_max_error":max_error,"timeline":timeline,"requested":format!("{:x}",request.finalize()),"sweep":peaks,"requested_dB":last.map(|v|20.*(1.+v).log10()),"accepted_dB":effective.map(|v|20.*(1.+v).log10()),"failures":[],"eligible":true}),
+    ))
 }
 pub fn run(out: &Path) -> Result<Value> {
     let contract: Contract = serde_json::from_str(include_str!("../../contracts/stationary.json"))?;
@@ -282,8 +317,11 @@ pub fn run(out: &Path) -> Result<Value> {
         )?;
         let schedule = &contract.schedules[&c.schedule];
         let (wet, mut evidence) = render_case(&c, schedule, &raw, &exe, &kernel)?;
+        let uncolored: Vec<_> = raw.iter().map(|r| [r[25], r[26], r[27], r[26]]).collect();
+        let mut neutral = Vec::new();
         let mut depths = Vec::new();
         for j in 0..3 {
+            neutral.push(grade(&raw, &uncolored, c.rate, c.hz, j)?);
             let row = grade(&raw, &wet, c.rate, c.hz, j)?;
             ensure(
                 row["passes"] == c.predicates[j],
@@ -291,6 +329,7 @@ pub fn run(out: &Path) -> Result<Value> {
             )?;
             depths.push(row);
         }
+        evidence["neutral"] = neutral.into();
         evidence["depths"] = depths.into();
         if matches!(c.schedule.as_str(), "upper" | "lower" | "inversion") {
             let mut bank = Bank::new(f64::from(c.rate))?;
@@ -328,5 +367,7 @@ pub fn run(out: &Path) -> Result<Value> {
         revised.len() == 36 && historical.len() == 9,
         "stationary and historical inventories",
     )?;
-    Ok(json!({"stationary":revised,"historical":historical}))
+    let sweep = super::sweeps::measured(&exe, &revised)?;
+    let expression = super::sweeps::expression(&revised)?;
+    Ok(json!({"stationary":revised,"historical":historical,"sweep":sweep,"expression":expression}))
 }

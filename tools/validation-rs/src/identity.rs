@@ -1,7 +1,9 @@
 //! Offline four-path independent correction bank. State belongs to one launch epoch.
 pub mod capture;
+pub mod clock;
 pub mod deadlines;
 pub mod epoch;
+pub mod evidence_controls;
 pub mod layout;
 mod legacy;
 pub mod listening;
@@ -12,6 +14,8 @@ pub mod sources;
 pub mod stationary;
 pub mod stereo;
 mod stereo_clock;
+pub mod sweeps;
+pub mod transaction_mutants;
 use crate::{Result, ensure, evidence};
 use rustfft::num_complex::Complex64;
 use serde::Deserialize;

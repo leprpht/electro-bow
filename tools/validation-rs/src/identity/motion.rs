@@ -18,6 +18,7 @@ struct Contract {
     windows: usize,
     witness: Option<Witness>,
     delivery_witness: Option<Witness>,
+    old_witness: Option<Witness>,
 }
 pub(super) fn interp(t: f64, x: &[f64], y: &[f64]) -> f64 {
     let edge = x.partition_point(|v| *v <= t);
@@ -166,15 +167,22 @@ fn case(
     }
     let mut output = vec![[0.; 20]; n];
     kernel.epoch(rate).run(&frames, &mut output, 0)?;
+    let legacy_scale = super::legacy::scales(&frames, &output, rate)?;
+    let mut legacy_hash = Sha256::new();
+    words(&mut legacy_hash, &legacy_scale);
+    let legacy_hash = format!("{:x}", legacy_hash.finalize());
+    ensure(
+        c.hashes["old_scale"] == legacy_hash,
+        "historical fixed-bin permission",
+    )?;
     if fs == 48000 && matches!(kind, "steady" | "vibrato" | "bend" | "veto") {
         let n = 2 * fs as usize;
         let mut clips = Vec::new();
         if kind == "steady" {
-            let s = super::legacy::scales(&frames, &output, rate)?;
             clips.push((
                 "previous-stationary",
                 (0..n)
-                    .map(|i| frames[i][2] + s[i] * output[i][0])
+                    .map(|i| frames[i][2] + legacy_scale[i] * output[i][0])
                     .collect::<Vec<_>>(),
             ));
         } else {
@@ -195,6 +203,19 @@ fn case(
             let bytes = x.iter().flat_map(|v| v.to_le_bytes()).collect::<Vec<_>>();
             std::fs::write(out.join(format!("{name}.f64le")), bytes)?;
         }
+    }
+    if fs == 48000 && matches!(kind, "steady" | "veto" | "vibrato" | "bend" | "held") {
+        use std::io::Write;
+        let mut samples = std::io::BufWriter::new(std::fs::File::create(
+            out.join(format!("{kind}-evidence.f64le")),
+        )?);
+        for (f, r) in frames.iter().zip(&output) {
+            let row: [f64; 13] = [
+                f[2], f[3], f[4], f[5], r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8],
+            ];
+            samples.write_all(row.map(f64::to_le_bytes).as_flattened())?;
+        }
+        samples.flush()?;
     }
     let mut bank = Bank::new(rate)?;
     let mut maximum = 0.0f64;
@@ -290,7 +311,20 @@ fn case(
         "retired-window dispositions",
     )?;
     let mut row = json!({"frames":n,"windows":windows,"hashes":digests,"full_window_slew_error":slew_error,"full_window_wet_error":wet_error,"max_bank_error":maximum,"monitor_sha256":c.monitor_sha256});
+    row["old_scale_sha256"] = legacy_hash.into();
     if kind == "vibrato" {
+        let historical: Vec<_> = frames
+            .iter()
+            .zip(&output)
+            .zip(legacy_scale)
+            .map(|((frame, result), scale)| [(frame[2] + scale * result[0]) - frame[2], 0.])
+            .collect();
+        row["old_off"] = witness(
+            &historical,
+            fs,
+            0,
+            c.old_witness.as_ref().ok_or("missing historical witness")?,
+        )?;
         row["off"] = witness(
             &delta,
             fs,
