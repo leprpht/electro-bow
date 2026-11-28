@@ -11,18 +11,7 @@ pub fn run(dir: &Path) -> Result<Value> {
         let revoke = 6 * (4. * fs / 196. + 0.5).floor() as usize;
         let fade = (0.005 * fs + 0.5).floor() as usize;
         let n = revoke + fade + 2;
-        let frames: Vec<_> = (0..n)
-            .map(|i| {
-                let q = 0.4 * (TAU * 196. * (i + 1) as f64 / fs).cos();
-                let mut frame = [0.; 20];
-                frame[0] = 196.;
-                frame[1..6].fill(q);
-                frame[6] = 0.1;
-                frame[18] = 1.;
-                frame[19] = f64::from(i < revoke);
-                frame
-            })
-            .collect();
+        let frames = withdrawal_frames(fs, n, revoke);
         let mut output = vec![[0.; 20]; n];
         kernel.epoch(fs).run(&frames, &mut output, 0)?;
         ensure(
@@ -148,4 +137,99 @@ pub fn signed(reference: &Path) -> Result<Value> {
         reports.push(json!({"producer":which,"frozen_sha256":sha,"first_mismatch":first,"wrong_live_products":changed,"wrong_cache_products":cache_mismatches,"historical_complete_exit":"passed"}));
     }
     Ok(json!({"runs":reports,"emitted_a4_available":false}))
+}
+
+fn withdrawal_frames(fs: f64, n: usize, revoke: usize) -> Vec<[f64; 20]> {
+    (0..n)
+        .map(|i| {
+            let q = 0.4 * (TAU * 196. * (i + 1) as f64 / fs).cos();
+            let mut frame = [0.; 20];
+            frame[0] = 196.;
+            frame[1..6].fill(q);
+            frame[6] = 0.1;
+            frame[18] = 1.;
+            frame[19] = f64::from(i < revoke);
+            frame
+        })
+        .collect()
+}
+
+pub fn corrected() -> Result<Value> {
+    use super::candidate::Slew;
+    let mut rows = Vec::new();
+    for fs in [
+        48000.,
+        32000.,
+        44100.,
+        88200.,
+        96000.,
+        176400.,
+        192000.,
+        47001.,
+        32008.333333333336,
+        95999.5,
+    ] {
+        let revoke = 6 * (4. * fs / 196. + 0.5_f64).floor() as usize;
+        let n = (0.005 * fs).round() as usize;
+        let end = revoke + n - 1;
+        let mut frames = withdrawal_frames(fs, end + 2, revoke);
+        // Distinct signs survive the exact zero path, even with live nonzero bank history.
+        frames[end][2..6].copy_from_slice(&[-0., 0., -0., -0.]);
+        let mut output = vec![[0.; 20]; frames.len()];
+        Kernel::Corrected.epoch(fs).run(&frames, &mut output, 0)?;
+        ensure(output[revoke - 1][8] == 1., "corrected full-scale setup")?;
+        ensure(
+            output[revoke..end].iter().all(|r| r[8] > 0.) && output[end][8] == 0.,
+            "exact neutral on Nth decrement",
+        )?;
+        ensure(
+            (0..4).all(|j| output[end][4 + j].to_bits() == frames[end][2 + j].to_bits()),
+            "first neutral q bits",
+        )?;
+        let bound = 1. / n as f64 + 2. * f64::EPSILON;
+        ensure(
+            output
+                .windows(2)
+                .all(|w| (w[1][8] - w[0][8]).abs() <= bound),
+            "binary64 slew step",
+        )?;
+        let mut reversals = 0;
+        for grid in 0..=16 {
+            let mut ramp = Slew::default();
+            for _ in 0..n {
+                ramp.advance(grid as f64 / 16., n as u32);
+            }
+            for (target, ticks) in [
+                (1., 7),
+                (0., 3),
+                (0.375, 13),
+                (0., n),
+                (1., n),
+                (0.25, n),
+                (0., n),
+            ] {
+                let origin = ramp.value;
+                for tick in 1..=ticks {
+                    let before = ramp.value;
+                    let x = ramp.advance(target, n as u32);
+                    let distance = tick as f64 / n as f64;
+                    let expected = if origin < target {
+                        (origin + distance).min(target)
+                    } else {
+                        (origin - distance).max(target)
+                    };
+                    ensure(
+                        (x - expected).abs() <= 2. * f64::EPSILON && (x - before).abs() <= bound,
+                        "interrupted origin and reversal",
+                    )?;
+                    if distance >= (target - origin).abs() {
+                        ensure(x == target, "interrupted exact endpoint")?;
+                    }
+                }
+                reversals += 1;
+            }
+        }
+        rows.push(json!({"rate":fs,"revocation":revoke,"increments":n,"first_exact_neutral":end,"q_bits":frames[end][2..6].iter().map(|x|x.to_bits()).collect::<Vec<_>>(),"step_bound":bound,"interrupted_runs":reversals}));
+    }
+    Ok(json!(rows))
 }

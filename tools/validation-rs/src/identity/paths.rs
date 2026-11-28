@@ -236,6 +236,7 @@ pub fn run(dir: &Path) -> Result<Value> {
     let f = Fixture::new(dir)?;
     let trajectory = drive(&f.frames, &f.independent, 48000.)?;
     f.check(&Kernel::build(dir)?, &trajectory)?;
+    f.check(&Kernel::Corrected, &trajectory)?;
     let original = fs::read_to_string("tools/validation/i1_stream.cpp")?;
     let mut controls = vec![];
     for (name, old, new, predicate, group) in [

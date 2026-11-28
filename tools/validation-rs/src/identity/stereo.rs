@@ -123,6 +123,8 @@ impl Eligibility {
             && (self.min_pitch..=self.max_pitch).contains(&pitch)
     }
 }
+mod closure;
+pub use closure::qualify;
 struct Lane<'a> {
     kernel: &'a Kernel,
     current: Option<super::epoch::Epoch<'a>>,
@@ -142,6 +144,9 @@ struct Lane<'a> {
     receipt: Option<Eligibility>,
     character: fn(usize) -> f64,
     mix: f32,
+    direct: fn(usize) -> f64,
+    emitted: super::delivery::Sample,
+    site: i32,
     failed_epoch: Option<usize>,
 }
 impl<'a> Lane<'a> {
@@ -171,6 +176,9 @@ impl<'a> Lane<'a> {
             }),
             character: |_| 1.,
             mix: 0.,
+            direct: super::stereo_clock::input,
+            emitted: Default::default(),
+            site: 0,
             failed_epoch: None,
         }
     }
@@ -195,6 +203,11 @@ impl<'a> Lane<'a> {
             }
             self.target = vector;
         }
+        let corrected = matches!(self.kernel, Kernel::Corrected);
+        self.site = 0;
+        let character = (self.character)(t);
+        let direct = (self.direct)(t);
+        let mut prospective = None;
         let mut row = [0.; 22];
         let mut gains = [0.; 24];
         row[1] = -1.;
@@ -256,7 +269,7 @@ impl<'a> Lane<'a> {
                 || (probe == 21 && name == "post-o2")
                 || !live_q.iter().all(|v| v.is_finite())
             {
-                Err(format!("epoch fault site={probe} offset=0").into())
+                Err(super::epoch::EpochFault(probe, 0).into())
             } else {
                 let mut frame = [0.; 20];
                 frame[..2].copy_from_slice(&[path.pitch[i], m5]);
@@ -283,6 +296,19 @@ impl<'a> Lane<'a> {
                 state.run(&[frame], &mut output, probe)
             };
             let result = result.and_then(|()| {
+                if corrected {
+                    prospective = Some(
+                        super::delivery::Sample::live(
+                            output[0][7],
+                            signed,
+                            energy,
+                            character,
+                            direct,
+                        )
+                        .map_err(|site| super::epoch::EpochFault(site, 0))?,
+                    );
+                    return Ok(());
+                }
                 let product = energy * (signed * output[0][7]);
                 ensure(product.is_finite(), "epoch fault site=22 offset=0")?;
                 let direct = super::stereo_clock::input(t);
@@ -298,7 +324,11 @@ impl<'a> Lane<'a> {
                     row[7] = v[8];
                     row[8] = v[7];
                     row[9] = energy;
-                    row[10] = row[9] * (signed * row[8]);
+                    if let Some(sample) = prospective {
+                        row[10] = sample.product;
+                    } else {
+                        row[10] = row[9] * (signed * row[8]);
+                    }
                     self.held = [row[9], row[10]];
                     row[14] = v[15];
                     for (dest, index) in row[15..].iter_mut().zip([9, 10, 17, 18, 4, 5, 6]) {
@@ -308,12 +338,21 @@ impl<'a> Lane<'a> {
                     gains[12..].copy_from_slice(&self.coefficients);
                 }
                 Err(error) => {
-                    let site = self.challenge.map_or(probe, |c| c.site);
-                    ensure(
-                        chosen == Some((t, probe))
-                            && error.to_string() == format!("epoch fault site={site} offset=0"),
-                        &format!("{name} unexpected fault at {t}: {error}"),
-                    )?;
+                    self.site = if corrected {
+                        error
+                            .downcast_ref::<super::epoch::EpochFault>()
+                            .ok_or("untyped corrected fault")?
+                            .0
+                    } else {
+                        let expected = self.challenge.map_or(probe, |c| c.site);
+                        ensure(
+                            chosen == Some((t, probe))
+                                && error.to_string()
+                                    == format!("epoch fault site={expected} offset=0"),
+                            &format!("{name} unexpected fault at {t}: {error}"),
+                        )?;
+                        expected
+                    };
                     self.failed_epoch = self.owner;
                     self.current = None;
                     self.owner = None;
@@ -323,11 +362,12 @@ impl<'a> Lane<'a> {
             }
         }
         if let Some(index) = self.fade {
-            let w = (239 - index) as f64 / 240.;
+            let length = (0.005 * self.rate).round() as usize;
+            let w = (length - 1 - index) as f64 / length as f64;
             row[13] = index as f64;
             row[9] = self.held[0] * w;
             row[10] = self.held[1] * w;
-            if index == 239 {
+            if index + 1 == length {
                 self.fade = None;
                 self.held = [0.; 2];
             } else {
@@ -336,6 +376,17 @@ impl<'a> Lane<'a> {
         }
         row[4] = self.losses as f64;
         row[11..13].copy_from_slice(&self.held);
+        if corrected {
+            self.emitted = match prospective {
+                Some(sample) => sample,
+                None => {
+                    super::delivery::Sample::inactive([row[9], row[10]], signed, character, direct)
+                        .map_err(|site| format!("invalid fallback conversion at {t}: {site}"))?
+                }
+            };
+            self.mix = self.emitted.output;
+            return Ok((row, gains));
+        }
         let c = (self.character)(t);
         let direct = super::stereo_clock::input(t);
         self.mix = ((1. - c * row[9]) * direct + c * row[10]) as f32;
@@ -584,12 +635,15 @@ pub fn run(out: &Path) -> Result<Value> {
 /// Execute corruption in the actual native operation, preserve the detection-tick commits,
 /// and grade both signed outputs against an unaffected, simultaneously advanced lane.
 pub fn faults(out: &Path) -> Result<Value> {
+    fault_cases(out, &Kernel::build(out)?)
+}
+fn fault_cases(out: &Path, kernel: &Kernel) -> Result<Value> {
     let exe = replay::build(out, None)?;
-    let kernel = Kernel::build(out)?;
+    let corrected = matches!(kernel, Kernel::Corrected);
     let paths = [render(&exe, 2)?, render(&exe, 2)?];
     let schedule = super::clock::fault_schedule(None)?;
     let signed = -1.3;
-    let mut original = Lane::new(&kernel);
+    let mut original = Lane::new(kernel);
     original.fault_trial = true;
     let mut healthy = Vec::new();
     for t in 0..8500 {
@@ -618,9 +672,15 @@ pub fn faults(out: &Path) -> Result<Value> {
         ("M5 accumulation", 658, 0, 5, Operand::M5),
         ("M5 closure", closure, 0, 5, Operand::M5),
         ("stored NaN", 3300, 0, 1, Operand::StoredPhase(f64::NAN)),
-        ("stored maximum", 3300, 0, 5, Operand::StoredPhase(f64::MAX)),
+        (
+            "stored maximum",
+            3300,
+            0,
+            if corrected { 1 } else { 5 },
+            Operand::StoredPhase(f64::MAX),
+        ),
     ] {
-        let mut left = Lane::new(&kernel);
+        let mut left = Lane::new(kernel);
         left.fault_trial = true;
         left.challenge = Some(Challenge {
             tick,
@@ -628,7 +688,7 @@ pub fn faults(out: &Path) -> Result<Value> {
             site,
             operand,
         });
-        let mut right = Lane::new(&kernel);
+        let mut right = Lane::new(kernel);
         right.fault_trial = true;
         let recovery = super::clock::fault_schedule(Some(tick))?;
         let prior_e = if tick - 1 <= 479 { 0. } else { 0.63 };
@@ -647,6 +707,7 @@ pub fn faults(out: &Path) -> Result<Value> {
                 commits += r[2] as usize;
             }
             if t == tick {
+                ensure(left.site == site, "actual arithmetic fault owner")?;
                 ensure(
                     r[1] == (tick - 479) as f64 && r[2] == 1. && r[3] == 1. && r[4] == 1.,
                     "detection physical/electrical commit",
@@ -681,7 +742,7 @@ pub fn faults(out: &Path) -> Result<Value> {
         rows.insert(label,json!({"site":site,"tick":tick,"zero":tick+239,"commits":commits,"previous_energy":prior_e,"previous_product":prior_p,"fresh":6479}));
     }
     Ok(
-        json!({"faults":rows,"phase_classification_held":true,"signed_gain":signed,"closure":closure}),
+        json!({"faults":rows,"phase_classification_held":!corrected,"signed_gain":signed,"closure":closure}),
     )
 }
 
@@ -779,6 +840,7 @@ pub fn joined_motion(out: &Path, root: &Path) -> Result<Value> {
     let exe = replay::build(out, None)?;
     let kernel = Kernel::build(out)?;
     let mut rows = BTreeMap::new();
+    let mut corrected_rates = BTreeMap::new();
     for rate in [32000u32, 44100, 48000, 88200, 96000, 176400, 192000] {
         let fs = f64::from(rate);
         let n = 3 * rate as usize;
@@ -799,6 +861,10 @@ pub fn joined_motion(out: &Path, root: &Path) -> Result<Value> {
         let mut lane = Lane::new(&kernel);
         lane.rate = fs;
         lane.registered_launch = Some(launch);
+        let mut revised = Lane::new(&Kernel::Corrected);
+        revised.rate = fs;
+        revised.registered_launch = Some(launch);
+        let mut corrected_delta = Vec::with_capacity(n);
         let mut idle = Lane::new(&kernel);
         idle.rate = fs;
         let mut wet: [Vec<f64>; 2] = std::array::from_fn(|_| Vec::with_capacity(n));
@@ -809,6 +875,11 @@ pub fn joined_motion(out: &Path, root: &Path) -> Result<Value> {
         let idle_schedule = Vec::new();
         for t in 0..n + launch {
             let (s, _) = lane.tick(t, &schedule, &paths, "reference", 1.)?;
+            let (actual, _) = revised.tick(t, &schedule, &paths, "reference", 1.)?;
+            ensure(
+                actual[..7] == s[..7] && actual[14..19] == s[14..19],
+                "corrected registered commit and decision",
+            )?;
             let (peer, _) = idle.tick(t, &idle_schedule, &paths, "reference", 1.)?;
             ensure(
                 peer[2] == 0. && peer[3] == 0. && s[4] == 0.,
@@ -819,6 +890,10 @@ pub fn joined_motion(out: &Path, root: &Path) -> Result<Value> {
                     s[1] == i as f64 && s[2] == 1. && s[3] == 1.,
                     "registered physical commits",
                 )?;
+                corrected_delta.push([
+                    actual[19] - paths[0].rows[i][25],
+                    actual[8] - paths[0].delivery[i][3],
+                ]);
                 commits += 1;
                 wet[0].push(s[19]);
                 wet[1].push(s[8]);
@@ -835,6 +910,12 @@ pub fn joined_motion(out: &Path, root: &Path) -> Result<Value> {
         let reference=previous["results"]["cases"][format!("steady-{rate}")]["historical_stationary_calibration"].as_f64().ok_or("fresh fixed-bin stationary calibration")?;
         let mut result = json!({"physical_commits":commits,"realized_veto_samples":veto});
         for (j, key) in ["off", "delivery"].iter().enumerate() {
+            let registered = super::score(&corrected_delta, rate, j, reference)?;
+            ensure(
+                registered["passed"] == true && registered["active"] == 100,
+                "corrected joined motion cells",
+            )?;
+            corrected_rates.entry(rate).or_insert_with(|| json!({}))[*key] = registered;
             let mut row = super::score(&delta, rate, j, reference)?;
             ensure(row["passed"] == true, "registered moving correction")?;
             let window = &delta[scored.clone()];
@@ -857,7 +938,7 @@ pub fn joined_motion(out: &Path, root: &Path) -> Result<Value> {
         }
         rows.insert(rate, result);
     }
-    Ok(json!({"rates":rows}))
+    Ok(json!({"rates":rows,"stage_08_3":corrected_rates}))
 }
 
 pub fn stream_compare(reference: &Path, root: &Path) -> Result<Value> {

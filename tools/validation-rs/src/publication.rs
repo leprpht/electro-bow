@@ -189,15 +189,7 @@ pub fn inspect(dir: &Path, suite: &str) -> Result<Value> {
                 "source provenance disagrees with receipt",
             )?;
         }
-        let payload = evidence::strict(&fs::read(run.join("evidence.json"))?)?;
-        ensure(
-            payload["run_id"] == r.run_id
-                && payload["suite"] == suite
-                && payload
-                    .get("results")
-                    .is_some_and(|v| v.is_object() || v.is_array()),
-            "dependent evidence run/suite/schema",
-        )?;
+        let payload = dependent(&fs::read(run.join("evidence.json"))?, suite, &r.run_id)?;
         if r.schema == 3 {
             crate::qualification::validate_children(
                 &run,
@@ -209,6 +201,31 @@ pub fn inspect(dir: &Path, suite: &str) -> Result<Value> {
         }
     }
     Ok(value)
+}
+
+pub(crate) fn dependent(bytes: &[u8], suite: &str, id: &str) -> Result<Value> {
+    let payload = evidence::strict(bytes)?;
+    ensure(
+        payload["run_id"] == id
+            && payload["suite"] == suite
+            && payload
+                .get("results")
+                .is_some_and(|v| v.is_object() || v.is_array()),
+        "dependent evidence run/suite/schema",
+    )?;
+    if suite == "i1-layout" {
+        ensure(
+            payload["results"] == crate::identity::layout::run()?,
+            "dependent layout field contract",
+        )?;
+    }
+    if suite == "i1-contract" {
+        ensure(
+            payload["results"]["layout"] == crate::identity::layout::prepared()?,
+            "dependent corrected layout field contract",
+        )?;
+    }
+    Ok(payload)
 }
 
 pub fn run(suite: &str, root: &Path, body: impl FnOnce(&Path) -> Result<Value>) -> Result<()> {

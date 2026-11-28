@@ -262,6 +262,8 @@ fn case(
         }
         samples.flush()?;
     }
+    let mut corrected = super::candidate::Differential::new(rate);
+    let mut corrected_delta = Vec::with_capacity(n);
     let mut bank = Bank::new(rate)?;
     let mut maximum = 0.0f64;
     let mut delta = Vec::with_capacity(n);
@@ -272,6 +274,8 @@ fn case(
     let mut timeline = Vec::new();
     for (i, r) in output.iter().enumerate() {
         let f = &frames[i];
+        let revised = corrected.check(f, r)?;
+        corrected_delta.push([revised[4] - f[2], revised[7] - f[5]]);
         let mut b = [0.; 17];
         b[0] = f[0];
         b[1..].copy_from_slice(&f[2..18]);
@@ -358,7 +362,7 @@ fn case(
         format!("{:x}", monitor.finalize()) == c.monitor_sha256 && windows == c.windows,
         "retired-window dispositions",
     )?;
-    let mut row = json!({"frames":n,"windows":windows,"hashes":digests,"full_window_slew_error":slew_error,"full_window_wet_error":wet_error,"max_bank_error":maximum,"monitor_sha256":c.monitor_sha256});
+    let mut row = json!({"stage_08_3":{"changed_wet_words":corrected.changed_wet,"changed_f32":corrected.changed_audio},"frames":n,"windows":windows,"hashes":digests,"full_window_slew_error":slew_error,"full_window_wet_error":wet_error,"max_bank_error":maximum,"monitor_sha256":c.monitor_sha256});
     if kind == "steady" {
         let tail = n - fs as usize;
         let power = frames[tail..]
@@ -398,6 +402,21 @@ fn case(
             .zip(legacy_scale)
             .map(|((frame, result), scale)| [(frame[2] + scale * result[0]) - frame[2], 0.])
             .collect();
+        for (j, k) in ["off", "delivery"].iter().enumerate() {
+            let old = if j == 0 {
+                &c.witness
+            } else {
+                &c.delivery_witness
+            };
+            let result = witness(
+                &corrected_delta,
+                fs,
+                j,
+                old.as_ref().ok_or("missing corrected motion witness")?,
+            )?;
+            ensure(result["active"] == 100, "corrected registered motion cells")?;
+            row["stage_08_3"][*k] = result;
+        }
         row["old_off"] = witness(
             &historical,
             fs,

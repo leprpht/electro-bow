@@ -3,6 +3,7 @@ use crate::{Result, ensure, evidence, publication};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::Path, process::Command};
 const REGRESSION: &[&str] = &[
+    "i1-contract",
     "i1-stereo",
     "o2-records",
     "fixtures",
@@ -96,11 +97,22 @@ pub fn validate_children(
         },
         "aggregate comparison mode",
     )?;
+    // Earlier schema-3 aggregates have the reviewed V1.1 child inventory.
+    let legacy = suite != "o2-qualification" && results["suites"].get("i1-contract").is_none();
+    if legacy {
+        crate::process::check(Command::new("git").args([
+            "merge-base",
+            "--is-ancestor",
+            revision,
+            "7de5fa4d54b2878ac2001db8f721a92e7c30e57a",
+        ]))?;
+    }
     let root = dir.join("children");
     let mut links = BTreeMap::new();
     let mut receipts = BTreeMap::new();
     for &name in REGRESSION
         .iter()
+        .filter(|s| !legacy || **s != "i1-contract")
         .filter(|s| suite != "o2-qualification" || s.starts_with("o2-"))
         .chain(COMPARISONS.iter().filter(|_| historical))
     {
@@ -116,6 +128,10 @@ pub fn validate_children(
         receipts.insert(name, receipt);
     }
     let read = |path| evidence::strict(&fs::read(path)?);
+    ensure(
+        read(dir.join("electrical.json"))? == crate::electrical::aggregate::run(&root)?,
+        "dependent electrical qualification evidence",
+    )?;
     let inventory = json!(links);
     ensure(
         results["suites"] == inventory && read(dir.join("inventory.json"))? == inventory,
@@ -144,9 +160,11 @@ pub fn validate_children(
             .as_object()
             .ok_or("evidence sources")?;
         ensure(
-            sources.len() == crate::identity::evidence_controls::PRODUCERS.len()
+            sources.len() + usize::from(legacy)
+                == crate::identity::evidence_controls::PRODUCERS.len()
                 && crate::identity::evidence_controls::PRODUCERS
                     .iter()
+                    .filter(|s| !legacy || **s != "i1-contract")
                     .all(|s| sources.get(*s) == Some(&links[s]["id"])),
             "run-local I1 evidence links",
         )?;

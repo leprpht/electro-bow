@@ -188,6 +188,8 @@ fn render_case(
     let velocity: Vec<_> = raw.iter().map(|r| r[21]).collect();
     let fourth = replay_taps(exe, fs, &velocity, 0.5)?;
     let mut epoch = kernel.epoch(fs);
+    let mut corrected = super::candidate::Differential::new(fs);
+    let mut revised_wet = Vec::with_capacity(raw.len());
     let mut bank = Bank::new(fs)?;
     let mut request = Sha256::new();
     if let Some(constant) = schedule.0 {
@@ -254,6 +256,8 @@ fn render_case(
         let mut output = vec![[0.; 20]; frames.len()];
         epoch.run(&frames, &mut output, 0)?;
         for (i, (v, independent)) in output.iter().zip(original).enumerate() {
+            let observed = corrected.check(&frames[i], v)?;
+            revised_wet.push(observed[4..8].try_into()?);
             let at = block * 8192 + i;
             if v[10] != 0. {
                 let end = at + 1;
@@ -290,11 +294,20 @@ fn render_case(
         hashes == [&c.wet, &c.correction, &c.scale].map(String::as_str),
         &format!("{} historical wet/correction/scale word identity", c.case),
     )?;
+    let mut corrected_depths = Vec::new();
+    for j in 0..3 {
+        let row = grade(raw, &revised_wet, c.rate, c.hz, j)?;
+        ensure(
+            row["passes"] == c.predicates[j],
+            "Stage 08.3 stationary V17",
+        )?;
+        corrected_depths.push(row["passes"].clone());
+    }
     let effective = last.map(|v| last_scale * v);
     let peaks = super::sweeps::analytical(fs, c.hz, &effective)?;
     Ok((
         wet,
-        json!({"hashes":hashes,"bank_max_error":max_error,"timeline":timeline,"requested":format!("{:x}",request.finalize()),"sweep":peaks,"requested_dB":last.map(|v|20.*(1.+v).log10()),"accepted_dB":effective.map(|v|20.*(1.+v).log10()),"failures":[],"eligible":true}),
+        json!({"stage_08_3":{"passes":corrected_depths,"changed_wet_words":corrected.changed_wet,"changed_f32":corrected.changed_audio},"hashes":hashes,"bank_max_error":max_error,"timeline":timeline,"requested":format!("{:x}",request.finalize()),"sweep":peaks,"requested_dB":last.map(|v|20.*(1.+v).log10()),"accepted_dB":effective.map(|v|20.*(1.+v).log10()),"failures":[],"eligible":true}),
     ))
 }
 pub fn run(out: &Path) -> Result<Value> {

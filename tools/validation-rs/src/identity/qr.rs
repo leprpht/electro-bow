@@ -237,7 +237,12 @@ pub(super) fn case(kernel: &Kernel, fs: f64, kind: &str, ratio: f64) -> Result<V
     )
 }
 pub fn run(out: &Path) -> Result<Value> {
-    let kernel = Kernel::build(out)?;
+    cases(&Kernel::build(out)?)
+}
+pub fn corrected() -> Result<Value> {
+    cases(&Kernel::Corrected)
+}
+fn cases(kernel: &Kernel) -> Result<Value> {
     let threshold = 10f64.powf(0.1425);
     let mut rows = Vec::new();
     for (fs, kind, r) in [
@@ -249,7 +254,7 @@ pub fn run(out: &Path) -> Result<Value> {
         (48000., "threshold-low", threshold * (1. - 2e-12)),
         (48000., "threshold-high", threshold * (1. + 2e-12)),
     ] {
-        rows.push(case(&kernel, fs, kind, r).map_err(|e| format!("{kind}/{fs}: {e}"))?);
+        rows.push(case(kernel, fs, kind, r).map_err(|e| format!("{kind}/{fs}: {e}"))?);
     }
     Ok(rows.into())
 }

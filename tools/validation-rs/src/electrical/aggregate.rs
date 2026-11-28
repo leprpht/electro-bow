@@ -111,7 +111,14 @@ pub fn run(root: &Path) -> Result<Value> {
     let mut controls: BTreeMap<String, Value> =
         serde_json::from_value(get("o2-records")?["controls"].take())?;
     let fresh = json!({"high_band":audio["high_band"],"onset_release":audio["onset_release"],"inputs":audio["sources"],"replay":get("o2-carrier")?,"corners":audio["corners"],"v17":audio["v17"],"listening":audio["listening"],"nominal":audio["nominal_sha256"],"witness":audio["witness"],"sweep":get("o2-sweep")?["rows"],"electrical":get("o2-bench")?["rates"],"local_timing":get("o2-timing")?});
-    grade(&fresh, &fresh)?;
+    let consume = |bytes: &[u8]| grade(&evidence::strict(bytes)?, &fresh);
+    let serialized = serde_json::to_string(&fresh)?;
+    consume(serialized.as_bytes())?;
+    let invalid = serialized.replacen('{', "{\"extra\":NaN,", 1);
+    ensure(
+        consume(invalid.as_bytes()).is_err(),
+        "historical O2 top-level NaN extension",
+    )?;
     let expected: BTreeMap<String, String> = serde_json::from_str(include_str!(
         "../../../validation/fixtures/o2_negative_predicates.json"
     ))?;

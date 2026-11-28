@@ -77,6 +77,7 @@ const SUITES: &[&str] = &[
     "i1-path-mutants",
     "i1-capture",
     "i1-review82",
+    "i1-contract",
     "signed-compare",
     "i1-motion",
     "i1-stationary",
@@ -99,7 +100,7 @@ const SUITES: &[&str] = &[
 ];
 const DEFAULT_OUT: &str = "build/validation-migration/rust";
 
-fn execute(suite: &str, dir: &Path, reference: &Path, explicit_reference: bool) -> Result<Value> {
+fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
     match suite {
         "repeatability" => recordings::scoring::run(dir, reference),
         "recordings" => recordings::preflight(dir, reference),
@@ -111,6 +112,7 @@ fn execute(suite: &str, dir: &Path, reference: &Path, explicit_reference: bool) 
         "native" => process::native(dir),
         "package" => package::run(dir),
         "signed-compare" => identity::deadlines::signed(reference),
+        "i1-contract" => identity::stereo::qualify(dir),
         "i1-review82" => identity::deadlines::run(dir),
         "i1-capture" => identity::capture::run(),
         "i1-path-mutants" => identity::paths::run(dir),
@@ -205,7 +207,7 @@ fn execute(suite: &str, dir: &Path, reference: &Path, explicit_reference: bool) 
             dir,
             reference,
             suite == "qualification",
-            suite == "differential" || (suite == "qualification" && explicit_reference),
+            matches!(suite, "differential" | "qualification"),
             suite == "o2-qualification",
         ),
         "guide-negative" => guide::negative(dir),
@@ -287,9 +289,7 @@ fn run() -> Result<()> {
         args.get(1)
             .map_or("build/validation-migration/reference", String::as_str),
     );
-    publication::run(suite, &root, |dir| {
-        execute(suite, dir, &reference, args.len() == 2)
-    })
+    publication::run(suite, &root, |dir| execute(suite, dir, &reference))
 }
 fn main() -> ExitCode {
     match run() {

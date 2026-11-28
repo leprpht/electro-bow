@@ -13,6 +13,7 @@ pub(crate) const PRODUCERS: &[&str] = &[
     "i1-path-mutants",
     "i1-transaction-mutants",
     "i1-layout",
+    "i1-contract",
     "i1-qr",
     "i1-capture",
     "i1-review82",
@@ -51,6 +52,7 @@ pub fn run(root: &Path) -> Result<Value> {
     let mut reports = BTreeMap::new();
     let mut paths = BTreeMap::new();
     let mut sources = BTreeMap::new();
+    let mut ingestion = BTreeMap::new();
     for &s in PRODUCERS {
         let receipt = publication::inspect(&root.join(s), s)?;
         ensure(
@@ -60,7 +62,44 @@ pub fn run(root: &Path) -> Result<Value> {
         let base = root
             .join(s)
             .join(receipt["run_id"].as_str().ok_or("run id")?);
-        let payload = evidence::strict(&fs::read(base.join("evidence.json"))?)?;
+        let id = receipt["run_id"].as_str().ok_or("run id")?;
+        let bytes = fs::read(base.join("evidence.json"))?;
+        let payload = publication::dependent(&bytes, s, id)?;
+        if matches!(s, "i1-layout" | "i1-contract") {
+            let mut rejected = Vec::new();
+            let text = std::str::from_utf8(&bytes)?;
+            for (name, bad) in [
+                ("NaN", "NaN"),
+                ("Infinity", "Infinity"),
+                ("negative infinity", "-Infinity"),
+                ("overflow", "1e999"),
+                ("malformed", "?"),
+            ] {
+                let probe = text.replacen("{", &format!("{{\"extension\":{bad},"), 1);
+                ensure(
+                    publication::dependent(probe.as_bytes(), s, id).is_err(),
+                    "accepted malformed dependent extension",
+                )?;
+                rejected.push(name);
+            }
+            let mut wrong = payload.clone();
+            let layout = if s == "i1-contract" {
+                &mut wrong["results"]["layout"]
+            } else {
+                &mut wrong["results"]
+            };
+            layout["maximum"]["analysis_bytes"] = "60728".into();
+            ensure(
+                publication::dependent(&serde_json::to_vec(&wrong)?, s, id).is_err(),
+                "dependent layout type",
+            )?;
+            let duplicate = text.replacen("{", "{\"results\":null,", 1);
+            ensure(
+                publication::dependent(duplicate.as_bytes(), s, id).is_err(),
+                "duplicate authoritative results",
+            )?;
+            ingestion.insert(s,json!({"syntax_rejected":rejected,"duplicate_results":true,"invalid_size_type":true}));
+        }
         reports.insert(s, payload["results"].clone());
         sources.insert(s, receipt["run_id"].clone());
         for name in receipt["artifacts"]
@@ -212,5 +251,7 @@ pub fn run(root: &Path) -> Result<Value> {
         verdict.insert(name, json!({"first":reason,"exit":1}));
     }
     ensure(verdict.len() == 16, "I1 evidence negative inventory")?;
-    Ok(json!({"controls":verdict,"sources":sources,"sample_artifacts":originals}))
+    Ok(
+        json!({"ingestion":ingestion,"controls":verdict,"sources":sources,"sample_artifacts":originals}),
+    )
 }

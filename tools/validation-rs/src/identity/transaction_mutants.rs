@@ -10,8 +10,8 @@ struct Mutant<'a> {
     suite: &'a str,
     predicate: &'a str,
 }
-fn cases() -> [Mutant<'static>; 9] {
-    [
+fn cases() -> Vec<Mutant<'static>> {
+    let mut cases = vec![
         Mutant {
             name: "expiry bypass",
             file: "identity/clock.rs",
@@ -84,7 +84,56 @@ fn cases() -> [Mutant<'static>; 9] {
             suite: "i1-stereo",
             predicate: "bank joined sample column 10",
         },
-    ]
+    ];
+    for (name, old, new, predicate) in [
+        (
+            "candidate half product",
+            "let product = energy * signed;",
+            "let product = 0.5 * energy * signed;",
+            "P == E*(signed_gain*wet)",
+        ),
+        (
+            "missing captured gain",
+            "let signed = gain * normalized;",
+            "let signed = normalized;",
+            "signed gain times normalized wet",
+        ),
+        (
+            "wrong polarity",
+            "let signed = gain * normalized;",
+            "let signed = gain.abs() * normalized;",
+            "signed gain times normalized wet",
+        ),
+        (
+            "incorrect Character weighting",
+            "+ self.character * self.product;",
+            "+ self.product;",
+            "live A4 mix",
+        ),
+        (
+            "double live envelope",
+            "let product = energy * signed;",
+            "let product = energy * energy * signed;",
+            "P == E*(signed_gain*wet)",
+        ),
+        (
+            "incorrect fade mix",
+            "sample.convert()?;\n        Ok(sample)\n    }\n}",
+            "sample.convert()?; sample.mix -= character*(1.-pair[0])*pair[1]; sample.output=sample.mix as f32;\n        Ok(sample)\n    }\n}",
+            "cached-fade A4 mix",
+        ),
+    ] {
+        cases.push(Mutant {
+            name,
+            file: "identity/delivery.rs",
+            old,
+            new,
+            suite: "i1-contract",
+            predicate,
+        });
+    }
+    cases.push(Mutant{name:"late-neutral candidate",file:"identity/candidate.rs",old:"let scale = self.slew.advance(self.target, n);",new:"let step=1./f64::from(n); self.slew.value+=(self.target-self.slew.value).clamp(-step,step); let scale=self.slew.value;",suite:"i1-contract",predicate:"exact neutral on Nth decrement"});
+    cases
 }
 pub fn run(out: &Path) -> Result<Value> {
     ensure(
@@ -149,6 +198,8 @@ pub fn run(out: &Path) -> Result<Value> {
         ));
         let output = root.join("receipts");
         let complete = [
+            "candidate half product",
+            "late-neutral candidate",
             "Review 8.2 half product",
             "wrong M5 denominator",
             "shifted wet pair",

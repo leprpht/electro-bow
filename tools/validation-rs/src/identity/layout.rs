@@ -59,3 +59,6 @@ pub fn run() -> Result<Value> {
         json!({"rate_grid":rows,"maximum":worst,"literal_support_and_receipt_projection":{"analysis_bytes":61376+extra,"total_bytes":peak+extra},"complete_field_ownership_verified":false,"measured_allocations":null}),
     )
 }
+
+mod prepared;
+pub use prepared::prepared;
