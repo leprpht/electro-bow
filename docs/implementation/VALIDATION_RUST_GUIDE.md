@@ -16,6 +16,8 @@ v=tools/validation-rs/target/release/electrobow-validation
 
 On Windows use the corresponding `.exe`. Native packaging needs a configured Release CMake tree and JUCE. Set `JUCE_PATH` when JUCE is outside the default `JUCE` directory. Historical O1 state comparison needs Git history including `0c98f608`. The C++ offline epoch comparison needs a C++17 compiler available as `clang++`. Platform availability is recorded in the [stage handoff](status/STAGE_V1_RUST_VALIDATION_MIGRATION.md).
 
+Use Cargo and [direct CMake](../../README.md#build) for local development without Python. The Rust validation executable also runs without Python. Review V1 holds repository-wide cutover, so the existing stage exits retain their reviewed authority. Extend future permanent validation in Rust. [Review V1](status/REVIEW_V1_RUST_VALIDATION_MIGRATION.md)
+
 ## Workspace ownership
 
 | Location under tools/validation-rs | Responsibility |
@@ -79,10 +81,12 @@ The root production workspace and both CMake Cargo invocations continue to use t
 
 Set `ELECTROBOW_VALIDATION_OUT` to use a different output directory. Default output is under `build/validation-migration/rust/<suite>/`. Each invocation has a unique directory. `current.json` identifies the current run, and `receipt.json` identifies its terminal status. Schema 3 binds run ID, source revision, executable digest, built validation source/contract digest, compiler/target/profile, runtime input inventory and artifacts. The reader accepts the earlier schema 2 snapshots. A successful run returns 0. A failed check, missing dependency, concurrent writer or malformed input exits nonzero. Inspection reconciles abandoned running receipts with the runner lock. JSON ingestion rejects nested duplicate keys, nonfinite values and overflowing literals. Optional measurements use JSON null.
 
-Keep expected outcomes on the frozen side of a comparison. Record windows, units, signed-zero policy, FFT scaling, execution identity and eligibility rules with every fixture. Preserve actual counterexamples as executable source mutations. A failed compiler or missing input never earns a behavioral rejection. Permanent licensed audio stays at its attributed path. Generated reports, executables and audio belong under ignored build directories. Review V1 owns the cutover decision. Existing complete O2 and I1 exits continue to govern their reviewed scopes.
+Keep expected outcomes on the frozen side of a comparison. Record windows, units, signed-zero policy, FFT scaling, execution identity and eligibility rules with every fixture. Preserve actual counterexamples as executable source mutations. A failed compiler or missing input never earns a behavioral rejection. Permanent licensed audio stays at its attributed path. Generated reports, executables and audio belong under ignored build directories.
 
 
 ## Frozen comparison and review
+
+The existing Python validation and independent offline C++ sources are retained in place at the frozen comparison revision `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0`. They preserve earlier study results and support historical differential checks. Future changes to Rust validation require no parallel update of the frozen implementations. The Rust CLI compiles the retained C++ epoch as the offline candidate under test and uses independent Rust mathematics for the expected results.
 
 The default comparison directory is `build/validation-migration/reference`. On arm64 macOS install the six pinned packages in the Python 3.9.6 environment named by `ELECTROBOW_REFERENCE_PYTHON`, build the original Release package, then run `sh tools/validation-rs/reference/reproduce.sh` from the project root. This checks out the entry revision, runs the historical suites, exercises the surviving half-product variant and exports comparison data. Freeze scripts are reference-side extraction tools. Run `"$v" differential` to execute both new producers and comparisons. The nested invocation uses a single copied executable throughout and writes one child inventory per aggregate. `qualification` checks the fresh artifact audit and returns nonzero for an unresolved canonical difference. Its invocation keeps `inventory.json`, `electrical.json`, the child receipts and `unqualified.json`. The complete half-product and carrier mutation controls require the named subordinate predicate to be the first failing boundary. [Historical environment](../../tools/validation-rs/reference/requirements-macos-arm64.txt) · [Disposition and open owners](status/STAGE_V1_RUST_VALIDATION_MIGRATION.md)
 

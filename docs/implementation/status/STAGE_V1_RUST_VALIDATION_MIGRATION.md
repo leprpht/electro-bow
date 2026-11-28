@@ -2,6 +2,8 @@
 
 **Partial migration, awaiting independent Review V1. Keep the existing qualification entry points.** The Rust differential command exercises migrated surfaces. Complete Rust qualification grades the observed artifact differences. One unresolved legacy normalization gain changes the archive digest. No qualification or release authority advances.
 
+The [subsequent Review V1 report](REVIEW_V1_RUST_VALIDATION_MIGRATION.md) records the independent results and current cutover decision.
+
 ## Revision and authority
 
 The entry was `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0` on `feature/bowed-string-engine`. Implementation milestones are `97c888e` (frozen inventory), `7e7aebb` (numerics and regressions), `4c19cd0` (physical measurements, packaging and publication), `7347e82` (O2 acoustics and listening archive), `08d2d9cc83a488c47d7b47313ea944d80ff6e1fc` (I1 motion and recording discrimination), `162fd10` (O1, O2 evidence and I1 stereo), `f00f15e` (recorded sources and I1 listening) , `61227ae8b3b95662fbcabfd665fbd83731dbd105` (compiled and runtime provenance) and `d9b529899bf84317d721094dbe74b6f7d2215831` (electrical, stationary, clock, transaction and evidence comparisons). Later milestones `6058390`, `be9f713`, `3244df5` and `47b5b62` cover the historical study, artifact inventory, Stage 04 observation, clock and study controls. The three complete-entry mutant probes are at `72c7752`. The final aggregate implementation is `9bc8880b7d35d0d3a237383a50f87112587e13a4`. The final validation test revision is `8f9ed635bf2e3996dfdbc04fa2fd2be190e21d4a` for the independent packaged audition regression. It leaves the measured aggregate executable source intact. Git records each evidence run's source revision and the receipt records the actual executable digest.

@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-28 · Retain the historical references and hold authoritative Rust cutover
+
+Keep all existing Python validation and independent offline C++ references in place, frozen at `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0` for historical replay and comparison. This owner decision supersedes the original deletion proposal. Extend permanent validation in Rust with independent mathematical references, existing acceptance bounds and a Python-free Rust qualification path. Historical validation has no synchronization obligation. Temporary Python research remains permissible.
+
+Keep existing qualification ownership pending closure of the canonical archive, recording eligibility and provenance findings. Review 8.2 authorizes the next narrow offline transaction revision and baseline injected S4a retains its existing scope. Isolated Rust I1, final A2, controlled identity, perception, live gesture, supported S5, integration and release retain their reviewed boundaries. [Independent Review V1](REVIEW_V1_RUST_VALIDATION_MIGRATION.md)
+
 ## 2026-11-28 · Retain existing qualification authority during the Rust migration
 
 Use the standalone Rust workspace for new validation calculations. Keep the frozen Python and offline C++ implementations and the original complete qualification commands through independent Review V1. Keep the entry audition ZIP available while Review V1 adjudicates the one-ULP normalization difference. The migrated differential is scoped to its recorded child inventory. Review 8.2 remains the engineering authority. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)

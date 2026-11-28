@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Review V1 holds the Rust validation cutover
+
+Reviewed `fcc272f..07a115d` from a clean tracked tree. With Python blocked, Rust O2 qualification exited 0 and full qualification exited 1 at the canonical Stage 08 archive gate after all 57 children passed. Forty-three children were regression producers and 14 were frozen comparisons. A controlled-recording WAV eligibility regression and incomplete schema 3 evidence ingestion also hold cutover. Continue permanent validation development in Rust. The owner retains the Python and independent offline C++ references in place at the entry revision with no synchronization requirement. Existing stage authority, production behavior and the Review 8.2 roadmap boundary are preserved. [Review, commands and receipts](REVIEW_V1_RUST_VALIDATION_MIGRATION.md)
+
 ## 2026-11-28 · Stage V1 migrates validation measurements and retains the original complete exits
 
 The independent Rust workspace now reproduces the contact, ring, guide, O1/O2, pitch and offline I1 measurements listed in the stage matrix. The O2 listening ZIP and packaged wet payloads match their original bytes. All 105 historical I1 artifacts have measured dispositions. All 17 historical source defect classes, 16 I1 evidence controls, 13 study controls and eight acquisition controls have Rust owners. One legacy listening gain differs by one ULP and full combined report equivalence remains open. Awaiting independent Review V1. [Stage V1 handoff](STAGE_V1_RUST_VALIDATION_MIGRATION.md)

@@ -24,7 +24,7 @@ Exact seeds, input schedules, field names, threshold predicates, fixture manifes
 
 Use a separate Cargo workspace at `tools/validation-rs`. The root manifest and lockfile are inputs to both the native build and historical mutation scripts that copy only `rust/dsp` into temporary roots. A nested workspace preserves those callers and keeps all validation dependencies outside the shipping dependency graph. Production execution occurs in existing replay processes. Oracle calculations have no Cargo dependency on the DSP crate.
 
-Freeze original executable outputs and fixtures, verify numeric and evidence primitives, then port the carrier, observation, electrical, analysis/controller and identity suites. Qualify each normal exit and its real defective variants before advancing authority. Preserve the offline C++ kernels through independently approved equivalence. Retire only through a subsequent Review V1 cutover. The [equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) records which work has reached each boundary.
+Freeze original executable outputs and fixtures, verify numeric and evidence primitives, then port the carrier, observation, electrical, analysis/controller and identity suites. Qualify each normal exit and its real defective variants before advancing authority. The [equivalence matrix](VALIDATION_RUST_EQUIVALENCE_MATRIX.md) records which work has reached each boundary. [Review V1](status/REVIEW_V1_RUST_VALIDATION_MIGRATION.md) records the cutover disposition.
 
 ## Dependency and arithmetic decisions
 
@@ -45,9 +45,9 @@ The listening writer uses zip 2.4.2 with its zlib backend. The historical archiv
 
 The locked metadata declares MIT or Apache 2.0 choices for RustFFT, the num crates, Serde, serde_json, SHA-2 and tempfile. Hound and nalgebra declare Apache 2.0, libloading declares ISC, zip declares MIT and csv declares Unlicense/MIT. The graph also includes Unicode data terms and target-specific compiler support. The highest declared minimum Rust version among direct dependencies is nalgebra's 1.87. The tested toolchain is 1.100. The native host still requires the existing JUCE license and toolchain. No validation crate is linked into the shipping plugin.
 
-## Retirement and historical replay
+## Historical references
 
-The inventory columns `replacement`, `equivalence_evidence`, `migration_status`, `historical_dependencies` and `retirement` form the per-file proposed retirement manifest. Keep all original owners and historical reviews in this submission. After independent approval, remove only approved superseded implementation rows in a dedicated cutover. Retain permanent attributed audio, existing native/ABI tests and actual-code Rust replay boundaries. A C++ adapter that hosts JUCE or measures the reviewed kernel remains necessary until the corresponding independent comparison is approved. Unclosed family rows retain the existing executable authority. The historical revision and pinned replay command remain available after any future cutover. [Per-file retirement manifest](validation-inventory.tsv) · [Frozen replay instructions](VALIDATION_RUST_GUIDE.md#frozen-comparison-and-review)
+The owner retains all existing Python validation and independent offline C++ references in place. Their frozen comparison revision is `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0`. The `retirement` column of the per-file inventory records the original migration proposal. The owner decision supersedes its deletion proposals. After cutover the historical implementations serve comparison and replay only, with no synchronization requirement. Unclosed families retain their existing executable authority pending cutover. Permanent attributed audio, native/ABI tests and actual-code adapters retain their roles. [Per-file inventory](validation-inventory.tsv) · [Frozen replay instructions](VALIDATION_RUST_GUIDE.md#frozen-comparison-and-review)
 
 ### Exceptions submitted for independent review
 
