@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+
+[package]
+name = "electrobow-validation"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+publish = false
+
+[dependencies]
+hound = "=3.5.1"
+num-rational = "=0.4.2"
+num-traits = "=0.2.19"
+rustfft = "=6.4.1"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = { version = "=1.0.145", features = ["float_roundtrip"] }
+sha2 = "=0.10.9"
+tempfile = "=3.23.0"
+libloading = "=0.8.9"
+nalgebra = { version = "=0.34.1", default-features = false, features = ["std"] }
+csv = "=1.4.0"

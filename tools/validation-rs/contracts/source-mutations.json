@@ -1,0 +1,404 @@
+[
+  {
+    "suite": "ring",
+    "name": "commit before reads",
+    "test": "instrument::ring::tests::impulse_before_commit",
+    "marker": "panicked at rust/dsp/src/instrument/ring/tests.rs:",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring/tests.rs",
+        "before": "fn impulse_before_commit() {\n    let mut ring = prepared(48000.0, Arm::Bridge);\n    let c = ring.samples.len();\n    // Flush the launch seed through ordinary commits, then inject at n=0.\n    for _ in 0..c {\n        push(&mut ring, 0.0);\n    }\n    for n in 0..4 * c {\n        for (delay, m, u) in [\n            (1.0, 1, 0.0),\n            (3.25, 3, 0.25),\n            ((c - 2) as f64, c - 2, 0.0),\n            (c as f64 - 0.25, c - 1, 0.75),\n            (c as f64, c, 0.0),\n        ] {\n            let expected = if n == m {\n                1.0 - u\n            } else if n == m + 1 {\n                u\n            } else {\n                0.0\n            };\n            assert_eq!(ring.read(delay), Ok(expected), \"tick {n}, tap {delay}\");\n        }\n        push(&mut ring, f64::from(n == 0));\n    }\n}\n\n#[test]\n",
+        "after": "fn impulse_before_commit() {\n    let mut ring = prepared(48000.0, Arm::Bridge);\n    let c = ring.samples.len();\n    // Flush the launch seed through ordinary commits, then inject at n=0.\n    for _ in 0..c {\n        push(&mut ring, 0.0);\n    }\n    for n in 0..4 * c {\n        push(&mut ring, f64::from(n == 0));\n        for (delay, m, u) in [\n            (1.0, 1, 0.0),\n            (3.25, 3, 0.25),\n            ((c - 2) as f64, c - 2, 0.0),\n            (c as f64 - 0.25, c - 1, 0.75),\n            (c as f64, c, 0.0),\n        ] {\n            let expected = if n == m {\n                1.0 - u\n            } else if n == m + 1 {\n                u\n            } else {\n                0.0\n            };\n            assert_eq!(ring.read(delay), Ok(expected), \"tick {n}, tap {delay}\");\n        }\n\n    }\n}\n\n#[test]\n"
+      }
+    ]
+  },
+  {
+    "suite": "ring",
+    "name": "historical index one too recent",
+    "test": "instrument::ring::tests::impulse_before_commit",
+    "marker": "panicked at rust/dsp/src/instrument/ring/tests.rs:",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "            return self.samples[slot];",
+        "after": "            return self.samples[(slot + 1) % self.samples.len()];"
+      }
+    ]
+  },
+  {
+    "suite": "ring",
+    "name": "swapped weights",
+    "test": "instrument::ring::tests::impulse_before_commit",
+    "marker": "panicked at rust/dsp/src/instrument/ring/tests.rs:",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "        (1.0 - u) * newer + u * self.history(lag + 1, seed)",
+        "after": "        u * newer + (1.0 - u) * self.history(lag + 1, seed)"
+      }
+    ]
+  },
+  {
+    "suite": "ring",
+    "name": "wrap one slot early",
+    "test": "instrument::ring::tests::full_capacity_neighbor_across_wraps",
+    "marker": "panicked at rust/dsp/src/instrument/ring/tests.rs:",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "        if ring.write == ring.samples.len() {",
+        "after": "        if ring.write == ring.samples.len() - 1 {"
+      }
+    ]
+  },
+  {
+    "suite": "ring",
+    "name": "missing oldest interpolation neighbor",
+    "test": "instrument::ring::tests::full_capacity_neighbor_across_wraps",
+    "marker": "panicked at rust/dsp/src/instrument/ring/tests.rs:",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "        (1.0 - u) * newer + u * self.history(lag + 1, seed)",
+        "after": "        (1.0 - u) * newer + u * self.history((lag + 1).min(self.samples.len() - 1), seed)"
+      }
+    ]
+  },
+  {
+    "suite": "ring",
+    "name": "stale epoch after invalidation",
+    "test": "instrument::ring::tests::invalidation_and_relaunch_hide_stale_slots",
+    "marker": "panicked at rust/dsp/src/instrument/ring/tests.rs:",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "        self.seed = None;",
+        "after": "        // old seed still valid"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "reflection sign",
+    "test": "instrument::waveguide::tests::passive_absolute_arrival",
+    "marker": "positive compact return",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "let from_nut = -self.nut.read",
+        "after": "let from_nut = self.nut.read"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "missing FIR delay",
+    "test": "instrument::waveguide::tests::passive_absolute_arrival",
+    "marker": "absolute arrival",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "(0.125 * x + 0.75 * self.loss[0] + 0.125 * self.loss[1])",
+        "after": "x"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "extra sample",
+    "test": "instrument::waveguide::tests::passive_absolute_arrival",
+    "marker": "absolute arrival",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.bridge.read(bridge_distance - 1.0)",
+        "after": "self.bridge.read(bridge_distance)"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "reversed bridge weights",
+    "test": "instrument::waveguide::tests::passive_absolute_arrival",
+    "marker": "absolute arrival",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "let u = delay - m as f64;",
+        "after": "let mut u = delay - m as f64;\n        if matches!(self.arm, Arm::Bridge) && u!=0.0 {u=1.0-u;}"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "wrong FIR preload",
+    "test": "instrument::waveguide::tests::evolving_eager_trajectory",
+    "marker": "pre x2",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.bridge.read_at(delay, 2)",
+        "after": "self.bridge.read_at(delay, 1)"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "incorrect launch history",
+    "test": "instrument::waveguide::tests::evolving_eager_trajectory",
+    "marker": "first divergence",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "t + 1.0 - BETA",
+        "after": "t + BETA"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "launch P replaced on retune",
+    "test": "instrument::waveguide::tests::evolving_eager_trajectory",
+    "marker": "first divergence",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "impl DelayRing {",
+        "after": "impl DelayRing {\n    pub fn replace_period(&mut self,p:f64){self.seed.as_mut().unwrap().period=p;}"
+      },
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "let period = self.rate / hz;",
+        "after": "let period = self.rate / hz;\n        self.nut.replace_period(period);"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "wrong arm routing",
+    "test": "instrument::waveguide::tests::evolving_eager_trajectory",
+    "marker": "stored B",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.bridge.stage(sample.contact.to_bridge)",
+        "after": "self.bridge.stage(sample.contact.to_nut)"
+      },
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.nut.stage(sample.contact.to_nut)",
+        "after": "self.nut.stage(sample.contact.to_bridge)"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "forget prior branch",
+    "test": "instrument::waveguide::tests::evolving_eager_trajectory",
+    "marker": "first divergence",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "                self.mode,",
+        "after": "                Mode::Stick,"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "commit before second stage",
+    "test": "instrument::waveguide::tests::atomic_fault_boundary",
+    "marker": "partial scalar/cursor commit",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "let nut = self.nut.stage(sample.contact.to_nut)?;\n        bridge.commit();",
+        "after": "bridge.commit();\n        let nut = self.nut.stage(sample.contact.to_nut)?;"
+      }
+    ]
+  },
+  {
+    "suite": "guide",
+    "name": "stale bridge on invalidation",
+    "test": "instrument::waveguide::tests::evolving_eager_trajectory",
+    "marker": "assertion",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.bridge.invalidate();",
+        "after": "// stale bridge epoch"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "single ray",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence station",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.direct - self.reflected_history",
+        "after": "self.direct"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "positive reflection",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence station",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.direct - self.reflected_history",
+        "after": "self.direct + self.reflected_history"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "reversed velocity",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence station",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "self.direct - self.reflected_history",
+        "after": "self.reflected_history - self.direct"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "pre-commit history",
+    "test": "instrument::waveguide::tests::o1::first_high_note_uses_committed_emission",
+    "marker": "committed emission rate=32000",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "Ok(self\n            .advance(hz, speed, k)?\n            .map(|(sample, period)| (sample, Observation::read(&self.nut, period))))",
+        "after": "\n        let old = self.live.then(|| Observation::read(&self.nut, self.rate / hz));\n        Ok(self.advance(hz, speed, k)?.map(|(s, _)| (s, old.unwrap())))"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "extra lag",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence direct",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "self.interpolate(delay, 1)",
+        "after": "self.interpolate(delay, 2)"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "reversed O1 interpolation",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence direct",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "self.interpolate(delay, 1)",
+        "after": "self.interpolate(delay.ceil() - delay.fract(), 1)"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "extra bridge reflection",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence reflected history",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "nut.read_committed((2.0 - position - BETA) * period / 2.0),",
+        "after": "nut.read_committed((2.0 - position - BETA) * period / 2.0) - 0.98 * nut.read_committed((position + BETA) * period / 2.0),"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "wrong center",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence direct",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "[0.162, 0.174, 0.186]",
+        "after": "[0.162, 0.170, 0.186]"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "uniform aperture",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence aperture",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "(left + 4.0 * center + right) / 6.0",
+        "after": "(left + center + right) / 3.0"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "retuned historical seed",
+    "test": "instrument::waveguide::tests::o1::chronological_grid",
+    "marker": "first O1 divergence reflected history",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "impl DelayRing {",
+        "after": "impl DelayRing {\n            pub fn swap_seed_period(&mut self, p: f64) -> f64 {\n                std::mem::replace(&mut self.seed.as_mut().unwrap().period,p)\n            }"
+      },
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "(sample, Observation::read(&self.nut, period))",
+        "after": "{\n            let saved = self.nut.swap_seed_period(period);\n            let observation = Observation::read(&self.nut, period);\n            self.nut.swap_seed_period(saved);\n            (sample, observation)\n        }"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "publish last epoch while cleared",
+    "test": "instrument::waveguide::tests::o1::lifecycle_parity",
+    "marker": "observed lifecycle tick=1250",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "    live: bool,",
+        "after": "    cached: Option<(Sample,Observation)>,\n    live: bool,"
+      },
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "            live: false,",
+        "after": "            cached: None,\n            live: false,"
+      },
+      {
+        "file": "rust/dsp/src/instrument/waveguide.rs",
+        "before": "Ok(self\n            .advance(hz, speed, k)?\n            .map(|(sample, period)| (sample, Observation::read(&self.nut, period))))",
+        "after": "let result = self.advance(hz,speed,k)?\n                    .map(|(s,p)| (s,Observation::read(&self.nut,p)));\n            self.cached = result.or(self.cached);\n            Ok(self.cached)"
+      }
+    ]
+  },
+  {
+    "suite": "o1",
+    "name": "decompose after float shift",
+    "test": "instrument::waveguide::tests::o1::preserves_fraction_at_post_commit",
+    "marker": "lost original fraction",
+    "edits": [
+      {
+        "file": "rust/dsp/src/instrument/ring.rs",
+        "before": "self.interpolate(delay, 1)",
+        "after": "self.interpolate(delay + 1.0, 0)"
+      }
+    ]
+  }
+]

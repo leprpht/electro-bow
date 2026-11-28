@@ -1,0 +1,49 @@
+{
+  "commits": [
+    [
+      "    invalidations: usize,",
+      "    pub commits: usize,\n    invalidations: usize,"
+    ],
+    [
+      "            invalidations: 0,",
+      "            commits: 0,\n            invalidations: 0,"
+    ],
+    [
+      "        nut.commit();",
+      "        nut.commit();\n        self.commits += 1;"
+    ]
+  ],
+  "ring": [
+    [
+      "    write: usize,",
+      "    opens: usize,\n    clears: usize,\n    write: usize,"
+    ],
+    [
+      "            write: 0,",
+      "            opens: 0,\n            clears: 0,\n            write: 0,"
+    ],
+    [
+      "self.seed = Some(Seed {",
+      "self.opens += 1;\n        self.seed = Some(Seed {"
+    ],
+    [
+      "pub fn invalidate(&mut self) {",
+      "pub fn invalidate(&mut self) {\n        self.clears += 1;"
+    ]
+  ],
+  "guide": [
+    [
+      "    live: bool,",
+      "    invalidations: usize,\n    live: bool,"
+    ],
+    [
+      "            live: false,",
+      "            invalidations: 0,\n            live: false,"
+    ],
+    [
+      "pub fn invalidate(&mut self) {",
+      "pub fn invalidate(&mut self) {\n        self.invalidations += 1;"
+    ]
+  ],
+  "ring_epoch": "\nimpl DelayRing {\n    pub(super) fn check_epoch(&self, ticks: usize, seed: (f64, f64)) {\n        assert_eq!((self.opens, self.clears), (1, 1), \"ring epoch change at {ticks}\");\n        let capacity = self.samples.len();\n        assert_eq!(self.write, ticks % capacity, \"ring cursor at {ticks}\");\n        assert_eq!(self.count, ticks.min(capacity), \"ring count at {ticks}\");\n        assert_eq!(self.seed.map(|s| (s.period, s.amplitude)), Some(seed));\n    }\n}\n"
+}

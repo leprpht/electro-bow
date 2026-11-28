@@ -61,3 +61,18 @@ for size in (1, 3, 16, 17, 240, 1024):
             hann=np.hanning(size).tolist(), fft=np.column_stack((fft.real, fft.imag)).tolist(),
             projections=np.column_stack((ph.real, ph.imag)).tolist()))
 (out / "numerics.json").write_text(json.dumps(numerics, allow_nan=False) + "\n")
+
+# Preserve every original circuit-delay measurement and both sides of each eager/lazy read.
+def ring_probe(frame, event, result):
+    if event != "return":
+        return
+    a = frame.f_locals
+    if frame.f_code.co_name == "absolute_delay":
+        ring_stream.write(struct.pack("<d", result))
+    elif frame.f_code.co_name == "check" and "reads" in a:
+        ring_stream.write(struct.pack("<Qddddd", a["n"], a["delay"], *a["reads"][0], *a["reads"][1]))
+
+with (out / "ring.bin").open("wb") as ring_stream:
+    sys.setprofile(ring_probe)
+    runpy.run_path("tools/validation/ring_oracle.py", run_name="__main__")
+    sys.setprofile(None)
