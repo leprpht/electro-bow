@@ -15,7 +15,7 @@ use std::{
     path::Path,
 };
 mod listening;
-mod resample;
+pub(crate) mod resample;
 const VECTORS: [&str; 4] = ["neutral", "upper", "lower", "inversion"];
 fn rms(x: &[f64]) -> f64 {
     (x.iter().map(|v| v * v).sum::<f64>() / x.len() as f64).sqrt()
@@ -374,57 +374,6 @@ pub fn differential(reference: &Path, root: &Path) -> Result<Value> {
     let old = evidence::strict(&std::fs::read(path)?)?;
     let p = crate::publication::current_artifact(root, "o2-acoustic", "evidence.json")?;
     let new = evidence::strict(&std::fs::read(p)?)?;
-    fn compare(a: &Value, b: &Value, path: &str, stats: &mut (usize, f64, f64)) -> Result<()> {
-        match a {
-            Value::Object(obj) => {
-                ensure(
-                    b.as_object().is_some_and(|m| m.len() == obj.len()),
-                    "acoustic field inventory",
-                )?;
-                for (k, x) in obj {
-                    compare(
-                        x,
-                        b.get(k).ok_or_else(|| format!("absent {path}/{k}"))?,
-                        &format!("{path}/{k}"),
-                        stats,
-                    )?;
-                }
-            }
-            Value::Array(arr) => {
-                let vals = b.as_array().ok_or("acoustic differential array")?;
-                ensure(arr.len() == vals.len(), "acoustic array length")?;
-                for (x, y) in arr.iter().zip(vals) {
-                    compare(x, y, path, stats)?;
-                }
-            }
-            Value::Number(n) if !n.is_f64() && b.is_f64() => {
-                ensure(n.as_f64() == b.as_f64(), &format!("numeric control {path}"))?;
-                stats.0 += 1;
-            }
-            Value::Number(n) if n.is_f64() => {
-                let x = n.as_f64().unwrap();
-                let y = b.as_f64().ok_or("non-numeric measurement")?;
-                let e = (x - y).abs();
-                let scaled = e / 1f64.max(x.abs());
-                if path.ends_with("phase_deg") {
-                    ensure(e <= 1e-6, &format!("phase degrees {path}"))?;
-                    stats.2 = stats.2.max(e);
-                } else {
-                    ensure(
-                        scaled <= 1e-9,
-                        &format!("acoustic measurement {path} {x} vs {y}"),
-                    )?;
-                    stats.1 = stats.1.max(scaled);
-                }
-                stats.0 += 1;
-            }
-            _ => {
-                ensure(a == b, &format!("acoustic decision or identity {path}"))?;
-                stats.0 += 1;
-            }
-        }
-        Ok(())
-    }
     let mut rows = BTreeMap::new();
     for (k, v) in old.as_object().unwrap() {
         let mut stats = (0, 0., 0.);
@@ -432,4 +381,61 @@ pub fn differential(reference: &Path, root: &Path) -> Result<Value> {
         rows.insert(k,json!({"fields":stats.0,"largest_scaled_error":stats.1,"largest_phase_error_deg":stats.2}));
     }
     Ok(json!({"producer_run":new["run_id"],"fields":rows}))
+}
+
+pub(crate) fn compare(
+    a: &Value,
+    b: &Value,
+    path: &str,
+    stats: &mut (usize, f64, f64),
+) -> Result<()> {
+    match a {
+        Value::Object(obj) => {
+            ensure(
+                b.as_object().is_some_and(|m| m.len() == obj.len()),
+                "acoustic field inventory",
+            )?;
+            for (k, x) in obj {
+                compare(
+                    x,
+                    b.get(k).ok_or_else(|| format!("absent {path}/{k}"))?,
+                    &format!("{path}/{k}"),
+                    stats,
+                )?;
+            }
+        }
+        Value::Array(arr) => {
+            let vals = b.as_array().ok_or("acoustic differential array")?;
+            ensure(arr.len() == vals.len(), "acoustic array length")?;
+            for (x, y) in arr.iter().zip(vals) {
+                compare(x, y, path, stats)?;
+            }
+        }
+        Value::Number(n) if !n.is_f64() && b.is_f64() => {
+            ensure(n.as_f64() == b.as_f64(), &format!("numeric control {path}"))?;
+            stats.0 += 1;
+        }
+        Value::Number(n) if n.is_f64() => {
+            let x = n.as_f64().unwrap();
+            let y = b.as_f64().ok_or("non-numeric measurement")?;
+            let e = (x - y).abs();
+            let scaled = e / 1f64.max(x.abs());
+            if path.ends_with("phase_deg") {
+                ensure(e <= 1e-6, &format!("phase degrees {path}"))?;
+                stats.2 = stats.2.max(e);
+            } else {
+                ensure(
+                    scaled <= 1e-9,
+                    &format!("acoustic measurement {path} {x} vs {y}"),
+                )?;
+                stats.1 = stats.1.max(scaled);
+            }
+            stats.0 += 1;
+        }
+        _ => {
+            ensure(a == b, &format!("acoustic decision or identity {path}"))?;
+            stats.0 += 1;
+        }
+    }
+    Ok(())
 }

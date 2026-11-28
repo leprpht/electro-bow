@@ -7,6 +7,8 @@ pub mod motion;
 pub mod paths;
 pub mod qr;
 pub mod stationary;
+pub mod stereo;
+mod stereo_clock;
 use crate::{Result, ensure, evidence};
 use rustfft::num_complex::Complex64;
 use serde::Deserialize;

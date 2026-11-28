@@ -30,6 +30,7 @@ measure contact-build rustc --edition 2024 -O tools/validation/contact_replay.rs
 measure contact "$py" tools/validation/contact_contract.py --rust build/contact
 measure ring "$py" tools/validation/ring_oracle.py
 measure guide "$py" tools/validation/guide_qualification.py
+measure string-oracle "$py" tools/validation/string_oracle.py
 measure observations "$py" tools/validation/acoustic_observation.py
 measure acoustic-identity "$py" tools/validation/acoustic_identity.py
 measure o1 "$py" tools/validation/o1_qualification.py
@@ -46,6 +47,10 @@ measure pitch-build rustc --edition 2024 -O tools/validation/pitch_candidates.rs
 measure pitch "$py" tools/validation/pitch_study.py
 measure pitch-results "$py" tools/validation/check_pitch_results.py
 measure freeze "$py" "$tools/freeze.py" "$ref"
+measure freeze-stereo "$py" "$tools/freeze_stereo.py" build/i1 "$ref/stereo.json"
+measure freeze-stationary "$py" "$tools/freeze_stationary.py" "$ref/stationary-contract.json"
+measure freeze-motion "$py" "$tools/freeze_motion.py" "$ref/motion.json"
+measure freeze-pitch "$py" "$tools/freeze_pitch.py" "$ref/pitch-compact.csv"
 measure freeze-bank "$py" "$tools/freeze_bank.py" "$ref/bank"
 measure freeze-guide "$py" "$tools/freeze_guide.py" build/stage-03 "$ref"
 measure freeze-acoustic "$py" "$tools/freeze_acoustic.py" build/o2/results.json "$ref/acoustic-result.json"

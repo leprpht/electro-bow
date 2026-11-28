@@ -228,6 +228,16 @@ pub fn run(dir: &Path) -> Result<Value> {
             "final wet residual -20 dB",
         ),
     )?;
+    let tail = crate::observation::measures::silent_control()?;
+    ensure(
+        tail == "ineligible harmonic_phase_deg",
+        "silent phase control first failure",
+    )?;
+    verdict.insert(
+        "tail phase from numerical residue".into(),
+        json!({"status":1,"first":tail}),
+    );
+    verdict.extend(super::negative::run()?);
     Ok(
         json!({"producer":evidence::digest(&exe)?,"source":clock.source,"taps":producer.taps,"delivered":producer.delivered,"controls":verdict,"case":name,"count":n,"window":clock.window}),
     )

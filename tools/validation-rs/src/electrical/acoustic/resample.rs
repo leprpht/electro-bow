@@ -13,8 +13,11 @@ fn i0(x: f64) -> f64 {
     sum
 }
 pub fn common_window(x: &[f64], rate: usize) -> Vec<f64> {
+    window(x, rate, 48000..80000)
+}
+pub fn window(x: &[f64], rate: usize, interval: std::ops::Range<usize>) -> Vec<f64> {
     if rate == 32000 {
-        return x[48000..80000].to_vec();
+        return x[interval].to_vec();
     }
     let (mut a, mut b) = (rate, 32000);
     while b != 0 {
@@ -40,7 +43,7 @@ pub fn common_window(x: &[f64], rate: usize) -> Vec<f64> {
     for v in &mut h {
         *v = *v / sum * up as f64;
     }
-    (48000..80000)
+    interval
         .map(|m| {
             let at = m * down + half;
             let first = at.saturating_sub(2 * half).div_ceil(up);

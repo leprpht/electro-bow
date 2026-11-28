@@ -1,4 +1,5 @@
 //! Compare each committed observation against an unbounded chronological history.
+pub mod measures;
 use crate::{Result, ensure, evidence, process, replay};
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -195,6 +196,6 @@ pub fn run(out: &Path) -> Result<Value> {
         rows.push(grade(name, c, &exe, out, &retained)?);
     }
     Ok(
-        json!({"cases":rows,"stress":String::from_utf8(stress.stdout)?,"producer_sha256":evidence::digest(&exe)?}),
+        json!({"cases":rows,"measurements":measures::retained(out,&cases,&retained)?,"stress":String::from_utf8(stress.stdout)?,"producer_sha256":evidence::digest(&exe)?}),
     )
 }

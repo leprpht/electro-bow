@@ -48,6 +48,13 @@ pub fn build(out: &Path, mutation: Option<(&str, &str, &str)>) -> Result<PathBuf
                 for [a, b] in audit.guide.iter().chain(&audit.commits) {
                     edit(&mut code, a, b)?;
                 }
+                if let Some(("relaunch", _, _)) = mutation {
+                    let changes: Vec<[String; 2]> =
+                        serde_json::from_str(include_str!("../contracts/guide-relaunch.json"))?;
+                    for [before, after] in changes {
+                        edit(&mut code, &before, &after)?;
+                    }
+                }
                 code.push_str(&fs::read_to_string("tools/validation/guide_epoch.rs")?);
             }
             "o2" => {

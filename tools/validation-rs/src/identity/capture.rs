@@ -36,7 +36,7 @@ fn stimulus(rate: usize, hz: f64, kind: &str) -> Vec<f64> {
         })
         .collect()
 }
-fn target(x: &[f64], fa: f64, hz: f64) -> Option<[f64; 12]> {
+pub(super) fn target(x: &[f64], fa: f64, hz: f64) -> Option<[f64; 12]> {
     let n = x.len();
     let orders = ((0.28 * fa / hz).floor() as usize).min(12);
     let window = numerics::hann(n);

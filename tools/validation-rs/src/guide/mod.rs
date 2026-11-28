@@ -1,5 +1,5 @@
 //! Grade prescribed waveguide motion at the existing 12-column physical boundary.
-mod phase;
+pub(crate) mod phase;
 use crate::{
     Result, ensure, evidence, numerics,
     observation::{self, Case},
@@ -25,7 +25,12 @@ fn stddev(x: &[f64]) -> f64 {
 fn db(x: f64) -> f64 {
     20. * x.max(1e-12).log10()
 }
-fn spec(x: &[f64], target: f64, orders: bool, planner: &mut FftPlanner<f64>) -> Result<Value> {
+pub(crate) fn spec(
+    x: &[f64],
+    target: f64,
+    orders: bool,
+    planner: &mut FftPlanner<f64>,
+) -> Result<Value> {
     let n = x.len();
     let center = mean(x);
     let mut buf = vec![Complex64::ZERO; 8 * n];
@@ -451,4 +456,53 @@ pub fn differential(reference: &Path, root: &Path) -> Result<Value> {
         result.insert(name,json!({"compared":words,"maximum_scaled_measurement_error":maximum,"maximum_instantaneous_error_cents":phase_error}));
     }
     Ok(json!({"guide_run":doc["run_id"],"cases":result}))
+}
+
+pub fn negative(out: &Path) -> Result<Value> {
+    let cases: BTreeMap<String, Case> =
+        serde_json::from_str(include_str!("../../contracts/physical-cases.json"))?;
+    let bend = &cases["bend_48000_196_R1.8_V0.1_3s"];
+    let faulty = replay::build(out, Some(("relaunch", "", "")))?;
+    let mutant = evidence::digest(&faulty)?;
+    let failure = replay::stream(
+        &faulty,
+        &[bend.rate.to_string()],
+        &observation::controls(bend),
+    )
+    .err()
+    .ok_or("late relaunch survived")?
+    .to_string();
+    ensure(
+        failure.contains("guide launch count after 96001 ticks"),
+        "late relaunch first predicate",
+    )?;
+    let clean = replay::build(out, None)?;
+    let c = &cases["steady_48000_440_R1.8_V0.1_3s"];
+    let actual = replay::stream(&clean, &[c.rate.to_string()], &observation::controls(c))?;
+    let frames = actual.stdout.as_chunks::<96>().0;
+    let target = &cases["steady_48000_196_R1.8_V0.1_3s"];
+    let mut planner = FftPlanner::new();
+    let row = spec(
+        &samples(&frames[frames.len() - 48000..], 2),
+        target.hz,
+        false,
+        &mut planner,
+    )?;
+    let cents = value(&row, "cents");
+    ensure(
+        (1390. ..1410.).contains(&cents),
+        "wrong-label witness in cents",
+    )?;
+    let reason = stationary(target, frames, &mut planner)
+        .err()
+        .ok_or("wrong label survived")?
+        .to_string();
+    ensure(
+        reason == "physical stationary cents/harmonic energy",
+        "wrong-label first predicate",
+    )?;
+    ensure([0., 1e-90, 1e-12].map(db) == [-240.; 3], "amplitude floor")?;
+    Ok(
+        json!({"mutant":mutant,"nominal":evidence::digest(&clean)?,"relaunch_detected_tick":96000,"wrong_label_cents":cents,"wrong_label_predicate":reason,"floor_db":-240}),
+    )
 }

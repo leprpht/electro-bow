@@ -40,6 +40,7 @@ const SUITES: &[&str] = &[
     "pitch-compare",
     "ring",
     "guide",
+    "guide-negative",
     "guide-compare",
     "regression",
     "differential",
@@ -49,6 +50,7 @@ const SUITES: &[&str] = &[
     "i1-bank-compare",
     "i1-qr",
     "i1-layout",
+    "i1-stereo",
     "i1-path-mutants",
     "i1-capture",
     "i1-review82",
@@ -61,10 +63,12 @@ const SUITES: &[&str] = &[
     "o2-acoustic-compare",
     "o2-sweep",
     "o2-records",
+    "o2-qualification",
     "o2-mutants",
     "o2-timing",
     "o1-state",
     "o1-replay",
+    "o1-compare",
     "native",
     "package",
     "compare",
@@ -86,6 +90,7 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
         "i1-review82" => identity::deadlines::run(dir),
         "i1-capture" => identity::capture::run(),
         "i1-path-mutants" => identity::paths::run(dir),
+        "i1-stereo" => identity::stereo::run(dir),
         "i1-layout" => identity::layout::run(),
         "i1-qr" => identity::qr::run(dir),
         "i1-motion" => identity::motion::run(dir),
@@ -104,6 +109,10 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
         "o2-mutants" => electrical::mutants(dir),
         "o2-timing" => electrical::timing(dir),
         "i1-bank-compare" => identity::compare(reference),
+        "o1-compare" => observation::measures::differential(
+            reference,
+            dir.parent().and_then(Path::parent).ok_or("suite root")?,
+        ),
         "o1-replay" => observation::run(dir),
         "contact" => contact::run(dir, None),
         "pitch" => pitch::run(dir),
@@ -114,12 +123,14 @@ fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
                 .and_then(Path::parent)
                 .ok_or("suite output root")?,
         ),
-        "regression" | "qualification" | "differential" => qualification::run(
+        "regression" | "qualification" | "differential" | "o2-qualification" => qualification::run(
             dir,
             reference,
             suite == "qualification",
             suite == "differential",
+            suite == "o2-qualification",
         ),
+        "guide-negative" => guide::negative(dir),
         "guide" => guide::run(dir),
         "ring" => ring::run(dir, None),
         "compare" => Ok(
@@ -177,6 +188,7 @@ fn run() -> Result<()> {
                     | "pitch-compare"
                     | "recordings"
                     | "repeatability"
+                    | "o1-compare"
                     | "guide-compare"
                     | "o2-acoustic-compare"
                     | "signed-compare"

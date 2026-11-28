@@ -9,6 +9,7 @@ const REGRESSION: &[&str] = &[
     "contact-mutants",
     "ring",
     "guide",
+    "guide-negative",
     "mutations",
     "o1-replay",
     "o1-state",
@@ -23,6 +24,7 @@ const REGRESSION: &[&str] = &[
     "i1-qr",
     "i1-path-mutants",
     "i1-layout",
+    "i1-stereo",
     "i1-capture",
     "i1-review82",
     "pitch",
@@ -33,12 +35,19 @@ const REGRESSION: &[&str] = &[
 const COMPARISONS: &[&str] = &[
     "compare",
     "guide-compare",
+    "o1-compare",
     "o2-acoustic-compare",
     "signed-compare",
     "pitch-compare",
     "i1-bank-compare",
 ];
-pub fn run(dir: &Path, reference: &Path, complete: bool, historical: bool) -> Result<Value> {
+pub fn run(
+    dir: &Path,
+    reference: &Path,
+    complete: bool,
+    historical: bool,
+    electrical: bool,
+) -> Result<Value> {
     let exe = dir
         .canonicalize()?
         .join(format!("runner{}", std::env::consts::EXE_SUFFIX));
@@ -49,7 +58,7 @@ pub fn run(dir: &Path, reference: &Path, complete: bool, historical: bool) -> Re
     let cases = REGRESSION
         .iter()
         .chain(COMPARISONS.iter().filter(|_| historical));
-    for suite in cases {
+    for suite in cases.filter(|s| !electrical || s.starts_with("o2-")) {
         let mut cmd = Command::new(&exe);
         cmd.arg(suite).env("ELECTROBOW_VALIDATION_OUT", &children);
         if COMPARISONS.contains(suite) {
@@ -70,9 +79,11 @@ pub fn run(dir: &Path, reference: &Path, complete: bool, historical: bool) -> Re
         reports.insert(suite,json!({"id":receipt["run_id"],"executable":receipt["executable_sha256"],"revision":receipt["revision"],"elapsed_seconds":receipt["elapsed_seconds"],"evidence":receipt["artifacts"]["evidence.json"]}));
         evidence::atomic(&dir.join("inventory.json"), &json!(reports))?;
     }
+    let electrical_report = crate::electrical::aggregate::run(&children)?;
+    evidence::atomic(&dir.join("electrical.json"), &electrical_report)?;
     if complete {
         let pending = [
-            "complete O2 dependent evidence and 54-control inventory",
+            "independent complete O2 report and exit equivalence review",
             "joined I1 capture, signed A4, cached stereo lifecycle and behavioral mutants",
             "cross-suite qualification of source-discrimination and joined recording controls",
         ];
