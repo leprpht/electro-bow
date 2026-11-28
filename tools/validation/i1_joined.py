@@ -676,6 +676,26 @@ def main():
             "other": sample_hash(other),
             "zero_tick": when + nf - 1,
         }
+    left, right = advance_lanes(
+        stream({replace: "bank", replace + 1: "bank"}), stream({})
+    )
+    tr, _, _, tx, _ = left
+    require(
+        len(tx) == 1
+        and tx[0]["epoch"] == 2
+        and tx[0]["physical_index"] == 0
+        and tx[0]["tick"] == replace
+        and tr[replace, 2] == tr[replace, 3] == 1
+        and not tr[replace : replace + 240, 10].any()
+        and np.array_equal(right[0], base),
+        "fault at replacement launch",
+    )
+    result["replacement_fault"] = {
+        "tick": replace,
+        "epoch": 2,
+        "physical_index": 0,
+        "zero": replace + 239,
+    }
     (OUT / "joined.json").write_text(
         json.dumps(result, indent=2, allow_nan=False) + "\n"
     )

@@ -130,6 +130,8 @@ def clock_ticks(
     energy=None,
 ):
     """Restart FIR phase at reset. Advance the source ring and bounded projection through the current input only."""
+    numerator, denominator = float(fs).as_integer_ratio()
+    acquire_ticks = -(-3 * numerator // (25 * denominator))
     d = int(fs // 16000)
     fa = fs / d
     hop = d * rounded(0.005 * fa)
@@ -208,7 +210,7 @@ def clock_ticks(
                 phase = "hold"
             elif action == "compatible" and owner and owner == live:
                 phase = "active"
-            if (phase == "pending" and tick - anchor >= math.ceil(3 * fs / 25)) or (
+            if (phase == "pending" and tick - anchor >= acquire_ticks) or (
                 phase == "confirmed" and tick > expiry
             ):
                 owner = confirmed = job = published_end = None

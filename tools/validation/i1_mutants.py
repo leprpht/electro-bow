@@ -83,8 +83,8 @@ CASES = [
     (
         "expiry bypass",
         "i1_clock.py",
-        "tick - anchor >= math.ceil(3 * fs / 25)",
-        "tick - anchor > math.ceil(3 * fs / 25)",
+        "tick - anchor >= acquire_ticks",
+        "tick - anchor > acquire_ticks",
         "events",
         "elapsed acquisition eligibility",
     ),

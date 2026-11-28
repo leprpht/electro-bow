@@ -254,9 +254,11 @@ def play(
 ):
     token = (0, 1)
     x = fixture(fs, n)
+    da = int(fs // 8000)
+    hop = da * math.floor(0.005 * fs / da + 0.5)
     frames = {
         t: Frame(196, owner=token, supported=t not in bad_ticks)
-        for t in range(239, n, 240)
+        for t in range(hop - 1, n, hop)
     }
     if carrier is None:
         carrier = returns(fs, n, "behavior")
@@ -291,6 +293,13 @@ def collisions():
             int(tr[t, 2]),
             next(r["actions"] for r in cap if r["tick"] == t),
         ]
+    fs = 32008.333333333336
+    for t in (3841, 3842):
+        tr = advance_lanes(play(events_at(t), fs=fs, n=4000))[0][0]
+        require(
+            bool(tr[t, 2]) == (t == 3841), "fractional elapsed acquisition eligibility"
+        )
+        rows[f"fractional/{t}"] = int(tr[t, 2])
     for label, extra, t, bad in (
         ("timeout", Gesture.TIMEOUT, 5760, ()),
         ("reset", Gesture.RESET, 5759, ()),
@@ -645,6 +654,22 @@ def retirement():
     require(
         left[7000, 7] > 0 and not left[7400:8500, 7].any() and left[-1, 7] > 0,
         "revocation freshness scope and causal recovery",
+    )
+    carrier = returns(fs, n, "uneven")
+    raw, q, depth, ctl = (v.copy() for v in carrier)
+    cut = 7001
+    q[cut:, 3] *= -2
+    ctl[cut:, 0] *= 1.2
+    depth[cut:] = 0.0
+    raw[cut:, 11] = 0.0
+    original = advance_lanes(play(ev, n, carrier=carrier))[0][0]
+    altered = advance_lanes(
+        play(ev, n, carrier=(raw, q, depth, ctl), parts=(0, 7, 8193))
+    )[0][0]
+    require(
+        np.array_equal(original[: 479 + cut], altered[: 479 + cut])
+        and np.any(original[479 + cut :, 8] != altered[479 + cut :, 8]),
+        "carrier automation causal prefix",
     )
     return dict(trial=trial, reset=6101, revoked=7100, renewed=8500)
 
