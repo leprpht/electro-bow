@@ -1,5 +1,11 @@
 # Decision log
 
+## 2026-11-28 · Accept corrected I1 delivery, withdrawal and phase ownership
+
+Close R82-1, R82-2 and R82-5 at the offline Rust boundary. Keep R82-3 and R82-4 open. Give the exact-ratio acquisition expiry interval an explicit prepared location and include it in the executable layout check. Require the existing strict Rust consumer to validate every required corrected I1 contract section and reject a coherently rehashed null joined result. Keep the optional allocation and stack evidence nullable. Review that one offline revision before authorizing isolated Rust I1.
+
+Retain Review 8.2's isolated numerical, memory, allocation, denormal, partition and timing requirements. Baseline injected S4a keeps its existing authorization. Final A2, controlled source recognition, owner listening, pickup calibration, supported S5, production integration and release retain their separate gates. [Review 8.3 decision](REVIEW_08_3_I1_CONTRACT_CLOSURE.md#implementation-readiness-and-next-direction)
+
 ## 2026-11-28 · Submit the corrected transaction and preserve the frozen qualification
 
 Use the Stage 08.3 offline Rust candidate for emitted A4, cached retirement, endpoint-exact permission and phase ownership. Retain the frozen C++ epoch and historical joined streams as executable comparisons with their original defects. Require the independently derived product, first neutral sample and existing stationary, motion, evidence and artifact gates. The prepared field map supplies the proposed capacities for subsequent measurement. Request focused Review 8.3 before implementing private isolated Rust I1. Baseline injected S4a retains its prior authority. [Decision request](STAGE_08_3_I1_CONTRACT_CLOSURE.md#independent-decision-requested) · [Contract](../../architecture/ELECTROBOW_I1_SOURCE_IDENTITY_SPECIFICATION.md#stage-083-emitted-transaction)

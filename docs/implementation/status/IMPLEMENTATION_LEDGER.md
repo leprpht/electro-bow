@@ -1,5 +1,11 @@
 # Implementation ledger
 
+## 2026-11-28 · Review 8.3 closes three I1 findings and retains the implementation hold
+
+Reviewed `7de5fa4..c21a4f3`. The Rust producer emits the independently graded signed wet product and pre-link A4, rejects the coherent half-product, reaches exact neutral at tick 6119 in the original 48 kHz witness, and retires NaN, infinity and DBL_MAX at PHASE after both detection-tick commits. The late-neutral mutation rejects. All 108 stationary depth rows and 700 cells on each registered motion path passed. The nine historical unsafe outcomes retain their rejections.
+
+The proposed 60,936-byte analysis/control and 717,384-byte total maps fit their ceilings and lack a named owner for the exact prepared acquisition expiry interval. The strict reader rejects the historical malformed reports. A rehashed corrected contract report with required `results.joined` set to null still passes the active I1 evidence consumer. Close those two boundaries in one offline Rust revision before isolated I1. Baseline injected S4a retains its independent scope and the A2 and downstream qualification gates stand. [Independent review and receipts](REVIEW_08_3_I1_CONTRACT_CLOSURE.md)
+
 ## 2026-11-28 · Stage 08.3 submits the offline I1 transaction for independent review
 
 At executable revision `eee1a09`, the offline Rust producer and independent bank/QR grader agree on the emitted signed product, pre-link A4, converted sample and previous finite cache. The compiled candidate meets exact withdrawal on all seven qualification rates and three uneven rates. Stored NaN, infinity and maximum finite phase retire at PHASE. The proposed named field layout requires 60,936 analysis/control bytes and 717,384 total prepared bytes. All 44 regression producers and 14 frozen comparisons passed, with zero unresolved artifact differences. Review 8.3 owns the next isolated implementation decision. [Handoff, mutation predicates and regression receipts](STAGE_08_3_I1_CONTRACT_CLOSURE.md)
