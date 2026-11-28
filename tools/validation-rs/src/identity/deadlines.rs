@@ -71,3 +71,81 @@ pub fn run(dir: &Path) -> Result<Value> {
     }
     Ok(json!({"review":"8.2","slew":rates,"phase_faults":state_faults,"late_deadlines":5}))
 }
+
+/// Historical comparison only. The declared envelope is independent of either producer's cache.
+pub fn signed(reference: &Path) -> Result<Value> {
+    use crate::evidence;
+    use std::fs;
+    let inputs = [
+        (
+            "entry",
+            "f25d2e2f4a9d54d5166f36dfb769f8b529274049815ec25fcea1c94ea3f1b446",
+        ),
+        (
+            "half-product",
+            "973cc65ef226016499c8716ec197ac1c2984921dc1929ef19a64d4ba601f2527",
+        ),
+    ];
+    let mut reports = Vec::new();
+    let mut nominal = Vec::new();
+    for (which, sha) in inputs {
+        let path = reference.join(format!("{which}-joined.bin"));
+        ensure(
+            evidence::digest(&path)? == sha,
+            "joined frozen producer stream",
+        )?;
+        let data = fs::read(path)?;
+        ensure(data.len() == 18500 * 64, "joined sample count")?;
+        let mut first = Value::Null;
+        let mut changed = 0;
+        let mut cache_mismatches = 0;
+        for (i, b) in data.as_chunks::<64>().0.iter().enumerate() {
+            let words = std::array::from_fn(|j| f64::from_le_bytes(b.as_chunks::<8>().0[j]));
+            let [epoch, index, e, wet, product, cached_e, cache, direct] = words;
+            let bounds = [
+                0., 479., 863., 9479., 9719., 10103., 13000., 14680., 15599., 15983., 18500.,
+            ];
+            let levels = [0., 0., 1., 1., 0., 1., 1., 0., 0., 1., 1.];
+            let energy = if epoch == 0. {
+                0.
+            } else {
+                super::motion::interp(i as f64, &bounds, &levels)
+            };
+            ensure(
+                e == energy && cached_e == energy,
+                "joined expected envelope/cache energy",
+            )?;
+            let expected = energy * wet;
+            if which == "entry" {
+                nominal.push([epoch, index, wet, direct]);
+            } else {
+                ensure(
+                    nominal[i].map(f64::to_bits) == [epoch, index, wet, direct].map(f64::to_bits),
+                    "mutant normalized samples or direct changed",
+                )?;
+            }
+            if cache != expected {
+                cache_mismatches += 1;
+            }
+            if product != expected {
+                changed += 1;
+                if first.is_null() {
+                    first = json!({"tick":i,"expected":expected,"actual":product,"wet":wet,"energy":energy,"predicate":"P == E*(signed_gain*wet)"});
+                }
+            }
+        }
+        if which == "entry" {
+            ensure(
+                changed == 0 && cache_mismatches == 0,
+                "nominal signed product",
+            )?;
+        } else {
+            ensure(
+                changed == 17099 && cache_mismatches == 17099 && first["tick"] == 480,
+                "R82-1 signed product witness",
+            )?;
+        }
+        reports.push(json!({"producer":which,"frozen_sha256":sha,"first_mismatch":first,"wrong_live_products":changed,"wrong_cache_products":cache_mismatches,"historical_complete_exit":"passed"}));
+    }
+    Ok(json!({"runs":reports,"emitted_a4_available":false}))
+}

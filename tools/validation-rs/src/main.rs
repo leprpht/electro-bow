@@ -12,6 +12,7 @@ mod pitch;
 mod process;
 mod publication;
 mod qualification;
+mod recordings;
 mod replay;
 mod ring;
 use serde_json::{Value, json};
@@ -31,6 +32,8 @@ fn ensure(condition: bool, message: &str) -> Result<()> {
 }
 const SUITES: &[&str] = &[
     "fixtures",
+    "recordings",
+    "recording-controls",
     "contact",
     "pitch",
     "pitch-compare",
@@ -44,11 +47,16 @@ const SUITES: &[&str] = &[
     "contact-mutants",
     "i1-bank-compare",
     "i1-qr",
+    "i1-capture",
     "i1-review82",
+    "signed-compare",
     "i1-motion",
     "i1-stationary",
     "o2-carrier",
     "o2-bench",
+    "o2-acoustic",
+    "o2-acoustic-compare",
+    "o2-sweep",
     "o2-mutants",
     "o2-timing",
     "o1-state",
@@ -61,16 +69,28 @@ const DEFAULT_OUT: &str = "build/validation-migration/rust";
 
 fn execute(suite: &str, dir: &Path, reference: &Path) -> Result<Value> {
     match suite {
+        "recordings" => recordings::preflight(dir, reference),
+        "recording-controls" => recordings::controls(dir),
         "fixtures" => audio::fixtures(),
         "mutations" => mutations::run(dir),
         "contact-mutants" => contact::controls::mutants(dir),
         "o1-state" => mutations::state_parity(dir),
         "native" => process::native(dir),
         "package" => package::run(dir),
+        "signed-compare" => identity::deadlines::signed(reference),
         "i1-review82" => identity::deadlines::run(dir),
+        "i1-capture" => identity::capture::run(),
         "i1-qr" => identity::qr::run(dir),
         "i1-motion" => identity::motion::run(dir),
         "i1-stationary" => identity::stationary::run(dir),
+        "o2-sweep" => electrical::sweep::run(dir),
+        "o2-acoustic-compare" => electrical::acoustic::differential(
+            reference,
+            dir.parent()
+                .and_then(Path::parent)
+                .ok_or("suite output root")?,
+        ),
+        "o2-acoustic" => electrical::acoustic::run(dir),
         "o2-bench" => electrical::bench(dir),
         "o2-carrier" => electrical::carrier::run(dir),
         "o2-mutants" => electrical::mutants(dir),
@@ -142,10 +162,17 @@ fn run() -> Result<()> {
         "unknown validation suite (use list)",
     )?;
     ensure(
-        args.len() == 1
+        (args.len() == 1 && suite != "recordings")
             || (matches!(
                 suite,
-                "compare" | "pitch-compare" | "guide-compare" | "i1-bank-compare" | "differential"
+                "compare"
+                    | "pitch-compare"
+                    | "recordings"
+                    | "guide-compare"
+                    | "o2-acoustic-compare"
+                    | "signed-compare"
+                    | "i1-bank-compare"
+                    | "differential"
             ) && args.len() == 2),
         "unexpected argument",
     )?;

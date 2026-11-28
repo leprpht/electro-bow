@@ -1,4 +1,5 @@
 //! Offline four-path independent correction bank. State belongs to one launch epoch.
+pub mod capture;
 pub mod deadlines;
 pub mod epoch;
 pub mod motion;

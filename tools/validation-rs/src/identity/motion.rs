@@ -19,7 +19,7 @@ struct Contract {
     witness: Option<Witness>,
     delivery_witness: Option<Witness>,
 }
-fn interp(t: f64, x: &[f64], y: &[f64]) -> f64 {
+pub(super) fn interp(t: f64, x: &[f64], y: &[f64]) -> f64 {
     let edge = x.partition_point(|v| *v <= t);
     if edge == 0 {
         return y[0];

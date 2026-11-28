@@ -26,7 +26,7 @@ struct Case {
     sha256: String,
 }
 
-fn fir(dec: usize) -> Vec<f64> {
+pub(crate) fn fir(dec: usize) -> Vec<f64> {
     let n = 32 * dec;
     let mut values: Vec<_> = (0..=n)
         .map(|i| {
@@ -36,7 +36,7 @@ fn fir(dec: usize) -> Vec<f64> {
             blackman * if s == 0. { 1. } else { s.sin() / s }
         })
         .collect();
-    let sum = stimulus::sum_numpy(&values);
+    let sum = crate::numerics::sum_numpy(&values);
     for v in &mut values {
         *v /= sum;
     }

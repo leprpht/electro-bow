@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, fs, path::Path, process::Command};
 const REGRESSION: &[&str] = &[
     "fixtures",
+    "recording-controls",
     "contact",
     "contact-mutants",
     "ring",
@@ -12,11 +13,14 @@ const REGRESSION: &[&str] = &[
     "o1-replay",
     "o1-state",
     "o2-bench",
+    "o2-acoustic",
+    "o2-sweep",
     "o2-carrier",
     "o2-mutants",
     "i1-stationary",
     "i1-motion",
     "i1-qr",
+    "i1-capture",
     "i1-review82",
     "pitch",
     "native",
@@ -26,11 +30,17 @@ const REGRESSION: &[&str] = &[
 const COMPARISONS: &[&str] = &[
     "compare",
     "guide-compare",
+    "o2-acoustic-compare",
+    "signed-compare",
     "pitch-compare",
     "i1-bank-compare",
 ];
 pub fn run(dir: &Path, reference: &Path, complete: bool, historical: bool) -> Result<Value> {
-    let exe = std::env::current_exe()?;
+    let exe = dir
+        .canonicalize()?
+        .join(format!("runner{}", std::env::consts::EXE_SUFFIX));
+    fs::copy(std::env::current_exe()?, &exe)?;
+    let expected_hash = evidence::digest(&exe)?;
     let children = dir.canonicalize()?.join("children");
     let mut reports = BTreeMap::new();
     let cases = REGRESSION
@@ -50,13 +60,16 @@ pub fn run(dir: &Path, reference: &Path, complete: bool, historical: bool) -> Re
             &format!("{suite}: {}", String::from_utf8_lossy(&run.stderr)),
         )?;
         let receipt = publication::inspect(&children.join(suite), suite)?;
-        ensure(receipt["status"] == "passed", "unsuccessful child receipt")?;
+        ensure(
+            receipt["status"] == "passed" && receipt["executable_sha256"] == expected_hash,
+            "unsuccessful child receipt",
+        )?;
         reports.insert(suite,json!({"id":receipt["run_id"],"executable":receipt["executable_sha256"],"revision":receipt["revision"],"elapsed_seconds":receipt["elapsed_seconds"],"evidence":receipt["artifacts"]["evidence.json"]}));
         evidence::atomic(&dir.join("inventory.json"), &json!(reports))?;
     }
     if complete {
         let pending = [
-            "complete O2 acoustic, listening and evidence-control inventory",
+            "complete O2 dependent evidence and 54-control inventory",
             "joined I1 capture, signed A4, cached stereo lifecycle and behavioral mutants",
             "controlled recording protocol and source discrimination scorer",
         ];

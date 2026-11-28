@@ -1,5 +1,7 @@
+pub mod acoustic;
 pub mod carrier;
 pub mod oracle;
+pub mod sweep;
 mod timing;
 use crate::{Result, ensure, evidence, numerics, process, replay};
 use rustfft::num_complex::Complex64 as C;

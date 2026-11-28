@@ -3,25 +3,8 @@ use crate::{Result, ensure};
 use hound::{SampleFormat, WavReader};
 use std::{f64::consts::TAU, path::Path};
 
-pub fn sum_numpy(x: &[f64]) -> f64 {
-    if x.len() < 8 {
-        return x.iter().fold(-0., |s, v| s + v);
-    }
-    if x.len() > 128 {
-        let mid = (x.len() / 2) / 8 * 8;
-        return sum_numpy(&x[..mid]) + sum_numpy(&x[mid..]);
-    }
-    let mut acc: [f64; 8] = x[..8].try_into().unwrap();
-    let (groups, rem) = x[8..].as_chunks::<8>();
-    for group in groups {
-        for (a, v) in acc.iter_mut().zip(group) {
-            *a += v;
-        }
-    }
-    let [a, b, c, d, e, f, g, h] = acc;
-    rem.iter()
-        .fold(((a + b) + (c + d)) + ((e + f) + (g + h)), |s, v| s + v)
-}
+use crate::numerics::sum_numpy;
+
 fn noise(n: usize, level: f64) -> Vec<f64> {
     let mut v = 1u32;
     let mut x: Vec<_> = (0..n)

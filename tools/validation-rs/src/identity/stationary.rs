@@ -36,12 +36,12 @@ fn ratio(num: f64, den: f64) -> Option<f64> {
     (den > 1e-12).then(|| 20. * (num / den).max(1e-12).log10())
 }
 
-struct Spectrum {
+pub(crate) struct Spectrum {
     amplitude: Vec<f64>,
-    peak: Option<f64>,
+    pub(crate) peak: Option<f64>,
 }
 impl Spectrum {
-    fn new(x: &[f64], fs: u32) -> Self {
+    pub(crate) fn new(x: &[f64], fs: u32) -> Self {
         let n = x.len();
         let mean = x.iter().sum::<f64>() / n as f64;
         let ac = (x.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / n as f64).sqrt();
@@ -86,9 +86,15 @@ impl Spectrum {
         }
     }
     fn metrics(&self, fs: u32, f0: f64) -> Value {
+        self.band_metrics(fs, f0, f64::from(fs) / 2.)
+    }
+    pub(crate) fn band_metrics(&self, fs: u32, f0: f64, ceiling: f64) -> Value {
         let (mut total, mut harmonic, mut high, mut moment) = (0., 0., 0., 0.);
         for (k, amp) in self.amplitude.iter().enumerate().skip(1) {
             let f = k as f64 / 8.;
+            if f > ceiling {
+                break;
+            }
             let order = (f / f0).round_ties_even();
             let p = amp * amp;
             total += p;
@@ -107,10 +113,16 @@ impl Spectrum {
         json!({"eta":eta,"residual":1.-eta,"centroid_hz":moment/total,"high_fraction":high/total,"high_flag":high/total>0.01})
     }
 }
-fn near(hz: Option<f64>, f: f64) -> bool {
+pub(crate) fn near(hz: Option<f64>, f: f64) -> bool {
     hz.is_some_and(|v| v > 0. && ((v - f).abs() <= 2. || (1200. * (v / f).log2()).abs() <= 15.))
 }
-fn grade(raw: &[[f64; 30]], wet: &[[f64; 4]], fs: u32, f: f64, j: usize) -> Result<Value> {
+pub(crate) fn grade(
+    raw: &[[f64; 30]],
+    wet: &[[f64; 4]],
+    fs: u32,
+    f: f64,
+    j: usize,
+) -> Result<Value> {
     ensure(
         raw.len() == wet.len() && raw.len() >= fs as usize,
         "aligned V17 samples",
