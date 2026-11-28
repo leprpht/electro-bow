@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-28 · Scope the Stage 08 archive equivalence to one historical gain
+
+Preserve the canonical frozen ZIP at SHA-256 `90222fb6bd1590713f287527607771d1db7d1f36122da5d0020bad70d96c9809`. The owner permits the measured Rust ZIP `0f6a5e212c3d751702ae6e3c16bf8d43db45fc1095b2ef1d05e3a9c42dd5a89c` for historical equivalence. Its techs-P2-60-held gain is 0.48111582544669923 versus the original 0.4811158254466993, exactly one binary64 ULP lower. Require all 17 members, all 14 WAV byte streams, attribution, instructions and the other six gains. Stage 08.2 and O2 retain exact ZIP requirements. The independent reviewer owns the cutover decision. [Stage V1.1 submission](STAGE_V1_1_RUST_VALIDATION_CLOSURE.md)
+
 ## 2026-11-28 · Retain the historical references and hold authoritative Rust cutover
 
 Keep all existing Python validation and independent offline C++ references in place, frozen at `fcc272f8ec7a0472917c1e787edbd2918dcc3ae0` for historical replay and comparison. This owner decision supersedes the original deletion proposal. Extend permanent validation in Rust with independent mathematical references, existing acceptance bounds and a Python-free Rust qualification path. Historical validation has no synchronization obligation. Temporary Python research remains permissible.

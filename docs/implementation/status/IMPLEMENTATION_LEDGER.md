@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Stage V1.1 submits the three validation corrections for independent review
+
+At `000bd410`, Python-blocked O2 and complete Rust qualification both exited 0. All 43 regression producers and 14 frozen comparisons passed. Stage 08 retains its canonical archive with one owner-authorized gain disposition. The float64 eight-take control retains its decoded identities and withheld wet-cue failure. The coherently rehashed fixtures counterexample now fails at inspection. Review V1.1 owns the proposed validation cutover. Existing DSP and release gates remain in force. [Runs, digests and review scope](STAGE_V1_1_RUST_VALIDATION_CLOSURE.md)
+
 ## 2026-11-28 · Review V1 holds the Rust validation cutover
 
 Reviewed `fcc272f..07a115d` from a clean tracked tree. With Python blocked, Rust O2 qualification exited 0 and full qualification exited 1 at the canonical Stage 08 archive gate after all 57 children passed. Forty-three children were regression producers and 14 were frozen comparisons. A controlled-recording WAV eligibility regression and incomplete schema 3 evidence ingestion also hold cutover. Continue permanent validation development in Rust. The owner retains the Python and independent offline C++ references in place at the entry revision with no synchronization requirement. Existing stage authority, production behavior and the Review 8.2 roadmap boundary are preserved. [Review, commands and receipts](REVIEW_V1_RUST_VALIDATION_MIGRATION.md)
