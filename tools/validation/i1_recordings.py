@@ -44,6 +44,7 @@ def inventory(config, manifest):
                 path = (manifest.parent / item["original"]).resolve()
                 fs, x = recorded_audio(path)
                 require(x.ndim == 1 and np.isfinite(x).all(), "invalid decoded samples")
+                require(fs >= 16000, "unsupported DI decimator rate")
                 original = digest(path)
                 whole = decoded(x)
                 lo, hi = item["interval"]

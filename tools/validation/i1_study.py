@@ -613,7 +613,7 @@ def main():
         "controlled_identity": "pending",
         "stationary": {},
         "head": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
+            ["git", "log", "-1", "--format=%H", "--", "tools/validation"], text=True
         ).strip(),
     }
     write("i1-results.json", {"passed": False, "error": "qualification incomplete"})

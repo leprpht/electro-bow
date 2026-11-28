@@ -71,9 +71,7 @@ def stable_cue(records, k, indices, threshold):
     return 1 if min(diff) >= threshold else -1 if max(diff) <= -threshold else 0
 
 
-def qualify(manifest):
-    # One cell per invocation. Only ordinal takes 1/2 are used to nominate a cue.
-    config = json.loads(manifest.read_text())
+def validate_labels(config):
     pitch = config["hz"]
     require(65 <= pitch <= 1320, "unsupported pitch")
     cell = config["classes"]
@@ -112,12 +110,35 @@ def qualify(manifest):
         cell["A"][config["comparison"]] != cell["B"][config["comparison"]],
         "identical class",
     )
-    takes = {}
-    inputs = {}
+
+
+def qualify(manifest):
     from i1_motion import physical, prerequisite
     from i1_recordings import inventory
 
-    records, samples, failures = inventory(config, manifest)
+    config = json.loads(manifest.read_text())
+    try:
+        validate_labels(config)
+        records, samples, failures = inventory(config, manifest)
+    except (ValueError, KeyError, TypeError) as err:
+        reason = str(err)
+        pairs = {
+            a + "/" + b: {"distance": None, "reason": reason}
+            for a, b in combinations(
+                [f"{c}{i}" for c in ("A", "B") for i in range(1, 5)], 2
+            )
+        }
+        return {
+            "status": "ineligible recording manifest",
+            "manifest_sha256": digest(manifest),
+            "failures": [reason],
+            "di_pairs": pairs,
+            "wet_pairs": pairs,
+        }
+
+    pitch = config["hz"]
+    cell = config["classes"]
+    takes, inputs = {}, {}
     report = {
         "manifest_sha256": digest(manifest),
         "protocol": config["protocol_revision"],
@@ -146,6 +167,7 @@ def qualify(manifest):
             h = abs(partials(segment, rate, hz))
             if len(h) != 12 or max(h) <= 1e-5:
                 failures.append(take + " DI harmonic eligibility")
+                continue
             inputs[take] = representation(h)
             takes[take] = (rate, x, hz, sha)
     report["di_pairs"] = {
@@ -165,8 +187,15 @@ def qualify(manifest):
             and abs(1200 * np.log2(takes[left][2] / takes[right][2])) > 10
         ):
             failures.append(left + "/" + right + " between-take pitch mismatch")
+
+    def ineligible(reason):
+        report["wet_pairs"] = {
+            k: {"distance": None, "reason": reason} for k in report["di_pairs"]
+        }
+        return dict(report, status=reason)
+
     if failures:
-        return dict(report, status="ineligible controlled recordings")
+        return ineligible("ineligible controlled recordings")
     di = discrimination(inputs)
     signs = [stable_cue(inputs, k, (1, 2), 2) for k in (0, 1)]
     repeat = all(di[s]["margin"] >= 1 for s in ("calibration", "withheld")) and all(
@@ -185,14 +214,20 @@ def qualify(manifest):
         }
     )
     if not repeat or not any(signs):
-        return dict(report, status="DI discrimination ineligible")
+        if not repeat:
+            failures.append("DI split margin or withheld centroid")
+        if not any(signs):
+            failures.append("no eligible stable registered DI cue")
+        return ineligible("DI discrimination ineligible")
     fs = 48000
     controls = np.tile([pitch, 0.1, 1.8 * 0.1 / 1.65], (3 * fs, 1)).astype("<f8")
     OUT.mkdir(parents=True, exist_ok=True)
     raw = physical(controls, fs, "controlled-carrier", OUT)
     upstream = prerequisite(raw, fs, pitch)
     if not upstream["passed"]:
-        return dict(report, status="ineligible upstream carrier", upstream=upstream)
+        report["upstream"] = upstream
+        failures.extend(upstream["failures"])
+        return ineligible("ineligible upstream carrier")
     from o2_qualification import strongest_hz
 
     anchor = strongest_hz(raw[-fs:, 11], fs)
@@ -226,12 +261,19 @@ def qualify(manifest):
     preserved = all(
         not s or s == stable_cue(wet, k, (3, 4), 0.5) for k, s in enumerate(signs)
     )
-    passed = (
-        not failures
-        and all(score[s]["margin"] >= 0.5 for s in ("calibration", "withheld"))
-        and all(score["matches"].values())
-        and preserved
+    if not preserved:
+        failures.append("withheld wet signed cue")
+    failures.extend(
+        split + " wet margin"
+        for split in ("calibration", "withheld")
+        if score[split]["margin"] < 0.5
     )
+    failures.extend(
+        take + " wet centroid"
+        for take, matched in score["matches"].items()
+        if not matched
+    )
+    passed = not failures
     return dict(
         report,
         status="passed" if passed else "held discrimination failed",

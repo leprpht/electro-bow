@@ -27,7 +27,7 @@ def publish(path, binary, controls, fs, pitch, commits):
         "start": 0,
         "end": count,
         "count": count,
-        "window": [count - fs, count],
+        "window": [count - fs, count] if count >= fs else None,
         "source": digest(path),
         "executable": digest(binary),
         "invocation": ["--o2-guide", str(fs)],

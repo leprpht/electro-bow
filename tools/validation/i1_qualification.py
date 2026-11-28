@@ -59,7 +59,8 @@ def relative_files():
             for case in ("lifted", "replacement", "fresh")
             for ext in ("-48000-18500.f64le", "-48000-18500.json")
         ]
-        + ["joined/" + key + ".npz" for key in (*SITES, "reference")]
+        + ["joined/uneven-47001-141003" + ext for ext in (".json", ".f64le")]
+        + ["joined/" + key + ".npz" for key in (*SITES, "reference", "uneven")]
         + [
             "listening.zip",
             "stage-08-1-listening.zip",

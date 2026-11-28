@@ -368,6 +368,61 @@ def capture_controls():
     }
 
 
+def uneven_delivery():
+    fs, n = 47001, 14500
+    x = fixture(fs, n)
+    token = (1, 1)
+    events = {
+        19: (Gesture.RESET,),
+        20: (Gesture.PICK,),
+        488: (Confirm(token, 5000),),
+        2614: (Launch(token, 1, 0.0),),
+    }
+    stamps = due_stamps(n, fs, [19])
+    energy = np.clip((np.arange(n) - 2614) / rounded(0.008 * fs), 0, 1)
+    carrier = returns(fs, 3 * fs, "uneven")
+    trusted = prerequisite(carrier[0], fs, 196)["passed"]
+    require(trusted, "uneven reference prerequisite")
+    summaries = {}
+    arrays = {}
+    for key in ("complete", "missing-A2", "missing-I1"):
+        frames = {t: Frame(196, owner=token) for t in range(253, 2604, 235)}
+        if key == "missing-A2":
+            del frames[2603]
+        received = stamps - {(1, 2614)} if key == "missing-I1" else stamps
+        gen = lane_ticks(
+            fs,
+            x,
+            frames,
+            events,
+            energy,
+            {1: carrier},
+            {},
+            (0, 1, 255, 19),
+            received,
+            trusted,
+        )
+        tr, g, cap, _, _ = advance_lanes(gen)[0]
+        launch = next(r for r in cap if r["tick"] == 2614)
+        # Support deliberately ends immediately after the due result, so later
+        # frames cannot replace the disputed publication.
+        changed = bool(np.any(tr[2614:, 8] != tr[2614:, 6]))
+        require(
+            changed == (key == "complete") and bool(any(launch["held"])) == changed,
+            "uneven joined publication/held delivery",
+        )
+        arrays[key] = tr
+        arrays[key + "_gains"] = g
+        summaries[key] = {
+            "launch": launch,
+            "capture": cap,
+            "changed": changed,
+            "trace": sample_hash(tr),
+        }
+    np.savez(OUT / "joined/uneven.npz", **arrays)
+    return summaries
+
+
 def main():
     fs = 48000
     n = 18500
@@ -445,6 +500,7 @@ def main():
         "columns": columns,
         "capture": capture,
         "clocks": capture_controls(),
+        "uneven_delivery": uneven_delivery(),
         "faults": {},
         "fs": fs,
         "reference": sample_hash(base),
