@@ -1,6 +1,6 @@
 # Proposed ordered acoustic migration
 
-The owner selected the magnetic reference. Review 5 qualified isolated Rust O1. Review 6 authorized isolated O2. Review 7 qualified private Rust O2 in isolation. Stage 08 submits O2 tooling remediation and one offline I1 specification for independent Review 8. The original [migration and V-number ownership](ELECTROBOW_MIGRATION_PLAN.md#validation-ownership) and existing stage authorizations still apply. No live routing follows from completion of this document.
+The owner selected the magnetic reference. Review 5 qualified isolated Rust O1. Review 6 authorized isolated O2. Review 7 qualified private Rust O2 in isolation. Independent Review 8 retained the carrier and blocked isolated I1 implementation. Stage 08.1 submits the offline phase monitor, joined transaction and replay-bound exit for independent Review 8.1. The original [migration and V-number ownership](ELECTROBOW_MIGRATION_PLAN.md#validation-ownership) and existing stage authorizations still apply. No live routing follows from completion of this document.
 
 Use the [output specification](../architecture/ELECTROBOW_ACOUSTIC_OUTPUT_SPECIFICATION.md) for algorithms and Rust interfaces, [acoustics](../research/BOWED_TIMBRE_ACOUSTIC_RESEARCH.md) and [identity](../research/GUITAR_TIMBRE_PRESERVATION.md) for evidence, and the [acoustic validation plan](ACOUSTIC_VALIDATION_PLAN.md) for frozen observations. Each increment below has one reviewable change. Maintain the ledger, decisions and a dated stage report recording revision, source hashes, exact commands, corpus, outcomes and still-open gates at each exit.
 
@@ -33,3 +33,8 @@ Use the [output specification](../architecture/ELECTROBOW_ACOUSTIC_OUTPUT_SPECIF
 | **AI_IMPLEMENTATION_GUIDE** authority table/rules 2,3,5,6 | After approval, add the acoustic specification and validation plan. Require diagnostic M5 alongside the selected wet branch, identity from original DI, no PRNG on supported wet, per-tick actual epochs, independent acoustic review before S5, and separate owner V22. | Avoid implementing historical S5 by default or inferring a new source model from the measurements. |
 
 These are proposed revisions, not edits to previously signed-off mathematics or host behavior. If independent review finds the target requires physically changing the load, loss or startup, document the unmet measured requirement and request a separate feedback/launch experiment and requalification.
+
+
+### Stage 08.1 handoff
+
+Independent Review 8.1 must decide the moving-basis permission, stationary upstream prerequisite, automated delivery, two-lane fault ownership and acceptance-tooling evidence before authorizing isolated I1. Preserve baseline injected S4a's existing authorization. Natural-source recognition needs the registered controlled recording cell and owner audition. Keep final A2, amended articulation, S4b, supported S5, public Noise mapping and integration at their existing gates. [Remediation evidence](status/STAGE_08_1_I1_REMEDIATION.md)

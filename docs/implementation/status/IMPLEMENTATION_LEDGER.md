@@ -1,5 +1,9 @@
 # Implementation ledger
 
+## 2026-11-28 · Stage 08.1 offline remediation awaiting independent Review 8.1
+
+The revised guide-phase permission retained meaningful coloration in all 700 registered vibrato cells across seven rates; the historical fixed-bin monitor retained none. All 108 revised stationary depth rows met V17. A fourth actual Rust electrical return exercised automated detail depth. The same-clock stereo oracle covers expiry, zero-E replacement, prospective numerical faults and cached-product fades. The full exit compares the reports and waveform artifacts with fresh replay. Pressure/speed transitions still cause measurable vetoes. Empirical controlled identity, owner listening, measured Rust real-time headroom and isolated implementation authorization remain pending. [Stage evidence and replay commands](STAGE_08_1_I1_REMEDIATION.md)
+
 ## 2026-11-28 · Review 8 retains the carrier and holds I1 implementation
 
 Reviewed `ddf77bd..d50a041` from a clean tree. S2a contact/ring, S2b guide, M4/M6, M5, O1, isolated Rust O2 and shipping/fallback remain qualified in their existing scopes. A fresh 156-stream O2 replay preserved 46,818,000 commits and returned factory sample provenance. The independent I1 recurrence reproduced all nine historical failures and passed all 108 corrected stationary depth rows. The prescribed vibrato was exactly neutral at all seven rates. The weakest held G3 contrast was .110 dB and controlled source and owner evidence remain pending.

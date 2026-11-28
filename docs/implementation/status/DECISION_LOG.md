@@ -1,5 +1,9 @@
 # Decision log
 
+## 2026-11-28 · Proposed guide-phase permission and replay-owned qualification
+
+**Proposed, awaiting independent Review 8.1.** Retain the qualified guide/O1/O2 path, DI projection and complex bank. Admit a common grid ray using the completed host-time fit to committed guide phase and an independently qualified upstream carrier. Measure all four realized paths through automation and slew. Require producer-owned provenance, typed acquisition/epoch evidence and a lane-local postcommit fault transaction. The preregistered motion gate passed at seven rates; natural-source approval requires the controlled holdout and perception remains an owner decision. Review 8's implementation hold and the independent baseline S4a authorization stand pending review. [Stage 08.1 handoff](STAGE_08_1_I1_REMEDIATION.md)
+
 ## 2026-11-28 · Hold I1 Rust implementation and acceptance-tooling sign-off
 
 Accept the DI representation for offline research and the measured past-block ray algebra. Retain the qualified physical/electrical carrier, original converted-M5 V17 denominator, inclusive-Nyquist scorer and paired final-wet residual. The short monitor can admit an upstream V17 failure and strips identity throughout the prescribed vibrato. Capture expiry and replacement, genuine downstream fault ownership and full-exit evidence binding need correction. Close actual returned factory q provenance and the subnormal/silence eligibility predicate. O2 aggregate, interruption and trusted paired-clock sign-off remain open.

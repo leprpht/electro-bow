@@ -42,3 +42,17 @@ period. These are engineering usefulness criteria relative to the established
 stationary contribution. Perceptual thresholds require owner listening. Count
 every scheduled cell, including vetoes. A missing/ineligible case or a failure
 at any rate holds moving-identity implementation. Apply V17 separately.
+
+## Complete Stage 08.1 exit
+
+Run `tools/validation/i1_qualification.py` after a passed O2 publication. It renders the historical grid, then the revised 36 cases × three sentinel depths with a fourth actual electrical return, six natural DI cases, 15 actual electrical sweeps, seven stationary motion references, seven bends, seven vibratos and six additional stress schedules. Every stationary colored row inherits a separately measured neutral prerequisite. All seven vibratos must individually pass the registration above. Retain time-varying scale, signed requested vector, fully overlapped correction, actual wet, paired residual and original M5 through trace or deterministic reconstruction. Verify bitwise neutral samples, exact sample coverage, slew increments, expression changes and the original V17 gates. A finite degenerate window, ineligible M5 or an unsuccessful required neutral row keeps its failure disposition.
+
+The exit reconstructs the reports and engineering artifacts in a fresh directory. It compares the actual trace bytes, measured rows, clock records, sweep, per-source cue/distance, and negative-control outcomes with that replay. It checks independent case inventories and actual q, d, λ, wet and original carrier samples. Mutation controls pass defective sample archives and coherently substituted report sections through the same comparison. The historical standalone report audit also reconstructs the measurements. Within-run reproducibility applies to the bound executable, tool versions and numerical environment. [Complete exit](../../tools/validation/i1_qualification.py) · [Evidence and dispositions](status/STAGE_08_1_I1_REMEDIATION.md)
+
+| Boundary | Required observation |
+|---|---|
+| Entry failures | Preserve nine independent-gain failures, 108 historical corrected rows, 199 Hz/H2/weak H1/Nyquist defects, signed-zero and .169031 FS bypass witnesses, expired and replaced acquisition, substituted O2/I1 reports and duplicate container negatives. |
+| Motion and actual depth | Use the committed guide pitch. Grade three candidate sentinels, all four realized streams, and paired final wet. Include constant/ramped and seven-sample depth switches, fast and 4-octave/s retune, expression ramps, missing observation, recovery, physical lift and scheduled release. |
+| Epoch transaction | Exact generation, pending/confirmed deadline, source/physical ownership, support, FIR window, gain, cache and output coverage. Complete both due-hop stamps. Verify the 47,001 Hz/reset-19 example. Require exact prefix and partition parity including empty calls. |
+| Downstream arithmetic | Inject candidate, bank, realized-moment, wet, conversion and delivery faults. Require preceding E and E·w fade separately, one invalidation, retained detection-tick commit, unaffected other lane and fresh acquisition. |
+| Empirical identity | Report calibration and withheld source evidence separately. An engineering or moving-witness pass carries no controlled-source or owner verdict. |
